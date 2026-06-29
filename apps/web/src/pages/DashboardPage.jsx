@@ -1,0 +1,583 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { api } from "../api";
+
+export function DashboardPage({ auth }) {
+  const [events, setEvents] = useState([]);
+  const [selectedEventId, setSelectedEventId] = useState("");
+  const [stats, setStats] = useState(null);
+  const [attendees, setAttendees] = useState([]);
+  const [error, setError] = useState("");
+  const [bulkResult, setBulkResult] = useState(null);
+  const [manualAttendee, setManualAttendee] = useState({ name: "", email: "", phoneNumber: "" });
+  const [staffUsers, setStaffUsers] = useState([]);
+  const [staffForm, setStaffForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ title: "", date: "", location: "", description: "" });
+  const [activeAttendeeQr, setActiveAttendeeQr] = useState(null);
+
+  // New features: editing and context-specific messages
+  const [editingAttendee, setEditingAttendee] = useState(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", phoneNumber: "" });
+  const [eventError, setEventError] = useState("");
+  const [eventSuccess, setEventSuccess] = useState("");
+  const [staffError, setStaffError] = useState("");
+  const [staffSuccess, setStaffSuccess] = useState("");
+  const [attendeeError, setAttendeeError] = useState("");
+  const [attendeeSuccess, setAttendeeSuccess] = useState("");
+  const [editError, setEditError] = useState("");
+
+  const isAdmin = auth.user?.role === "admin";
+
+  async function loadEvents() {
+    try {
+      const list = await api("/api/events", { token: auth.token });
+      setEvents(list);
+      if (list.length && !selectedEventId) {
+        setSelectedEventId(list[0]._id);
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function loadStaff() {
+    if (!isAdmin) return;
+    const staff = await api("/api/auth/staff", { token: auth.token });
+    setStaffUsers(staff);
+  }
+
+  useEffect(() => {
+    loadEvents();
+    loadStaff().catch((err) => setError(err.message));
+  }, [auth.token]);
+
+  async function loadEventDetails(eventId) {
+    const [s, a] = await Promise.all([
+      api(`/api/events/${eventId}/stats`, { token: auth.token }),
+      api(`/api/events/${eventId}/attendees`, { token: auth.token })
+    ]);
+    setStats(s);
+    setAttendees(a);
+  }
+
+  useEffect(() => {
+    if (!selectedEventId) return;
+    (async () => {
+      try {
+        await loadEventDetails(selectedEventId);
+      } catch (err) {
+        setError(err.message);
+      }
+    })();
+  }, [selectedEventId, auth.token]);
+
+  async function createEvent(event) {
+    event.preventDefault();
+    setEventError("");
+    setEventSuccess("");
+    try {
+      await api("/api/events", {
+        token: auth.token,
+        method: "POST",
+        body: form
+      });
+      setForm({ title: "", date: "", location: "", description: "" });
+      setEventSuccess("Event created successfully!");
+      await loadEvents();
+    } catch (err) {
+      setEventError(err.message);
+    }
+  }
+
+  async function uploadCsv(file) {
+    setAttendeeError("");
+    setAttendeeSuccess("");
+    const data = new FormData();
+    data.append("file", file);
+    try {
+      const result = await api(`/api/events/${selectedEventId}/attendees/bulk`, {
+        token: auth.token,
+        method: "POST",
+        formData: data
+      });
+      setBulkResult(result);
+      setAttendeeSuccess(`Import complete: ${result.created} attendees successfully imported.`);
+      await loadEventDetails(selectedEventId);
+    } catch (err) {
+      setAttendeeError(err.message);
+    }
+  }
+
+  async function addManualAttendee(event) {
+    event.preventDefault();
+    if (!selectedEventId) return;
+    setAttendeeError("");
+    setAttendeeSuccess("");
+
+    try {
+      await api(`/api/events/${selectedEventId}/attendees`, {
+        token: auth.token,
+        method: "POST",
+        body: manualAttendee
+      });
+      setManualAttendee({ name: "", email: "", phoneNumber: "" });
+      setBulkResult(null);
+      setAttendeeSuccess("Attendee added successfully!");
+      await loadEventDetails(selectedEventId);
+    } catch (err) {
+      setAttendeeError(err.message);
+    }
+  }
+
+  async function createStaffUser(event) {
+    event.preventDefault();
+    setStaffError("");
+    setStaffSuccess("");
+    try {
+      await api("/api/auth/staff", {
+        token: auth.token,
+        method: "POST",
+        body: staffForm
+      });
+      setStaffForm({ name: "", email: "", password: "" });
+      setStaffSuccess("Staff user created successfully!");
+      await loadStaff();
+    } catch (err) {
+      setStaffError(err.message);
+    }
+  }
+
+  async function handleStartEdit(attendee) {
+    setEditingAttendee(attendee);
+    setEditForm({
+      name: attendee.name,
+      email: attendee.email,
+      phoneNumber: attendee.phoneNumber || ""
+    });
+    setEditError("");
+  }
+
+  async function handleUpdateAttendee(event) {
+    event.preventDefault();
+    if (!selectedEventId || !editingAttendee) return;
+    setEditError("");
+    setAttendeeError("");
+    setAttendeeSuccess("");
+
+    try {
+      await api(`/api/events/${selectedEventId}/attendees/${editingAttendee._id}`, {
+        token: auth.token,
+        method: "PUT",
+        body: editForm
+      });
+      setEditingAttendee(null);
+      setAttendeeSuccess("Attendee updated successfully!");
+      await loadEventDetails(selectedEventId);
+    } catch (err) {
+      setEditError(err.message);
+    }
+  }
+
+  async function handleDeleteAttendee(attendeeId) {
+    if (!selectedEventId) return;
+    if (!window.confirm("Are you sure you want to delete this attendee? This action cannot be undone.")) return;
+    setAttendeeError("");
+    setAttendeeSuccess("");
+
+    try {
+      await api(`/api/events/${selectedEventId}/attendees/${attendeeId}`, {
+        token: auth.token,
+        method: "DELETE"
+      });
+      setAttendeeSuccess("Attendee deleted successfully!");
+      await loadEventDetails(selectedEventId);
+    } catch (err) {
+      setAttendeeError(err.message);
+    }
+  }
+
+  const selectedEvent = events.find((event) => event._id === selectedEventId);
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 p-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Event Admin Dashboard</h1>
+        <div className="space-x-2">
+          <Link to="/scan" className="rounded bg-emerald-700 px-3 py-2 text-sm text-white">
+            Scanner
+          </Link>
+          <button className="rounded bg-slate-900 px-3 py-2 text-sm text-white" onClick={auth.logout}>
+            Logout
+          </button>
+        </div>
+      </div>
+
+      {isAdmin && (
+        <form className="grid gap-2 rounded bg-white p-4 shadow md:grid-cols-4" onSubmit={createEvent}>
+          <input
+            className="rounded border p-2"
+            placeholder="Title"
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            required
+          />
+          <input
+            className="rounded border p-2"
+            type="datetime-local"
+            value={form.date}
+            onChange={(e) => setForm({ ...form, date: e.target.value })}
+            required
+          />
+          <input
+            className="rounded border p-2"
+            placeholder="Location"
+            value={form.location}
+            onChange={(e) => setForm({ ...form, location: e.target.value })}
+            required
+          />
+          <button className="rounded bg-blue-600 px-3 py-2 text-white">Create Event</button>
+          <textarea
+            className="rounded border p-2 md:col-span-4"
+            placeholder="Description"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
+          {eventError && <p className="text-sm text-red-600 md:col-span-4 font-medium">{eventError}</p>}
+          {eventSuccess && <p className="text-sm text-emerald-600 md:col-span-4 font-medium">{eventSuccess}</p>}
+        </form>
+      )}
+
+      {isAdmin && (
+        <div className="grid gap-4 rounded bg-white p-4 shadow md:grid-cols-2">
+          <form className="space-y-2" onSubmit={createStaffUser}>
+            <h2 className="font-semibold">Create Staff User</h2>
+            <input
+              className="w-full rounded border p-2"
+              placeholder="Full name"
+              value={staffForm.name}
+              onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })}
+              required
+            />
+            <input
+              className="w-full rounded border p-2"
+              placeholder="Email"
+              type="email"
+              value={staffForm.email}
+              onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })}
+              required
+            />
+            <input
+              className="w-full rounded border p-2"
+              placeholder="Temporary password"
+              type="password"
+              value={staffForm.password}
+              onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })}
+              required
+            />
+            <button className="rounded bg-indigo-700 px-3 py-2 text-sm text-white">Create Staff</button>
+            {staffError && <p className="text-sm text-red-600 font-medium">{staffError}</p>}
+            {staffSuccess && <p className="text-sm text-emerald-600 font-medium">{staffSuccess}</p>}
+          </form>
+
+          <div>
+            <h2 className="mb-2 font-semibold">Staff Users</h2>
+            <div className="space-y-2 text-sm">
+              {staffUsers.length === 0 && <p className="text-slate-500">No staff users yet.</p>}
+              {staffUsers.map((staff) => (
+                <div key={staff.id} className="rounded border p-2">
+                  <p className="font-medium">{staff.name}</p>
+                  <p className="text-slate-600">{staff.email}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded bg-white p-4 shadow">
+          <h2 className="mb-2 font-semibold">Events</h2>
+          <div className="space-y-2">
+            {events.map((event) => (
+              <button
+                key={event._id}
+                onClick={() => setSelectedEventId(event._id)}
+                className={`w-full rounded border px-2 py-1 text-left text-sm ${
+                  selectedEventId === event._id ? "bg-slate-100" : ""
+                }`}
+              >
+                {event.title}
+              </button>
+            ))}
+          </div>
+          {selectedEvent && (
+            <p className="mt-3 text-xs text-slate-600">
+              Public form: <code>/register/{selectedEvent.publicSlug}</code>
+            </p>
+          )}
+        </div>
+
+        <div className="rounded bg-white p-4 shadow md:col-span-2">
+          <h2 className="mb-2 font-semibold">Registration Stats</h2>
+          {stats ? (
+            <div className="grid grid-cols-3 gap-3 text-sm">
+              <StatCard label="Total" value={stats.totalRegistrations} />
+              <StatCard label="Checked In" value={stats.checkedIn} />
+              <StatCard label="Pending" value={stats.pending} />
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Select an event</p>
+          )}
+
+          {selectedEventId && isAdmin && (
+            <div className="mt-4 rounded border p-3">
+              <label className="text-sm font-medium">Bulk Upload (CSV or Excel)</label>
+              <input
+                className="mt-2 block w-full text-sm"
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={(e) => e.target.files?.[0] && uploadCsv(e.target.files[0]).catch((err) => setError(err.message))}
+              />
+              {bulkResult && (
+                <div className="mt-3 rounded bg-slate-50 p-2 text-xs">
+                  <p>
+                    Imported: <strong>{bulkResult.created}</strong> of <strong>{bulkResult.totalRows}</strong>
+                  </p>
+                  {bulkResult.errors?.length > 0 && <p>Errors: {bulkResult.errors.length}</p>}
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedEventId && isAdmin && (
+            <form className="mt-4 grid gap-2 rounded border p-3 md:grid-cols-3" onSubmit={addManualAttendee}>
+              <input
+                className="rounded border p-2"
+                placeholder="Walk-in Name"
+                value={manualAttendee.name}
+                onChange={(e) => setManualAttendee({ ...manualAttendee, name: e.target.value })}
+                required
+              />
+              <input
+                className="rounded border p-2"
+                type="email"
+                placeholder="Walk-in Email"
+                value={manualAttendee.email}
+                onChange={(e) => setManualAttendee({ ...manualAttendee, email: e.target.value })}
+                required
+              />
+              <div className="flex gap-2">
+                <input
+                  className="w-full rounded border p-2"
+                  placeholder="Phone"
+                  value={manualAttendee.phoneNumber}
+                  onChange={(e) => setManualAttendee({ ...manualAttendee, phoneNumber: e.target.value })}
+                />
+                <button className="rounded bg-emerald-700 px-3 py-2 text-white">Add</button>
+              </div>
+            </form>
+          )}
+
+          {(attendeeError || attendeeSuccess) && (
+            <div className="mt-3 p-2 rounded text-sm font-medium">
+              {attendeeError && <p className="text-red-600">{attendeeError}</p>}
+              {attendeeSuccess && <p className="text-emerald-600">{attendeeSuccess}</p>}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded bg-white p-4 shadow">
+        <h2 className="mb-2 font-semibold">Attendees</h2>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b">
+                <th className="p-2 text-left">Name</th>
+                <th className="p-2 text-left">Email</th>
+                <th className="p-2 text-left">Phone</th>
+                <th className="p-2 text-left">Status</th>
+                <th className="p-2 text-left">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {attendees.map((attendee) => (
+                <tr key={attendee._id} className="border-b">
+                  <td className="p-2">{attendee.name}</td>
+                  <td className="p-2">{attendee.email}</td>
+                  <td className="p-2">{attendee.phoneNumber || "-"}</td>
+                  <td className="p-2">{attendee.isCheckedIn ? "Checked In" : "Not Checked In"}</td>
+                  <td className="p-2 space-x-1">
+                    <button
+                      onClick={() => setActiveAttendeeQr(attendee)}
+                      className="rounded bg-slate-100 hover:bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-800 transition-colors"
+                    >
+                      View QR
+                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleStartEdit(attendee)}
+                        className="rounded bg-blue-50 hover:bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700 transition-colors"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleDeleteAttendee(attendee._id)}
+                        className="rounded bg-red-50 hover:bg-red-100 px-2 py-1 text-xs font-semibold text-red-700 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="rounded bg-white p-4 shadow">
+        <h2 className="mb-2 font-semibold">Recent Check-ins</h2>
+        {stats?.recentLogs?.length ? (
+          <div className="space-y-2 text-sm">
+            {stats.recentLogs.map((log) => (
+              <div key={log._id} className="rounded border p-2">
+                <p className="font-medium">{log.attendeeId?.name || "Unknown attendee"}</p>
+                <p className="text-slate-600">{log.attendeeId?.email || "No email"}</p>
+                <p className="text-slate-600">
+                  {new Date(log.timestamp).toLocaleString()} {log.gateNumber ? `- ${log.gateNumber}` : ""}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">No check-ins yet.</p>
+        )}
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {activeAttendeeQr && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded bg-white p-6 shadow-xl relative">
+            <button
+              onClick={() => setActiveAttendeeQr(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 font-bold text-xl"
+            >
+              &times;
+            </button>
+            <div className="text-center">
+              <h3 className="text-lg font-bold text-slate-950">Attendee QR Ticket</h3>
+              <p className="mt-1 text-sm text-slate-600 font-medium">{activeAttendeeQr.name}</p>
+              <p className="text-xs text-slate-500">{activeAttendeeQr.email}</p>
+              
+              <div className="my-4 flex justify-center bg-slate-50 p-4 rounded-lg border border-slate-100">
+                <img src={activeAttendeeQr.qrCodeDataUrl} alt="Attendee QR Code" className="w-48 h-48" />
+              </div>
+              
+              <p className="text-xs font-mono text-slate-500 select-all mb-4">
+                Ticket ID: {activeAttendeeQr.ticketUuid}
+              </p>
+
+              <div className="flex gap-2">
+                <a
+                  href={activeAttendeeQr.qrCodeDataUrl}
+                  download={`ticket-${activeAttendeeQr.name.replace(/\s+/g, "_")}.png`}
+                  className="flex-1 rounded bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors text-center"
+                >
+                  Download QR
+                </a>
+                <button
+                  onClick={() => setActiveAttendeeQr(null)}
+                  className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingAttendee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fade-in">
+          <div className="w-full max-w-sm rounded bg-white p-6 shadow-xl relative animate-scale-up">
+            <button
+              type="button"
+              onClick={() => setEditingAttendee(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 font-bold text-xl"
+            >
+              &times;
+            </button>
+            <div>
+              <h3 className="text-lg font-bold text-slate-950">Edit Attendee</h3>
+              <p className="text-xs text-slate-500">Update attendee ticket information</p>
+            </div>
+
+            <form onSubmit={handleUpdateAttendee} className="mt-4 space-y-4">
+              <div className="space-y-3 text-sm">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Full Name</label>
+                  <input
+                    className="w-full rounded border p-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Email Address</label>
+                  <input
+                    className="w-full rounded border p-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Phone Number</label>
+                  <input
+                    className="w-full rounded border p-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    value={editForm.phoneNumber}
+                    onChange={(e) => setEditForm({ ...editForm, phoneNumber: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {editError && <p className="text-xs text-red-600 font-semibold">{editError}</p>}
+
+              <div className="flex gap-2 text-sm pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 rounded bg-blue-600 px-3 py-2 font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors"
+                >
+                  Save Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingAttendee(null)}
+                  className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="rounded border p-3">
+      <p className="text-slate-500">{label}</p>
+      <p className="text-xl font-semibold">{value}</p>
+    </div>
+  );
+}
+

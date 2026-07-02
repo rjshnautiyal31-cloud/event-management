@@ -232,3 +232,22 @@ authRouter.put("/staff/:userId", requireAuth, requireRole("admin"), async (req, 
   }
 });
 
+authRouter.delete("/staff/:userId", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Safety check: Prevent users from deleting their own logged-in account
+    if (user._id.toString() === req.user.id.toString()) {
+      return res.status(400).json({ message: "You cannot delete your own admin account" });
+    }
+
+    await User.deleteOne({ _id: req.params.userId });
+    return res.json({ message: "User account deleted successfully" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+

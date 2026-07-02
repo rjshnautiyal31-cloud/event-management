@@ -30,6 +30,11 @@ export function DashboardPage({ auth }) {
   const [attendeeSuccess, setAttendeeSuccess] = useState("");
   const [editError, setEditError] = useState("");
 
+  // New features: user edit/delete states
+  const [editingUser, setEditingUser] = useState(null);
+  const [editUserForm, setEditUserForm] = useState({ name: "", email: "", role: "staff", assignedGateId: "" });
+  const [editUserError, setEditUserError] = useState("");
+
   const isAdmin = auth.user?.role === "admin";
 
   async function loadEvents() {
@@ -208,6 +213,57 @@ export function DashboardPage({ auth }) {
       const createdRole = staffForm.role === "admin" ? "Admin" : "Staff";
       setStaffForm({ name: "", email: "", password: "", role: "staff", assignedGateId: "" });
       setStaffSuccess(`${createdRole} user account created successfully!`);
+      await loadStaff();
+    } catch (err) {
+      setStaffError(err.message);
+    }
+  }
+
+  function handleStartEditUser(user) {
+    setEditingUser(user);
+    setEditUserForm({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      assignedGateId: user.assignedGateId || ""
+    });
+    setEditUserError("");
+  }
+
+  async function handleUpdateUser(e) {
+    e.preventDefault();
+    if (!editingUser) return;
+    setEditUserError("");
+    setStaffError("");
+    setStaffSuccess("");
+    try {
+      await api(`/api/auth/staff/${editingUser.id}`, {
+        token: auth.token,
+        method: "PUT",
+        body: editUserForm
+      });
+      setEditingUser(null);
+      setStaffSuccess("User account updated successfully!");
+      await loadStaff();
+    } catch (err) {
+      setEditUserError(err.message);
+    }
+  }
+
+  async function handleDeleteUser(userId, userName) {
+    if (auth.user?.id === userId) {
+      alert("For safety reasons, you cannot delete your own logged-in admin account!");
+      return;
+    }
+    if (!window.confirm(`Are you sure you want to delete the user account for "${userName}"? This action is permanent.`)) return;
+    setStaffError("");
+    setStaffSuccess("");
+    try {
+      await api(`/api/auth/staff/${userId}`, {
+        token: auth.token,
+        method: "DELETE"
+      });
+      setStaffSuccess(`User account for "${userName}" deleted successfully!`);
       await loadStaff();
     } catch (err) {
       setStaffError(err.message);
@@ -424,6 +480,23 @@ export function DashboardPage({ auth }) {
                         </select>
                       </div>
                     )}
+
+                    <div className="flex gap-1.5 pt-1.5">
+                      <button
+                        onClick={() => handleStartEditUser(staff)}
+                        className="text-[10px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors px-2 py-0.5 rounded border border-blue-100"
+                      >
+                        Edit Details
+                      </button>
+                      {auth.user?.id !== staff.id && (
+                        <button
+                          onClick={() => handleDeleteUser(staff.id, staff.name)}
+                          className="text-[10px] font-semibold text-red-700 bg-red-50 hover:bg-red-100 transition-colors px-2 py-0.5 rounded border border-red-100"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </div>
                   
                   {staff.role === "staff" && staff.assignedGateName && (
@@ -794,6 +867,93 @@ export function DashboardPage({ auth }) {
                 <button
                   type="button"
                   onClick={() => setEditingAttendee(null)}
+                  className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-fade-in">
+          <div className="w-full max-w-sm rounded bg-white p-6 shadow-xl relative animate-scale-up">
+            <button
+              onClick={() => setEditingUser(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 font-bold text-xl"
+            >
+              &times;
+            </button>
+            <div>
+              <h3 className="text-lg font-bold text-slate-950">Edit User Account</h3>
+              <p className="text-xs text-slate-500">Update account details for {editingUser.name}</p>
+            </div>
+
+            <form onSubmit={handleUpdateUser} className="mt-4 space-y-4">
+              <div className="space-y-3 text-sm">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Full Name</label>
+                  <input
+                    className="w-full rounded border p-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    value={editUserForm.name}
+                    onChange={(e) => setEditUserForm({ ...editUserForm, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Email Address</label>
+                  <input
+                    className="w-full rounded border p-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    type="email"
+                    value={editUserForm.email}
+                    onChange={(e) => setEditUserForm({ ...editUserForm, email: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Account Role</label>
+                  <select
+                    className="w-full rounded border p-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    value={editUserForm.role}
+                    onChange={(e) => setEditUserForm({ ...editUserForm, role: e.target.value })}
+                  >
+                    <option value="staff">Staff (Scanner Access)</option>
+                    <option value="admin">Admin (Full Access)</option>
+                  </select>
+                </div>
+                {editUserForm.role === "staff" && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Assigned Gate</label>
+                    <select
+                      className="w-full rounded border p-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      value={editUserForm.assignedGateId}
+                      onChange={(e) => setEditUserForm({ ...editUserForm, assignedGateId: e.target.value })}
+                    >
+                      <option value="">No Gate Assigned</option>
+                      {gates.map((g) => (
+                        <option key={g._id} value={g._id}>
+                          {g.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {editUserError && <p className="text-xs text-red-600 font-semibold">{editUserError}</p>}
+
+              <div className="flex gap-2 text-sm pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 rounded bg-blue-600 px-3 py-2 font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors"
+                >
+                  Save Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
                   className="flex-1 rounded border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   Cancel

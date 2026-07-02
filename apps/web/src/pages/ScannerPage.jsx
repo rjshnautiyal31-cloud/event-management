@@ -120,15 +120,21 @@ export function ScannerPage({ auth }) {
                 )}
                 
                 {/* Visual Cooldown Controls */}
-                <div className="flex justify-between items-center gap-2 mt-4 pt-3 border-t border-current/10">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-3 border-t border-current/10">
                   <span className="text-[10px] font-bold uppercase tracking-wider opacity-75 animate-pulse">
                     Scanner Paused (Avoiding Double-Scans)
                   </span>
                   <button
                     onClick={resetScanner}
-                    className="rounded-lg bg-current/10 hover:bg-current/25 text-current font-bold text-[10px] uppercase tracking-wider px-2.5 py-1.5 transition-all border border-current/10 hover:scale-[1.02] active:scale-[0.98]"
+                    className={`rounded-lg font-bold text-xs uppercase tracking-wider px-3.5 py-1.5 transition-all shadow-sm hover:shadow hover:scale-[1.01] active:scale-[0.99] border whitespace-nowrap text-center ${
+                      result.status === "granted"
+                        ? "bg-white text-emerald-800 hover:bg-emerald-100 border-emerald-200"
+                        : result.status === "already_checked_in"
+                          ? "bg-white text-amber-800 hover:bg-amber-100 border-amber-200"
+                          : "bg-white text-red-800 hover:bg-red-100 border-red-200"
+                    }`}
                   >
-                    Scan Next Now
+                    Scan Next Now ➔
                   </button>
                 </div>
               </div>

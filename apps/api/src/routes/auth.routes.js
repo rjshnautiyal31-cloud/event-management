@@ -138,12 +138,13 @@ authRouter.post("/login", async (req, res) => {
  *       409: { description: User already exists }
  */
 authRouter.get("/staff", requireAuth, requireRole("admin"), async (_req, res) => {
-  const users = await User.find({ role: "staff" }).sort({ createdAt: -1 }).lean();
+  // Fetch both staff and admin accounts for full user management
+  const users = await User.find({ role: { $in: ["admin", "staff"] } }).sort({ createdAt: -1 }).lean();
   return res.json(users.map((user) => ({ id: user._id, name: user.name, email: user.email, role: user.role })));
 });
 
 authRouter.post("/staff", requireAuth, requireRole("admin"), async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, role } = req.body;
   const normalizedEmail = String(email || "").toLowerCase();
 
   if (!name || !normalizedEmail || !password) {
@@ -155,8 +156,11 @@ authRouter.post("/staff", requireAuth, requireRole("admin"), async (req, res) =>
     return res.status(409).json({ message: "User already exists" });
   }
 
+  // Ensure role is valid, defaulting to staff
+  const userRole = (role === "admin" || role === "staff") ? role : "staff";
+
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = await User.create({ name, email: normalizedEmail, passwordHash, role: "staff" });
+  const user = await User.create({ name, email: normalizedEmail, passwordHash, role: userRole });
   return res.status(201).json({ id: user._id, name: user.name, email: user.email, role: user.role });
 });
 

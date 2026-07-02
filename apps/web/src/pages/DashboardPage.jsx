@@ -11,7 +11,7 @@ export function DashboardPage({ auth }) {
   const [bulkResult, setBulkResult] = useState(null);
   const [manualAttendee, setManualAttendee] = useState({ name: "", email: "", phoneNumber: "" });
   const [staffUsers, setStaffUsers] = useState([]);
-  const [staffForm, setStaffForm] = useState({ name: "", email: "", password: "" });
+  const [staffForm, setStaffForm] = useState({ name: "", email: "", password: "", role: "staff" });
   const [form, setForm] = useState({ title: "", date: "", location: "", description: "" });
   const [activeAttendeeQr, setActiveAttendeeQr] = useState(null);
 
@@ -139,8 +139,9 @@ export function DashboardPage({ auth }) {
         method: "POST",
         body: staffForm
       });
-      setStaffForm({ name: "", email: "", password: "" });
-      setStaffSuccess("Staff user created successfully!");
+      const createdRole = staffForm.role === "admin" ? "Admin" : "Staff";
+      setStaffForm({ name: "", email: "", password: "", role: "staff" });
+      setStaffSuccess(`${createdRole} user account created successfully!`);
       await loadStaff();
     } catch (err) {
       setStaffError(err.message);
@@ -262,43 +263,62 @@ export function DashboardPage({ auth }) {
       {isAdmin && (
         <div className="grid gap-4 rounded bg-white p-4 shadow md:grid-cols-2">
           <form className="space-y-2" onSubmit={createStaffUser}>
-            <h2 className="font-semibold">Create Staff User</h2>
+            <h2 className="font-semibold text-slate-800">Create System User Account</h2>
             <input
-              className="w-full rounded border p-2"
+              className="w-full rounded border p-2 text-sm focus:ring-1 focus:ring-blue-500"
               placeholder="Full name"
               value={staffForm.name}
               onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })}
               required
             />
             <input
-              className="w-full rounded border p-2"
-              placeholder="Email"
+              className="w-full rounded border p-2 text-sm focus:ring-1 focus:ring-blue-500"
+              placeholder="Email address"
               type="email"
               value={staffForm.email}
               onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })}
               required
             />
             <input
-              className="w-full rounded border p-2"
-              placeholder="Temporary password"
+              className="w-full rounded border p-2 text-sm focus:ring-1 focus:ring-blue-500"
+              placeholder="Password"
               type="password"
               value={staffForm.password}
               onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })}
               required
             />
-            <button className="rounded bg-indigo-700 px-3 py-2 text-sm text-white">Create Staff</button>
+            <select
+              className="w-full rounded border p-2 text-sm bg-white focus:ring-1 focus:ring-blue-500"
+              value={staffForm.role}
+              onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}
+            >
+              <option value="staff">Role: Staff (Scanner Only)</option>
+              <option value="admin">Role: Admin (Full Access)</option>
+            </select>
+            <button className="rounded bg-indigo-700 hover:bg-indigo-600 transition-colors px-3 py-2 text-sm text-white font-medium shadow-sm">
+              Create User
+            </button>
             {staffError && <p className="text-sm text-red-600 font-medium">{staffError}</p>}
             {staffSuccess && <p className="text-sm text-emerald-600 font-medium">{staffSuccess}</p>}
           </form>
 
           <div>
-            <h2 className="mb-2 font-semibold">Staff Users</h2>
-            <div className="space-y-2 text-sm">
+            <h2 className="mb-2 font-semibold text-slate-800">System User Accounts</h2>
+            <div className="space-y-2 text-sm max-h-56 overflow-y-auto pr-1">
               {staffUsers.length === 0 && <p className="text-slate-500">No staff users yet.</p>}
               {staffUsers.map((staff) => (
-                <div key={staff.id} className="rounded border p-2">
-                  <p className="font-medium">{staff.name}</p>
-                  <p className="text-slate-600">{staff.email}</p>
+                <div key={staff.id} className="rounded border p-2 bg-slate-50/50 flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-slate-800">{staff.name}</p>
+                    <p className="text-slate-500 text-xs">{staff.email}</p>
+                  </div>
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                    staff.role === "admin"
+                      ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
+                      : "bg-slate-100 text-slate-800 border border-slate-200"
+                  }`}>
+                    {staff.role === "admin" ? "Admin" : "Staff"}
+                  </span>
                 </div>
               ))}
             </div>
@@ -332,7 +352,7 @@ export function DashboardPage({ auth }) {
         <div className="rounded bg-white p-4 shadow md:col-span-2">
           <h2 className="mb-2 font-semibold">Registration Stats</h2>
           {stats ? (
-            <div className="grid grid-cols-3 gap-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
               <StatCard label="Total" value={stats.totalRegistrations} />
               <StatCard label="Checked In" value={stats.checkedIn} />
               <StatCard label="Pending" value={stats.pending} />
@@ -392,14 +412,14 @@ export function DashboardPage({ auth }) {
           {selectedEventId && isAdmin && (
             <form className="mt-4 grid gap-2 rounded border p-3 md:grid-cols-3" onSubmit={addManualAttendee}>
               <input
-                className="rounded border p-2"
+                className="rounded border p-2 text-sm focus:ring-1 focus:ring-blue-500"
                 placeholder="Walk-in Name"
                 value={manualAttendee.name}
                 onChange={(e) => setManualAttendee({ ...manualAttendee, name: e.target.value })}
                 required
               />
               <input
-                className="rounded border p-2"
+                className="rounded border p-2 text-sm focus:ring-1 focus:ring-blue-500"
                 type="email"
                 placeholder="Walk-in Email"
                 value={manualAttendee.email}
@@ -408,12 +428,12 @@ export function DashboardPage({ auth }) {
               />
               <div className="flex gap-2">
                 <input
-                  className="w-full rounded border p-2"
+                  className="w-full rounded border p-2 text-sm focus:ring-1 focus:ring-blue-500"
                   placeholder="Phone"
                   value={manualAttendee.phoneNumber}
                   onChange={(e) => setManualAttendee({ ...manualAttendee, phoneNumber: e.target.value })}
                 />
-                <button className="rounded bg-emerald-700 px-3 py-2 text-white">Add</button>
+                <button className="rounded bg-emerald-700 hover:bg-emerald-600 transition-colors px-3 py-2 text-white font-medium text-sm">Add</button>
               </div>
             </form>
           )}
@@ -434,20 +454,20 @@ export function DashboardPage({ auth }) {
             <thead>
               <tr className="border-b">
                 <th className="p-2 text-left">Name</th>
-                <th className="p-2 text-left">Email</th>
-                <th className="p-2 text-left">Phone</th>
+                <th className="p-2 text-left hidden sm:table-cell">Email</th>
+                <th className="p-2 text-left hidden md:table-cell">Phone</th>
                 <th className="p-2 text-left">Status</th>
-                <th className="p-2 text-left">Checked-in At</th>
-                <th className="p-2 text-left">Gate</th>
+                <th className="p-2 text-left hidden lg:table-cell">Checked-in At</th>
+                <th className="p-2 text-left hidden md:table-cell">Gate</th>
                 <th className="p-2 text-left">Actions</th>
               </tr>
             </thead>
             <tbody>
               {attendees.map((attendee) => (
                 <tr key={attendee._id} className="border-b">
-                  <td className="p-2 font-medium text-slate-900">{attendee.name}</td>
-                  <td className="p-2 text-slate-600">{attendee.email}</td>
-                  <td className="p-2 text-slate-500">{attendee.phoneNumber || "-"}</td>
+                  <td className="p-2 font-semibold text-slate-900">{attendee.name}</td>
+                  <td className="p-2 text-slate-600 hidden sm:table-cell">{attendee.email}</td>
+                  <td className="p-2 text-slate-500 hidden md:table-cell">{attendee.phoneNumber || "-"}</td>
                   <td className="p-2">
                     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                       attendee.isCheckedIn ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-800"
@@ -455,41 +475,43 @@ export function DashboardPage({ auth }) {
                       {attendee.isCheckedIn ? "Checked In" : "Not Checked In"}
                     </span>
                   </td>
-                  <td className="p-2 text-slate-500 font-mono">
+                  <td className="p-2 text-slate-500 font-mono hidden lg:table-cell">
                     {attendee.isCheckedIn && attendee.checkedInAt
                       ? new Date(attendee.checkedInAt).toLocaleString()
                       : "-"}
                   </td>
-                  <td className="p-2 text-slate-500">
+                  <td className="p-2 text-slate-500 hidden md:table-cell">
                     {attendee.isCheckedIn && attendee.checkedInGate
                       ? attendee.checkedInGate
                       : attendee.isCheckedIn
                       ? "Default"
                       : "-"}
                   </td>
-                  <td className="p-2 space-x-1">
-                    <button
-                      onClick={() => setActiveAttendeeQr(attendee)}
-                      className="rounded bg-slate-100 hover:bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-800 transition-colors"
-                    >
-                      View QR
-                    </button>
-                    {isAdmin && (
+                  <td className="p-2">
+                    <div className="flex flex-wrap gap-1">
                       <button
-                        onClick={() => handleStartEdit(attendee)}
-                        className="rounded bg-blue-50 hover:bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700 transition-colors"
+                        onClick={() => setActiveAttendeeQr(attendee)}
+                        className="rounded bg-slate-100 hover:bg-slate-200 px-2 py-1 text-xs font-semibold text-slate-800 transition-colors"
                       >
-                        Edit
+                        View QR
                       </button>
-                    )}
-                    {isAdmin && (
-                      <button
-                        onClick={() => handleDeleteAttendee(attendee._id)}
-                        className="rounded bg-red-50 hover:bg-red-100 px-2 py-1 text-xs font-semibold text-red-700 transition-colors"
-                      >
-                        Delete
-                      </button>
-                    )}
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleStartEdit(attendee)}
+                          className="rounded bg-blue-50 hover:bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700 transition-colors"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDeleteAttendee(attendee._id)}
+                          className="rounded bg-red-50 hover:bg-red-100 px-2 py-1 text-xs font-semibold text-red-700 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

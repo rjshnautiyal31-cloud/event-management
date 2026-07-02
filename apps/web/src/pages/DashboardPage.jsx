@@ -279,13 +279,16 @@ export function DashboardPage({ auth }) {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Event Admin Dashboard</h1>
-        <div className="space-x-2">
-          <Link to="/scan" className="rounded bg-emerald-700 px-3 py-2 text-sm text-white">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-4">
+        <h1 className="text-2xl font-bold text-slate-900">Event Admin Dashboard</h1>
+        <div className="flex items-center gap-2">
+          <Link to="/scan" className="rounded bg-emerald-700 hover:bg-emerald-600 transition-colors px-3 py-2 text-sm font-semibold text-white shadow-sm text-center">
             Scanner
           </Link>
-          <button className="rounded bg-slate-900 px-3 py-2 text-sm text-white" onClick={auth.logout}>
+          <button 
+            className="rounded bg-slate-900 hover:bg-slate-800 transition-colors px-3 py-2 text-sm font-semibold text-white shadow-sm text-center" 
+            onClick={auth.logout}
+          >
             Logout
           </button>
         </div>

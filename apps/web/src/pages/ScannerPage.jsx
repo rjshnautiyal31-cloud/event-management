@@ -126,13 +126,7 @@ export function ScannerPage({ auth }) {
                   </span>
                   <button
                     onClick={resetScanner}
-                    className={`rounded-lg font-bold text-xs uppercase tracking-wider px-3.5 py-1.5 transition-all shadow-sm hover:shadow hover:scale-[1.01] active:scale-[0.99] border whitespace-nowrap text-center ${
-                      result.status === "granted"
-                        ? "bg-white text-emerald-800 hover:bg-emerald-100 border-emerald-200"
-                        : result.status === "already_checked_in"
-                          ? "bg-white text-amber-800 hover:bg-amber-100 border-amber-200"
-                          : "bg-white text-red-800 hover:bg-red-100 border-red-200"
-                    }`}
+                    className="rounded-xl font-bold text-xs uppercase tracking-wider px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all border border-slate-950 whitespace-nowrap text-center min-w-[140px] shadow-slate-900/10"
                   >
                     Scan Next Now ➔
                   </button>

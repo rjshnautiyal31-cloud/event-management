@@ -437,16 +437,36 @@ export function DashboardPage({ auth }) {
                 <th className="p-2 text-left">Email</th>
                 <th className="p-2 text-left">Phone</th>
                 <th className="p-2 text-left">Status</th>
+                <th className="p-2 text-left">Checked-in At</th>
+                <th className="p-2 text-left">Gate</th>
                 <th className="p-2 text-left">Actions</th>
               </tr>
             </thead>
             <tbody>
               {attendees.map((attendee) => (
                 <tr key={attendee._id} className="border-b">
-                  <td className="p-2">{attendee.name}</td>
-                  <td className="p-2">{attendee.email}</td>
-                  <td className="p-2">{attendee.phoneNumber || "-"}</td>
-                  <td className="p-2">{attendee.isCheckedIn ? "Checked In" : "Not Checked In"}</td>
+                  <td className="p-2 font-medium text-slate-900">{attendee.name}</td>
+                  <td className="p-2 text-slate-600">{attendee.email}</td>
+                  <td className="p-2 text-slate-500">{attendee.phoneNumber || "-"}</td>
+                  <td className="p-2">
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                      attendee.isCheckedIn ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-800"
+                    }`}>
+                      {attendee.isCheckedIn ? "Checked In" : "Not Checked In"}
+                    </span>
+                  </td>
+                  <td className="p-2 text-slate-500 font-mono">
+                    {attendee.isCheckedIn && attendee.checkedInAt
+                      ? new Date(attendee.checkedInAt).toLocaleString()
+                      : "-"}
+                  </td>
+                  <td className="p-2 text-slate-500">
+                    {attendee.isCheckedIn && attendee.checkedInGate
+                      ? attendee.checkedInGate
+                      : attendee.isCheckedIn
+                      ? "Default"
+                      : "-"}
+                  </td>
                   <td className="p-2 space-x-1">
                     <button
                       onClick={() => setActiveAttendeeQr(attendee)}
@@ -483,11 +503,11 @@ export function DashboardPage({ auth }) {
         {stats?.recentLogs?.length ? (
           <div className="space-y-2 text-sm">
             {stats.recentLogs.map((log) => (
-              <div key={log._id} className="rounded border p-2">
-                <p className="font-medium">{log.attendeeId?.name || "Unknown attendee"}</p>
-                <p className="text-slate-600">{log.attendeeId?.email || "No email"}</p>
-                <p className="text-slate-600">
-                  {new Date(log.timestamp).toLocaleString()} {log.gateNumber ? `- ${log.gateNumber}` : ""}
+              <div key={log._id} className="rounded border p-2 bg-slate-50/50">
+                <p className="font-semibold text-slate-900">{log.attendeeName || log.attendeeId?.name || "Deleted Attendee"}</p>
+                <p className="text-slate-600 text-xs">{log.attendeeEmail || log.attendeeId?.email || "No email info"}</p>
+                <p className="text-slate-500 text-xs font-medium mt-1">
+                  📅 {new Date(log.timestamp).toLocaleString()} {log.gateNumber ? `(Gate: ${log.gateNumber})` : ""}
                 </p>
               </div>
             ))}

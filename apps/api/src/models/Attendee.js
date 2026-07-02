@@ -9,7 +9,8 @@ const attendeeSchema = new mongoose.Schema(
     ticketUuid: { type: String, required: true, unique: true, index: true },
     qrCodeDataUrl: { type: String, required: true },
     isCheckedIn: { type: Boolean, default: false, index: true },
-    checkedInAt: { type: Date, default: null }
+    checkedInAt: { type: Date, default: null },
+    checkedInGate: { type: String, default: "" }
   },
   { timestamps: true }
 );

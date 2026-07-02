@@ -9,7 +9,7 @@ export function createCheckinService({ attendeeModel = Attendee, entryLogModel =
       // Atomic conditional update prevents duplicate check-ins from concurrent scans.
       const updated = await attendeeModel.findOneAndUpdate(
         { ticketUuid, isCheckedIn: false },
-        { $set: { isCheckedIn: true, checkedInAt: now } },
+        { $set: { isCheckedIn: true, checkedInAt: now, checkedInGate: gateNumber } },
         { new: true }
       );
 
@@ -18,7 +18,9 @@ export function createCheckinService({ attendeeModel = Attendee, entryLogModel =
           attendeeId: updated._id,
           eventId: updated.eventId,
           gateNumber,
-          timestamp: now
+          timestamp: now,
+          attendeeName: updated.name,
+          attendeeEmail: updated.email
         });
 
         return {

@@ -62,6 +62,29 @@ export function ScannerPage({ auth }) {
         </Link>
       </div>
 
+      {result && (
+        <div
+          className={`rounded border p-4 shadow-sm animate-fade-in ${
+            result.status === "granted"
+              ? "border-emerald-300 bg-emerald-50 text-emerald-950"
+              : result.status === "already_checked_in"
+                ? "border-amber-300 bg-amber-50 text-amber-950"
+                : "border-red-300 bg-red-50 text-red-950"
+          }`}
+        >
+          <p className="font-bold text-base">{result.message || "Scan result"}</p>
+          {result.checkedInAt && (
+            <p className="text-xs mt-1">Check-in Time: {new Date(result.checkedInAt).toLocaleString()}</p>
+          )}
+          {result.attendee?.name && (
+            <div className="text-sm mt-2 border-t pt-1 border-current/10">
+              <p className="font-semibold">Attendee: {result.attendee.name}</p>
+              <p className="text-xs opacity-80">{result.attendee.email}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="rounded bg-white p-4 shadow">
         <label className="text-sm font-medium">Gate Number</label>
         <input
@@ -74,24 +97,6 @@ export function ScannerPage({ auth }) {
       <div className="rounded bg-white p-4 shadow">
         <div id="qr-reader" />
       </div>
-
-      {result && (
-        <div
-          className={`rounded border p-4 ${
-            result.status === "granted"
-              ? "border-emerald-300 bg-emerald-50"
-              : result.status === "already_checked_in"
-                ? "border-amber-300 bg-amber-50"
-                : "border-red-300 bg-red-50"
-          }`}
-        >
-          <p className="font-semibold">{result.message || "Scan result"}</p>
-          {result.checkedInAt && (
-            <p className="text-sm">Checked in at: {new Date(result.checkedInAt).toLocaleString()}</p>
-          )}
-          {result.attendee?.name && <p className="text-sm">Attendee: {result.attendee.name}</p>}
-        </div>
-      )}
     </div>
   );
 }

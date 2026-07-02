@@ -43,22 +43,8 @@ export function ScannerPage({ auth }) {
             body: { ticketUuid: decodedText, gateNumber }
           });
           setResult(response);
-
-          // Hold the result on screen for 4 seconds, then reset for the next scan
-          cooldownTimeoutRef.current = setTimeout(() => {
-            setResult(null);
-            isProcessingRef.current = false;
-            setIsProcessing(false);
-          }, 4000);
         } catch (err) {
           setResult({ status: "invalid", message: err.message });
-
-          // Shorter cooldown for errors (3 seconds) to allow quick retries
-          cooldownTimeoutRef.current = setTimeout(() => {
-            setResult(null);
-            isProcessingRef.current = false;
-            setIsProcessing(false);
-          }, 3000);
         }
       },
       (error) => {

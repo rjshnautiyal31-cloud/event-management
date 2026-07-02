@@ -196,6 +196,18 @@ export function DashboardPage({ auth }) {
     }
   }
 
+  function downloadSampleCsv() {
+    const csvContent = "Name,Email,Phone Number\nJohn Doe,john.doe@example.com,+1234567890\nJane Smith,jane.smith@example.com,+9876543210\n";
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "attendee_import_sample.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   const selectedEvent = events.find((event) => event._id === selectedEventId);
 
   return (
@@ -331,7 +343,16 @@ export function DashboardPage({ auth }) {
 
           {selectedEventId && isAdmin && (
             <div className="mt-4 rounded border p-3 bg-slate-50/50">
-              <label className="text-sm font-semibold text-slate-800">Bulk Upload (CSV or Excel)</label>
+              <div className="flex items-center justify-between border-b pb-1.5 mb-2">
+                <label className="text-sm font-semibold text-slate-800">Bulk Upload (CSV or Excel)</label>
+                <button
+                  type="button"
+                  onClick={downloadSampleCsv}
+                  className="text-xs font-semibold text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-1"
+                >
+                  📥 Download Sample CSV
+                </button>
+              </div>
               <input
                 className="mt-2 block w-full text-sm text-slate-600 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                 type="file"

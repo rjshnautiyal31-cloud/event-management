@@ -1,18 +1,25 @@
 # Event Management and QR Check-in System
 
-A full-stack monorepo for event registration, unique QR ticket generation, and on-site QR validation with duplicate-scan prevention.
+A full-stack, enterprise-grade monorepo for event registration, unique QR ticket generation, physical gate management, and on-site QR validation with duplicate-scan prevention.
 
-## Stack
+## Modern Features Added (July 2026) 🚀
 
-- Frontend: React + Vite + Tailwind CSS + `html5-qrcode`
-- Backend: Node.js + Express + MongoDB (Mongoose)
-- Utilities: `qrcode`, `nodemailer`, CSV/Excel bulk parsing (`csv-parse`, `xlsx`)
-- Auth: JWT (`Authorization: Bearer <token>`)
+- **Resend Email API Integration**: Standard HTTPS integration allowing direct email ticket deliveries on Render's Free Tier (completely bypassing blocked SMTP ports 25, 465, and 587).
+- **Event Gates Management**: Create, delete, and monitor physical gates (e.g. *Gate A, VIP Gate, Main Entrance*) per event.
+- **Dynamic Staff-Gate Assignment**: Assign scanner staff to specific gates from the dashboard with instant inline reassignments.
+- **Automatic Scanner Gate Locking**: Staff scanners are automatically locked to their assigned gate upon login to eliminate gate-typing mistakes.
+- **Decoupled Check-in Logs**: Entry logs denormalize name and email at check-in so that history is preserved even if an attendee is later deleted.
+- **Fully Responsive Mobile Table Grid**: Progressive disclosure table hiding secondary columns on small screens, preventing horizontal overflow on smartphones.
+- **Attendees Edit & Delete**: Modals to edit attendee details with background-triggered email ticket updates, plus secure cascading deletions.
+- **Centralized Session Expiration Redirect**: Expired JWT tokens automatically trigger local logouts and gracefully redirect to `/login` inline.
+- **Inline Contextual Error Reporting**: Success/error alerts are placed directly within each form component (in-frame) instead of at the bottom of the page.
 
-## Project Layout
+## Monorepo Layout
 
-- `apps/api`: Express API, auth, event and attendee management, scan validation
-- `apps/web`: Admin dashboard, public registration page, protected scanner page
+- `apps/api`: Node.js Express backend, Mongoose/MongoDB, token signers, CSV parser, and check-in validators.
+- `apps/web`: React + Vite + Tailwind CSS frontend, html5-qrcode scanner integration, responsive dashboard, and public registration.
+
+---
 
 ## Database Schema (MongoDB Collections)
 
@@ -20,8 +27,9 @@ A full-stack monorepo for event registration, unique QR ticket generation, and o
 - `_id`
 - `name` (string)
 - `email` (unique)
-- `passwordHash`
+- `passwordHash` (bcrypt)
 - `role` (`admin` | `staff`)
+- `assignedGateId` -> Reference to `gates._id` (null if none)
 - timestamps
 
 ### `events`
@@ -30,9 +38,17 @@ A full-stack monorepo for event registration, unique QR ticket generation, and o
 - `date`
 - `location`
 - `description`
-- `publicSlug` (unique; used for public registration URL)
+- `publicSlug` (unique)
 - `createdBy` -> `users._id`
 - timestamps
+
+### `gates`
+- `_id`
+- `eventId` -> `events._id`
+- `name` (string)
+- `description` (string)
+- timestamps
+- index: `(eventId, name)` unique
 
 ### `attendees`
 - `_id`
@@ -40,163 +56,112 @@ A full-stack monorepo for event registration, unique QR ticket generation, and o
 - `name`
 - `email`
 - `phoneNumber`
-- `ticketUuid` (unique UUID, encoded in QR)
-- `qrCodeDataUrl`
+- `ticketUuid` (unique UUID encoded in QR)
+- `qrCodeDataUrl` (base64 PNG)
 - `isCheckedIn` (default `false`)
 - `checkedInAt` (nullable)
+- `checkedInGate` (string)
 - timestamps
 - index: `(eventId, email)` unique
 
 ### `entrylogs`
 - `_id`
-- `attendeeId` -> `attendees._id` (unique to prevent duplicate logs)
+- `attendeeId` -> `attendees._id` (nullable)
 - `eventId` -> `events._id`
 - `timestamp`
-- `gateNumber` (optional)
+- `gateNumber` (string)
+- `attendeeName` (string - denormalized for persistence)
+- `attendeeEmail` (string - denormalized for persistence)
 - timestamps
+
+---
 
 ## API Endpoints
 
-### Auth
+### Auth & User Accounts
 - `POST /api/auth/setup-admin`
-  - Initializes first admin (`setupKey`, `name`, `email`, `password`)
+  - Bootstraps the first admin (`setupKey`, `name`, `email`, `password`)
 - `POST /api/auth/login`
-  - Returns JWT and user payload
+  - Validates credentials and returns JWT + user profile + populated gate assignments
 - `GET /api/auth/staff` (admin)
-  - Lists staff users
+  - Lists all system users (both admin and staff) with populated gate assignments
 - `POST /api/auth/staff` (admin)
-  - Creates a staff account (`name`, `email`, `password`)
+  - Creates a new user with chosen role (`admin` | `staff`) and optional `assignedGateId`
+- `PUT /api/auth/staff/:userId` (admin)
+  - Updates name, email, role, or gate assignment dynamically for an existing user
 
-### Admin Events
-- `POST /api/events` (admin)
-  - Create event
-- `GET /api/events` (auth)
-  - List events
-- `GET /api/events/:eventId/stats` (auth)
-  - Registration/check-in summary + recent logs
-- `GET /api/events/:eventId/attendees` (auth)
-  - Attendee list
-- `POST /api/events/:eventId/attendees` (admin)
-  - Add single attendee
-- `POST /api/events/:eventId/attendees/bulk` (admin)
-  - Bulk upload attendees via `.csv`, `.xlsx`, `.xls`
-  - multipart field name: `file`
+### Admin Events, Attendees, & Gates
+- `POST /api/events` (admin): Create a new event
+- `GET /api/events` (auth): List all events
+- `GET /api/events/:eventId/stats` (auth): Registration/check-in summary, stats, and recent check-in logs
+- `GET /api/events/:eventId/attendees` (auth): List attendees
+- `POST /api/events/:eventId/attendees` (admin): Create single walkthrough attendee
+- `PUT /api/events/:eventId/attendees/:attendeeId` (admin): Edit name, email, phone. Auto-sends updated ticket if details change
+- `DELETE /api/events/:eventId/attendees/:attendeeId` (admin): Deletes attendee record safely
+- `POST /api/events/:eventId/attendees/bulk` (admin): Robust CSV/Excel import with auto-BOM stripping and case normalization
+- `GET /api/events/:eventId/gates` (auth): List all gates for an event
+- `POST /api/events/:eventId/gates` (admin): Create a physical gate
+- `DELETE /api/events/:eventId/gates/:gateId` (admin): Delete a gate and clear its assignment from staff
 
 ### Public Registration
-- `GET /api/public/events/:slug`
-  - Event details for public form
-- `POST /api/public/events/:slug/register`
-  - Creates attendee + QR ticket
+- `GET /api/public/events/:slug`: Event details for the public signup form
+- `POST /api/public/events/:slug/register`: Creates attendee and returns live QR ticket
 
 ### Scanner Validation
-- `POST /api/scan/validate` (admin/staff)
-  - Body: `{ ticketUuid, gateNumber? }`
-  - `ticketUuid` can be a raw UUID or a URL containing UUID in `ticketUuid` query param/path tail.
-  - Returns one of:
-    - `invalid` -> "Invalid Ticket"
-    - `already_checked_in` -> includes prior timestamp
-    - `granted` -> marks attendee checked-in and logs entry
+- `POST /api/scan/validate` (auth): Validates scanned UUID. Implements atomic single-scan validation
 
-## Race-Condition Prevention
-
-Check-in uses an atomic conditional write:
-
-1. `findOneAndUpdate({ ticketUuid, isCheckedIn: false }, { isCheckedIn: true, checkedInAt: now })`
-2. If update succeeds -> access granted + write `entrylogs` row
-3. If update fails:
-   - attendee missing -> invalid
-   - attendee exists and checked in -> already checked in
-
-This prevents two simultaneous scans from both being accepted.
+---
 
 ## Environment Variables
 
-Create these files:
+Create these files in your local setup:
 
-- `apps/api/.env`
-- `apps/web/.env`
+### `apps/api/.env`
+```env
+PORT=4000
+MONGO_URI=mongodb://127.0.0.1:27017/event_qr_system
+JWT_SECRET=your_jwt_secret_key
+ADMIN_SETUP_KEY=setup-admin
 
-See examples in:
+# EITHER: Set Resend API Key (Recommended for Render Free Tier)
+RESEND_API_KEY=re_your_copied_api_key
+SENDER_EMAIL=onboarding@resend.dev # Or verified custom domain
 
-- `apps/api/.env.example`
-- `apps/web/.env.example`
+# OR: Set standard SMTP variables (Requires Render Paid Tier)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-16-char-app-password
+```
+
+### `apps/web/.env`
+```env
+VITE_API_BASE=http://localhost:4000
+```
+
+---
 
 ## Quick Start
 
+1. Install dependencies at root:
+   ```bash
+   npm install
+   ```
+2. Start Dev Database, API, and Frontend concurrently:
+   ```bash
+   # Run API and Web locally
+   npm run dev:api  # Starts backend on 4000
+   npm run dev:web  # Starts frontend on 5173
+   ```
+
+## Production Docker Deployment
+Compile and run with health-checked orchestration:
 ```bash
-cd /var/www/html/ai-projects
-npm install
-```
-
-Run API:
-
-```bash
-cd /var/www/html/ai-projects
-npm run dev:api
-```
-
-Run Web:
-
-```bash
-cd /var/www/html/ai-projects
-npm run dev:web
-```
-
-## Docker Workflow
-
-The repo includes containerized services for MongoDB, API, and static-served Web:
-
-- `mongo` (`mongo:7`) with persistent volume `mongo_data`
-- `api` built from `apps/api/Dockerfile`
-- `web` built from `apps/web/Dockerfile` and served by Nginx
-
-All three services are wired with health checks in `docker-compose.yml`.
-
-Start everything:
-
-```bash
-cd /var/www/html/ai-projects
 docker compose up --build -d
 ```
 
-Check status/health:
+---
 
-```bash
-cd /var/www/html/ai-projects
-docker compose ps
-docker compose logs -f api
-```
+## Docs & User Guide
 
-Stop services:
-
-```bash
-cd /var/www/html/ai-projects
-docker compose down
-```
-
-Stop and remove Mongo data volume:
-
-```bash
-cd /var/www/html/ai-projects
-docker compose down -v
-```
-
-Default URLs when running with Docker Compose:
-
-- Web: `http://localhost:8080`
-- API: `http://localhost:4000`
-- API health: `http://localhost:4000/health`
-- MongoDB: `mongodb://localhost:27017`
-
-Notes:
-
-- `web` is built with `VITE_API_BASE=http://localhost:4000` in compose.
-- `api` uses `MONGO_URI=mongodb://mongo:27017/event_qr_system` in compose.
-- Override secrets (like `JWT_SECRET`) in `docker-compose.yml` or via environment substitution before production use.
-
-## Notes
-
-- Email sending is optional in local development; when SMTP is not configured, the API skips sending and continues registration.
-- Scanner route in web UI is protected behind login (`/scan`).
-- Dashboard now includes admin-only sections for staff creation and walk-in attendee registration.
-
+For detailed guidelines, CSV importing tips, SMTP setup, and step-by-step feature execution, please check out our dedicated **[USER_GUIDE.md](./USER_GUIDE.md)**!

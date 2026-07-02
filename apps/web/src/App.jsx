@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { LoginPage } from "./pages/LoginPage.jsx";
 import { DashboardPage } from "./pages/DashboardPage.jsx";
 import { PublicRegistrationPage } from "./pages/PublicRegistrationPage.jsx";
@@ -38,6 +38,14 @@ export function App() {
     }),
     [token, user]
   );
+
+  useEffect(() => {
+    function handleUnauthorized() {
+      auth.logout();
+    }
+    window.addEventListener("auth-unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("auth-unauthorized", handleUnauthorized);
+  }, [auth]);
 
   return (
     <Routes>

@@ -14,6 +14,11 @@ export async function api(path, { token, method = "GET", body, formData } = {}) 
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      window.dispatchEvent(new Event("auth-unauthorized"));
+    }
     throw new Error(payload.message || "Request failed");
   }
 

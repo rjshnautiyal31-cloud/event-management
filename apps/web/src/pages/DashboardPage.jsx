@@ -11,11 +11,15 @@ export function DashboardPage({ auth }) {
   const [bulkResult, setBulkResult] = useState(null);
   const [manualAttendee, setManualAttendee] = useState({ name: "", email: "", phoneNumber: "" });
   const [staffUsers, setStaffUsers] = useState([]);
-  const [staffForm, setStaffForm] = useState({ name: "", email: "", password: "", role: "staff" });
+  const [staffForm, setStaffForm] = useState({ name: "", email: "", password: "", role: "staff", assignedGateId: "" });
   const [form, setForm] = useState({ title: "", date: "", location: "", description: "" });
   const [activeAttendeeQr, setActiveAttendeeQr] = useState(null);
 
-  // New features: editing and context-specific messages
+  // Gates management and context-specific messages
+  const [gates, setGates] = useState([]);
+  const [newGateName, setNewGateName] = useState("");
+  const [gateError, setGateError] = useState("");
+  const [gateSuccess, setGateSuccess] = useState("");
   const [editingAttendee, setEditingAttendee] = useState(null);
   const [editForm, setEditForm] = useState({ name: "", email: "", phoneNumber: "" });
   const [eventError, setEventError] = useState("");
@@ -60,16 +64,78 @@ export function DashboardPage({ auth }) {
     setAttendees(a);
   }
 
+  async function loadGates(eventId) {
+    try {
+      const list = await api(`/api/events/${eventId}/gates`, { token: auth.token });
+      setGates(list);
+    } catch (err) {
+      console.error("Failed to load gates:", err);
+    }
+  }
+
   useEffect(() => {
     if (!selectedEventId) return;
     (async () => {
       try {
-        await loadEventDetails(selectedEventId);
+        await Promise.all([
+          loadEventDetails(selectedEventId),
+          loadGates(selectedEventId)
+        ]);
       } catch (err) {
         setError(err.message);
       }
     })();
   }, [selectedEventId, auth.token]);
+
+  async function createGate(e) {
+    e.preventDefault();
+    if (!selectedEventId || !newGateName.trim()) return;
+    setGateError("");
+    setGateSuccess("");
+    try {
+      await api(`/api/events/${selectedEventId}/gates`, {
+        token: auth.token,
+        method: "POST",
+        body: { name: newGateName.trim() }
+      });
+      setNewGateName("");
+      setGateSuccess("Gate created successfully!");
+      await loadGates(selectedEventId);
+    } catch (err) {
+      setGateError(err.message);
+    }
+  }
+
+  async function handleDeleteGate(gateId) {
+    if (!selectedEventId) return;
+    if (!window.confirm("Are you sure you want to delete this gate? All staff assigned to this gate will be unassigned.")) return;
+    setGateError("");
+    setGateSuccess("");
+    try {
+      await api(`/api/events/${selectedEventId}/gates/${gateId}`, {
+        token: auth.token,
+        method: "DELETE"
+      });
+      setGateSuccess("Gate deleted successfully!");
+      await loadGates(selectedEventId);
+      await loadStaff(); // Reload staff to show updated assignments
+    } catch (err) {
+      setGateError(err.message);
+    }
+  }
+
+  async function handleReassignGate(userId, gateId) {
+    try {
+      await api(`/api/auth/staff/${userId}`, {
+        token: auth.token,
+        method: "PUT",
+        body: { assignedGateId: gateId || null }
+      });
+      await loadStaff();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
 
   async function createEvent(event) {
     event.preventDefault();
@@ -140,7 +206,7 @@ export function DashboardPage({ auth }) {
         body: staffForm
       });
       const createdRole = staffForm.role === "admin" ? "Admin" : "Staff";
-      setStaffForm({ name: "", email: "", password: "", role: "staff" });
+      setStaffForm({ name: "", email: "", password: "", role: "staff", assignedGateId: "" });
       setStaffSuccess(`${createdRole} user account created successfully!`);
       await loadStaff();
     } catch (err) {
@@ -287,14 +353,31 @@ export function DashboardPage({ auth }) {
               onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })}
               required
             />
-            <select
-              className="w-full rounded border p-2 text-sm bg-white focus:ring-1 focus:ring-blue-500"
-              value={staffForm.role}
-              onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}
-            >
-              <option value="staff">Role: Staff (Scanner Only)</option>
-              <option value="admin">Role: Admin (Full Access)</option>
-            </select>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                className="w-full rounded border p-2 text-sm bg-white focus:ring-1 focus:ring-blue-500"
+                value={staffForm.role}
+                onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}
+              >
+                <option value="staff">Role: Staff</option>
+                <option value="admin">Role: Admin</option>
+              </select>
+              
+              {staffForm.role === "staff" && (
+                <select
+                  className="w-full rounded border p-2 text-sm bg-white focus:ring-1 focus:ring-blue-500"
+                  value={staffForm.assignedGateId}
+                  onChange={(e) => setStaffForm({ ...staffForm, assignedGateId: e.target.value })}
+                >
+                  <option value="">No Gate Assigned</option>
+                  {gates.map((g) => (
+                    <option key={g._id} value={g._id}>
+                      Gate: {g.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
             <button className="rounded bg-indigo-700 hover:bg-indigo-600 transition-colors px-3 py-2 text-sm text-white font-medium shadow-sm">
               Create User
             </button>
@@ -304,21 +387,47 @@ export function DashboardPage({ auth }) {
 
           <div>
             <h2 className="mb-2 font-semibold text-slate-800">System User Accounts</h2>
-            <div className="space-y-2 text-sm max-h-56 overflow-y-auto pr-1">
+            <div className="space-y-2 text-sm max-h-[300px] overflow-y-auto pr-1">
               {staffUsers.length === 0 && <p className="text-slate-500">No staff users yet.</p>}
               {staffUsers.map((staff) => (
                 <div key={staff.id} className="rounded border p-2 bg-slate-50/50 flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-slate-800">{staff.name}</p>
+                  <div className="space-y-1">
+                    <div>
+                      <span className="font-semibold text-slate-800">{staff.name}</span>
+                      <span className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        staff.role === "admin"
+                          ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
+                          : "bg-slate-100 text-slate-800 border border-slate-200"
+                      }`}>
+                        {staff.role === "admin" ? "Admin" : "Staff"}
+                      </span>
+                    </div>
                     <p className="text-slate-500 text-xs">{staff.email}</p>
+                    
+                    {staff.role === "staff" && (
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-1">
+                        <span>Assign Gate:</span>
+                        <select
+                          value={staff.assignedGateId || ""}
+                          onChange={(e) => handleReassignGate(staff.id, e.target.value)}
+                          className="rounded border border-slate-300 bg-white p-0.5 text-slate-700 text-[11px]"
+                        >
+                          <option value="">None (Default)</option>
+                          {gates.map((g) => (
+                            <option key={g._id} value={g._id}>
+                              {g.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
-                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                    staff.role === "admin"
-                      ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
-                      : "bg-slate-100 text-slate-800 border border-slate-200"
-                  }`}>
-                    {staff.role === "admin" ? "Admin" : "Staff"}
-                  </span>
+                  
+                  {staff.role === "staff" && staff.assignedGateName && (
+                    <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 border border-emerald-100">
+                      📍 {staff.assignedGateName}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
@@ -327,25 +436,66 @@ export function DashboardPage({ auth }) {
       )}
 
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded bg-white p-4 shadow">
-          <h2 className="mb-2 font-semibold">Events</h2>
-          <div className="space-y-2">
-            {events.map((event) => (
-              <button
-                key={event._id}
-                onClick={() => setSelectedEventId(event._id)}
-                className={`w-full rounded border px-2 py-1 text-left text-sm ${
-                  selectedEventId === event._id ? "bg-slate-100" : ""
-                }`}
-              >
-                {event.title}
-              </button>
-            ))}
+        <div className="space-y-4">
+          <div className="rounded bg-white p-4 shadow">
+            <h2 className="mb-2 font-semibold">Events</h2>
+            <div className="space-y-2">
+              {events.map((event) => (
+                <button
+                  key={event._id}
+                  onClick={() => setSelectedEventId(event._id)}
+                  className={`w-full rounded border px-2 py-1 text-left text-sm ${
+                    selectedEventId === event._id ? "bg-slate-100" : ""
+                  }`}
+                >
+                  {event.title}
+                </button>
+              ))}
+            </div>
+            {selectedEvent && (
+              <p className="mt-3 text-xs text-slate-600">
+                Public form: <code>/register/{selectedEvent.publicSlug}</code>
+              </p>
+          )}
           </div>
-          {selectedEvent && (
-            <p className="mt-3 text-xs text-slate-600">
-              Public form: <code>/register/{selectedEvent.publicSlug}</code>
-            </p>
+
+          {selectedEventId && isAdmin && (
+            <div className="rounded bg-white p-4 shadow border border-slate-100">
+              <h3 className="font-semibold text-slate-800 text-sm border-b pb-1.5 mb-2">Event Gates Management</h3>
+              <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                {gates.length === 0 && <p className="text-xs text-slate-400">No gates created for this event yet.</p>}
+                {gates.map((g) => (
+                  <div key={g._id} className="flex items-center justify-between text-xs p-1.5 rounded border bg-slate-50/50">
+                    <span className="font-medium text-slate-800">📍 {g.name}</span>
+                    <button
+                      onClick={() => handleDeleteGate(g._id)}
+                      className="text-red-500 hover:text-red-700 font-bold px-1 text-sm"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <form onSubmit={createGate} className="mt-3 flex gap-2">
+                <input
+                  className="flex-1 rounded border p-1 text-xs focus:ring-1 focus:ring-blue-500"
+                  placeholder="Gate Name (e.g. VIP Gate)"
+                  value={newGateName}
+                  onChange={(e) => setNewGateName(e.target.value)}
+                  required
+                />
+                <button className="rounded bg-blue-600 hover:bg-blue-500 px-2 py-1 text-xs text-white font-medium transition-colors">
+                  Add Gate
+                </button>
+              </form>
+              {(gateError || gateSuccess) && (
+                <div className="mt-2 text-xs font-semibold">
+                  {gateError && <p className="text-red-600">{gateError}</p>}
+                  {gateSuccess && <p className="text-emerald-600">{gateSuccess}</p>}
+                </div>
+              )}
+            </div>
           )}
         </div>
 

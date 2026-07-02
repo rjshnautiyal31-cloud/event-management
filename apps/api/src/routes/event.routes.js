@@ -4,6 +4,8 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { Event } from "../models/Event.js";
 import { Attendee } from "../models/Attendee.js";
 import { EntryLog } from "../models/EntryLog.js";
+import { Gate } from "../models/Gate.js";
+import { User } from "../models/User.js";
 import { parseAttendeeCsv, parseAttendeeSpreadsheet } from "../utils/csv.js";
 import { registerAttendee } from "../services/attendeeService.js";
 const upload = multer({ storage: multer.memoryStorage() });
@@ -326,6 +328,57 @@ eventRouter.delete("/:eventId/attendees/:attendeeId", requireRole("admin"), asyn
       return res.status(404).json({ message: "Attendee not found" });
     }
     return res.json({ message: "Attendee deleted successfully" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// List all gates for an event
+eventRouter.get("/:eventId/gates", requireAuth, async (req, res) => {
+  try {
+    const gates = await Gate.find({ eventId: req.params.eventId }).sort({ name: 1 }).lean();
+    return res.json(gates);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// Create a new gate for an event (admin only)
+eventRouter.post("/:eventId/gates", requireAuth, requireRole("admin"), async (req, res) => {
+  const { name, description } = req.body;
+  if (!name) {
+    return res.status(400).json({ message: "Gate name is required" });
+  }
+
+  try {
+    const existing = await Gate.findOne({ eventId: req.params.eventId, name: name.trim() });
+    if (existing) {
+      return res.status(409).json({ message: "A gate with this name already exists for this event" });
+    }
+
+    const gate = await Gate.create({
+      eventId: req.params.eventId,
+      name: name.trim(),
+      description: (description || "").trim()
+    });
+
+    return res.status(201).json(gate);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+// Delete a gate for an event (admin only)
+eventRouter.delete("/:eventId/gates/:gateId", requireAuth, requireRole("admin"), async (req, res) => {
+  try {
+    const result = await Gate.deleteOne({ _id: req.params.gateId, eventId: req.params.eventId });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: "Gate not found" });
+    }
+    // Clear this gate assignment from any staff user
+    await User.updateMany({ assignedGateId: req.params.gateId }, { $set: { assignedGateId: null } });
+    
+    return res.json({ message: "Gate deleted successfully" });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }

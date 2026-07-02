@@ -9,6 +9,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["admin", "staff"],
       default: "staff"
+    },
+    assignedGateId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Gate",
+      default: null
     }
   },
   { timestamps: true }

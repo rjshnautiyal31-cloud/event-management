@@ -135,6 +135,12 @@ export function ScannerPage({ auth }) {
           <div className="rounded-xl overflow-hidden border border-slate-100 bg-slate-900 aspect-square flex items-center justify-center">
             <div id="qr-reader" className="w-full h-full bg-slate-900" />
           </div>
+
+          <div className="mt-3.5 text-center border-t border-slate-50 pt-2.5">
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+              Powered by Rajesh Nautiyal
+            </p>
+          </div>
         </div>
       </div>
     </div>

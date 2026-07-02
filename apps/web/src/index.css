@@ -6,3 +6,73 @@ body {
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
 
+/* Professional QR Scanner Overrides */
+#qr-reader {
+  border: none !important;
+  color: #e2e8f0 !important; /* slate-200 */
+  font-family: inherit !important;
+}
+
+#qr-reader h1, 
+#qr-reader h2, 
+#qr-reader h3, 
+#qr-reader span, 
+#qr-reader div, 
+#qr-reader p,
+#qr-reader b {
+  color: #e2e8f0 !important;
+}
+
+/* Turn boring standard buttons into modern Indigo Pill actions */
+#qr-reader button {
+  background-color: #4f46e5 !important; /* Indigo-600 */
+  color: #ffffff !important;
+  padding: 0.6rem 1.2rem !important;
+  border-radius: 0.5rem !important;
+  font-weight: 700 !important;
+  font-size: 0.75rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  border: none !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1), 0 2px 4px -2px rgba(79, 70, 229, 0.1) !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+#qr-reader button:hover {
+  background-color: #4338ca !important; /* Indigo-700 */
+  transform: translateY(-1px) !important;
+  box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.2) !important;
+}
+
+/* Style the Camera selection dropdowns */
+#qr-reader select {
+  background-color: #1e293b !important; /* Slate-800 */
+  border: 1px solid #334155 !important; /* Slate-700 */
+  color: #f1f5f9 !important;
+  border-radius: 0.5rem !important;
+  padding: 0.5rem 1rem !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  outline: none !important;
+  cursor: pointer !important;
+  margin: 0.5rem 0 !important;
+  transition: border-color 0.15s ease !important;
+}
+
+#qr-reader select:focus {
+  border-color: #6366f1 !important; /* Indigo-500 */
+}
+
+/* Hide the "Powered by HTML5-QRCode" and "Report Issues" remarks entirely */
+#qr-reader a {
+  display: none !important;
+}
+
+/* Stylize the scanner helper image icon */
+#qr-reader img {
+  filter: invert(1) brightness(1.5) !important;
+  opacity: 0.5 !important;
+  max-width: 80px !important;
+}
+

@@ -330,20 +330,39 @@ export function DashboardPage({ auth }) {
           )}
 
           {selectedEventId && isAdmin && (
-            <div className="mt-4 rounded border p-3">
-              <label className="text-sm font-medium">Bulk Upload (CSV or Excel)</label>
+            <div className="mt-4 rounded border p-3 bg-slate-50/50">
+              <label className="text-sm font-semibold text-slate-800">Bulk Upload (CSV or Excel)</label>
               <input
-                className="mt-2 block w-full text-sm"
+                className="mt-2 block w-full text-sm text-slate-600 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                 type="file"
                 accept=".csv,.xlsx,.xls"
                 onChange={(e) => e.target.files?.[0] && uploadCsv(e.target.files[0]).catch((err) => setError(err.message))}
               />
               {bulkResult && (
-                <div className="mt-3 rounded bg-slate-50 p-2 text-xs">
-                  <p>
-                    Imported: <strong>{bulkResult.created}</strong> of <strong>{bulkResult.totalRows}</strong>
-                  </p>
-                  {bulkResult.errors?.length > 0 && <p>Errors: {bulkResult.errors.length}</p>}
+                <div className="mt-3 rounded bg-white p-3 text-xs border border-slate-200 shadow-sm space-y-2">
+                  <p className="font-semibold text-slate-800 border-b pb-1">Import Report Summary:</p>
+                  <div className="grid grid-cols-2 gap-2 text-slate-600">
+                    <p>Total Rows Found: <strong>{bulkResult.totalRows}</strong></p>
+                    <p>Successfully Created: <strong className="text-emerald-700">{bulkResult.created}</strong></p>
+                  </div>
+                  
+                  {bulkResult.errors?.length > 0 && (
+                    <div className="pt-2 border-t mt-2">
+                      <p className="font-semibold text-red-600 mb-1">Row Failures ({bulkResult.errors.length}):</p>
+                      <ul className="list-disc pl-4 space-y-1 max-h-36 overflow-y-auto text-slate-500">
+                        {bulkResult.errors.map((err, i) => (
+                          <li key={i}>
+                            <span className="font-medium text-slate-700">{err.email || "Unknown Row"}</span>: <span className="text-red-500">{err.reason}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {bulkResult.totalRows === 0 && (
+                    <p className="text-amber-600 font-medium mt-1">
+                      ⚠️ No rows were imported. Please check that your CSV columns are named exactly "name", "email", and "phone".
+                    </p>
+                  )}
                 </div>
               )}
             </div>

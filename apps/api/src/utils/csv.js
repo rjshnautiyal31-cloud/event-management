@@ -3,11 +3,22 @@ import XLSX from "xlsx";
 
 function normalizeRows(rows) {
   return rows
-    .map((row) => ({
-      name: row.Name || row.name || "",
-      email: row.Email || row.email || "",
-      phoneNumber: row["Phone Number"] || row.phone || row.Phone || row.phoneNumber || ""
-    }))
+    .map((row) => {
+      // Create a clean row with lowercased, trimmed keys and stripped BOMs (UTF-8 signature)
+      const cleanRow = {};
+      for (const key of Object.keys(row)) {
+        if (key) {
+          const cleanKey = key.replace(/^\uFEFF/, "").trim().toLowerCase();
+          cleanRow[cleanKey] = row[key];
+        }
+      }
+
+      return {
+        name: cleanRow.name || cleanRow.fullname || "",
+        email: cleanRow.email || "",
+        phoneNumber: cleanRow["phone number"] || cleanRow.phone || cleanRow.phonenumber || cleanRow.telephone || ""
+      };
+    })
     .filter((row) => row.name && row.email);
 }
 

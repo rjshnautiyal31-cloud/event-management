@@ -6,7 +6,20 @@ import { api } from "../api";
 export function ScannerPage({ auth }) {
   const [result, setResult] = useState(null);
   const [gateNumber, setGateNumber] = useState(auth.user?.assignedGateName || "Gate A");
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  const isProcessingRef = useRef(false);
+  const cooldownTimeoutRef = useRef(null);
   const scannerRef = useRef(null);
+
+  function resetScanner() {
+    if (cooldownTimeoutRef.current) {
+      clearTimeout(cooldownTimeoutRef.current);
+    }
+    setResult(null);
+    isProcessingRef.current = false;
+    setIsProcessing(false);
+  }
 
   useEffect(() => {
     const scanner = new Html5QrcodeScanner("qr-reader", {
@@ -16,6 +29,13 @@ export function ScannerPage({ auth }) {
 
     scanner.render(
       async (decodedText) => {
+        // If already processing or in cooldown, ignore this camera frame
+        if (isProcessingRef.current) return;
+
+        isProcessingRef.current = true;
+        setIsProcessing(true);
+        setResult(null);
+
         try {
           const response = await api("/api/scan/validate", {
             token: auth.token,
@@ -23,8 +43,22 @@ export function ScannerPage({ auth }) {
             body: { ticketUuid: decodedText, gateNumber }
           });
           setResult(response);
+
+          // Hold the result on screen for 4 seconds, then reset for the next scan
+          cooldownTimeoutRef.current = setTimeout(() => {
+            setResult(null);
+            isProcessingRef.current = false;
+            setIsProcessing(false);
+          }, 4000);
         } catch (err) {
           setResult({ status: "invalid", message: err.message });
+
+          // Shorter cooldown for errors (3 seconds) to allow quick retries
+          cooldownTimeoutRef.current = setTimeout(() => {
+            setResult(null);
+            isProcessingRef.current = false;
+            setIsProcessing(false);
+          }, 3000);
         }
       },
       (error) => {
@@ -36,6 +70,9 @@ export function ScannerPage({ auth }) {
 
     return () => {
       scanner.clear().catch(console.error);
+      if (cooldownTimeoutRef.current) {
+        clearTimeout(cooldownTimeoutRef.current);
+      }
     };
   }, [gateNumber, auth.token]);
 
@@ -65,7 +102,7 @@ export function ScannerPage({ auth }) {
       </nav>
 
       <div className="mx-auto max-w-lg px-4 sm:px-6 mt-6 space-y-5 animate-scale-up">
-        {/* Real-time Scan Result Alerts */}
+        {/* Real-time Scan Result Alerts with Cooldown UI */}
         {result && (
           <div
             className={`rounded-2xl border p-4 shadow-sm transition-all duration-300 ${
@@ -95,6 +132,19 @@ export function ScannerPage({ auth }) {
                     <p className="text-xs opacity-80">{result.attendee.email}</p>
                   </div>
                 )}
+                
+                {/* Visual Cooldown Controls */}
+                <div className="flex justify-between items-center gap-2 mt-4 pt-3 border-t border-current/10">
+                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-75 animate-pulse">
+                    Scanner Paused (Avoiding Double-Scans)
+                  </span>
+                  <button
+                    onClick={resetScanner}
+                    className="rounded-lg bg-current/10 hover:bg-current/25 text-current font-bold text-[10px] uppercase tracking-wider px-2.5 py-1.5 transition-all border border-current/10 hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    Scan Next Now
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -126,13 +176,13 @@ export function ScannerPage({ auth }) {
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-violet-600" />
           <div className="flex items-center gap-1.5 mb-3 px-1">
-            <span className="animate-pulse h-2.5 w-2.5 rounded-full bg-red-500" />
+            <span className={`h-2.5 w-2.5 rounded-full ${isProcessing ? "bg-amber-500 animate-pulse" : "bg-red-500 animate-pulse"}`} />
             <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              Camera Live Validation Lens
+              {isProcessing ? "Scanner Lens is Paused..." : "Camera Live Validation Lens"}
             </span>
           </div>
           
-          <div className="rounded-xl overflow-hidden border border-slate-100 bg-slate-900 aspect-square flex items-center justify-center">
+          <div className={`rounded-xl overflow-hidden border border-slate-100 bg-slate-900 aspect-square flex items-center justify-center transition-all duration-300 ${isProcessing ? "opacity-30 scale-[0.98]" : "opacity-100"}`}>
             <div id="qr-reader" className="w-full h-full bg-slate-900" />
           </div>
 

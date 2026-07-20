@@ -29,6 +29,8 @@ export function PublicRegistrationPage() {
     }
   }
 
+  const isExpired = event ? new Date() > new Date(event.date) : false;
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
@@ -39,7 +41,7 @@ export function PublicRegistrationPage() {
           Event Registration
         </h2>
         <p className="mt-2 text-center text-sm text-slate-600 font-medium">
-          Register to claim your unique scan-ready QR entrance ticket
+          {isExpired ? "Registration is closed for this event." : "Register to claim your unique scan-ready QR entrance ticket"}
         </p>
       </div>
 
@@ -64,7 +66,12 @@ export function PublicRegistrationPage() {
           )}
 
           {!result ? (
-            <form className="space-y-4" onSubmit={handleSubmit}>
+            isExpired ? (
+              <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 text-sm font-semibold text-amber-800 text-center">
+                This event has expired. Registration is no longer available.
+              </div>
+            ) : (
+              <form className="space-y-4" onSubmit={handleSubmit}>
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Full Name
@@ -109,6 +116,7 @@ export function PublicRegistrationPage() {
                 <span className="text-xs">🎟️</span>
               </button>
             </form>
+            )
           ) : (
             <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-6 flex flex-col items-center text-center space-y-4 animate-scale-up relative">
               <div className="absolute -left-3 top-1/2 transform -translate-y-1/2 w-6 h-6 bg-slate-50 border-r border-slate-200 rounded-full" />

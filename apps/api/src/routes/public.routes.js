@@ -94,6 +94,11 @@ publicRouter.post("/events/:slug/register", async (req, res) => {
   if (!event) {
     return res.status(404).json({ message: "Event not found" });
   }
+
+  if (new Date() > new Date(event.date)) {
+    return res.status(403).json({ message: "This event has expired. Registration is closed." });
+  }
+
   try {
     const attendee = await registerAttendee({
       event,

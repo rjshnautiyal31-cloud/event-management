@@ -614,7 +614,7 @@ export function DashboardPage({ auth }) {
                 <div className="mt-4 pt-3 border-t border-slate-100 space-y-1">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Public Registration Link:</p>
                   <code className="block text-[11px] font-mono text-indigo-600 bg-indigo-50/50 p-1.5 rounded select-all break-all border border-indigo-50">
-                    /register/{selectedEvent.publicSlug}
+                    {window.location.origin}/#/register/{selectedEvent.publicSlug}
                   </code>
                 </div>
               )}

@@ -4,6 +4,7 @@ import { LoginPage } from "./pages/LoginPage.jsx";
 import { DashboardPage } from "./pages/DashboardPage.jsx";
 import { PublicRegistrationPage } from "./pages/PublicRegistrationPage.jsx";
 import { ScannerPage } from "./pages/ScannerPage.jsx";
+import { QRGeneratorPage } from "./pages/QRGeneratorPage.jsx";
 
 function ProtectedRoute({ token, children }) {
   if (!token) {
@@ -64,6 +65,14 @@ export function App() {
         element={
           <ProtectedRoute token={auth.token}>
             <ScannerPage auth={auth} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/generator"
+        element={
+          <ProtectedRoute token={auth.token}>
+            <QRGeneratorPage auth={auth} />
           </ProtectedRoute>
         }
       />

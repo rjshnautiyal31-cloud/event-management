@@ -239,8 +239,10 @@ authRouter.delete("/staff/:userId", requireAuth, requireRole("admin"), async (re
       return res.status(404).json({ message: "User not found" });
     }
 
+    const currentUserId = req.user?.id || req.user?.sub || req.user?._id;
+
     // Safety check: Prevent users from deleting their own logged-in account
-    if (user._id.toString() === req.user.id.toString()) {
+    if (user._id.toString() === currentUserId?.toString()) {
       return res.status(400).json({ message: "You cannot delete your own admin account" });
     }
 

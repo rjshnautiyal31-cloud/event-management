@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import QRCode from "qrcode";
 
 export function QRGeneratorPage({ auth }) {
+  if (auth.user?.role !== "admin") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   const [url, setUrl] = useState("https://example.com");
   const [fgColor, setFgColor] = useState("#4f46e5"); // Premium Indigo
   const [bgColor, setBgColor] = useState("#ffffff");

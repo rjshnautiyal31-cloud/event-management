@@ -387,13 +387,15 @@ export function DashboardPage({ auth }) {
             </div>
             
             <div className="flex items-center gap-2">
-              <Link 
-                to="/generator" 
-                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-700 hover:bg-indigo-600 transition-colors px-4 py-2 text-xs font-semibold text-white shadow-sm"
-              >
-                <span>QR Generator</span>
-                <span className="text-[10px]">🎨</span>
-              </Link>
+              {isAdmin && (
+                <Link 
+                  to="/generator" 
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-700 hover:bg-indigo-600 transition-colors px-4 py-2 text-xs font-semibold text-white shadow-sm"
+                >
+                  <span>QR Generator</span>
+                  <span className="text-[10px]">🎨</span>
+                </Link>
+              )}
               <Link 
                 to="/scan" 
                 className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 transition-colors px-4 py-2 text-xs font-semibold text-white shadow-sm"

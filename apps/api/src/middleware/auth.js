@@ -9,7 +9,11 @@ export function requireAuth(req, res, next) {
   }
 
   try {
-    req.user = verifyToken(token);
+    const decoded = verifyToken(token);
+    req.user = {
+      ...decoded,
+      id: decoded.sub || decoded.id || decoded._id
+    };
     return next();
   } catch (error) {
     return res.status(401).json({ message: "Invalid or expired token" });

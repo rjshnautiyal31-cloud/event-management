@@ -6,9 +6,12 @@ import { PublicRegistrationPage } from "./pages/PublicRegistrationPage.jsx";
 import { ScannerPage } from "./pages/ScannerPage.jsx";
 import { QRGeneratorPage } from "./pages/QRGeneratorPage.jsx";
 
-function ProtectedRoute({ token, children }) {
+function ProtectedRoute({ token, user, adminOnly = false, children }) {
   if (!token) {
     return <Navigate to="/login" replace />;
+  }
+  if (adminOnly && user?.role !== "admin") {
+    return <Navigate to="/dashboard" replace />;
   }
   return children;
 }
@@ -55,7 +58,7 @@ export function App() {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute token={auth.token}>
+          <ProtectedRoute token={auth.token} user={auth.user}>
             <DashboardPage auth={auth} />
           </ProtectedRoute>
         }
@@ -63,7 +66,7 @@ export function App() {
       <Route
         path="/scan"
         element={
-          <ProtectedRoute token={auth.token}>
+          <ProtectedRoute token={auth.token} user={auth.user}>
             <ScannerPage auth={auth} />
           </ProtectedRoute>
         }
@@ -71,7 +74,7 @@ export function App() {
       <Route
         path="/generator"
         element={
-          <ProtectedRoute token={auth.token}>
+          <ProtectedRoute token={auth.token} user={auth.user} adminOnly>
             <QRGeneratorPage auth={auth} />
           </ProtectedRoute>
         }

@@ -45,13 +45,12 @@ Once logged in as an Admin, your primary workspace is the **Event Admin Dashboar
 3. Click **Create Event**.
 4. The event will appear instantly inside your **Events List** card on the left side of the screen.
 
-### **Obtaining the Public Registration Link**
+### **Obtaining the Public Registration Link & QR Code**
 1. Click on your newly created event in the **Events List**.
-2. Directly below the list, a link label will display:
-   `Public form: /register/your-event-slug-abc123`
-3. Append this path to your frontend domain to share it with your attendees:
-   `https://event-qr-web.onrender.com/register/your-event-slug-abc123`
-4. When users visit this link, they can enter their Name, Email, and Phone to register. Upon submission, **their unique QR ticket will instantly render on their screen** (with options to download or print), and a copy will be emailed to them!
+2. Directly below the list, you will see the **Public Registration Link** along with a **Copy Link** button and a live **Event Registration QR Code**.
+3. Click **📥 Download Registration QR** to download a high-resolution PNG QR code image.
+4. Share the link or print/distribute the QR code poster. When attendees scan the QR code using any smartphone camera, it instantly directs them to the event registration form (`/#/register/your-event-slug-abc123`).
+5. When users submit the registration form, **their unique QR entrance ticket will instantly render on their screen** (with options to download or print), and a copy will be emailed to them!
 
 ---
 

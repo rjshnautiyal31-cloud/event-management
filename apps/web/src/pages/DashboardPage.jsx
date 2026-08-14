@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import QRCode from "qrcode";
 
 export function DashboardPage({ auth }) {
   const [events, setEvents] = useState([]);
@@ -29,6 +30,8 @@ export function DashboardPage({ auth }) {
   const [attendeeError, setAttendeeError] = useState("");
   const [attendeeSuccess, setAttendeeSuccess] = useState("");
   const [editError, setEditError] = useState("");
+  const [eventQrDataUrl, setEventQrDataUrl] = useState("");
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // New features: user edit/delete states
   const [editingUser, setEditingUser] = useState(null);
@@ -147,7 +150,7 @@ export function DashboardPage({ auth }) {
     setEventError("");
     setEventSuccess("");
     try {
-      await api("/api/events", {
+      const created = await api("/api/events", {
         token: auth.token,
         method: "POST",
         body: form
@@ -155,6 +158,9 @@ export function DashboardPage({ auth }) {
       setForm({ title: "", date: "", location: "", description: "" });
       setEventSuccess("Event created successfully!");
       await loadEvents();
+      if (created && created._id) {
+        setSelectedEventId(created._id);
+      }
     } catch (err) {
       setEventError(err.message);
     }
@@ -332,6 +338,33 @@ export function DashboardPage({ auth }) {
   }
 
   const selectedEvent = events.find((event) => event._id === selectedEventId);
+  const publicRegistrationUrl = selectedEvent
+    ? `${window.location.origin}/#/register/${selectedEvent.publicSlug}`
+    : "";
+
+  useEffect(() => {
+    if (publicRegistrationUrl) {
+      QRCode.toDataURL(publicRegistrationUrl, {
+        width: 360,
+        margin: 2,
+        color: {
+          dark: "#1e1b4b",
+          light: "#ffffff"
+        }
+      })
+        .then((url) => setEventQrDataUrl(url))
+        .catch((err) => console.error("Error generating registration QR code:", err));
+    } else {
+      setEventQrDataUrl("");
+    }
+  }, [publicRegistrationUrl]);
+
+  function copyRegistrationLink() {
+    if (!publicRegistrationUrl) return;
+    navigator.clipboard.writeText(publicRegistrationUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 pb-16">
@@ -611,11 +644,48 @@ export function DashboardPage({ auth }) {
                 ))}
               </div>
               {selectedEvent && (
-                <div className="mt-4 pt-3 border-t border-slate-100 space-y-1">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Public Registration Link:</p>
-                  <code className="block text-[11px] font-mono text-indigo-600 bg-indigo-50/50 p-1.5 rounded select-all break-all border border-indigo-50">
-                    {window.location.origin}/#/register/{selectedEvent.publicSlug}
-                  </code>
+                <div className="mt-4 pt-3 border-t border-slate-100 space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Public Registration Link:
+                      </p>
+                      <button
+                        type="button"
+                        onClick={copyRegistrationLink}
+                        className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1"
+                      >
+                        {copiedLink ? "✓ Copied!" : "📋 Copy Link"}
+                      </button>
+                    </div>
+                    <code className="block text-[11px] font-mono text-indigo-600 bg-indigo-50/50 p-2 rounded select-all break-all border border-indigo-100/60">
+                      {publicRegistrationUrl}
+                    </code>
+                  </div>
+
+                  {eventQrDataUrl && (
+                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 flex flex-col items-center text-center space-y-2.5">
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm">
+                        <img
+                          src={eventQrDataUrl}
+                          alt="Event Public Registration QR Code"
+                          className="w-36 h-36 object-contain"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-800">Event Registration QR</p>
+                        <p className="text-[10px] text-slate-500 font-medium">Scan with camera to open form</p>
+                      </div>
+                      <a
+                        href={eventQrDataUrl}
+                        download={`${(selectedEvent.title || "event").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-registration-qr.png`}
+                        className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 transition-colors px-3 py-2 text-xs font-bold text-white shadow-sm shadow-indigo-100"
+                      >
+                        <span>📥</span>
+                        <span>Download Registration QR</span>
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -670,10 +740,22 @@ export function DashboardPage({ auth }) {
             
             {/* Stats Dashboard */}
             <div>
-              <h2 className="mb-3 text-sm font-bold text-slate-700 uppercase tracking-wider border-b pb-1.5 flex items-center gap-1.5">
-                <span>📈</span>
-                <span>Registration Stats</span>
-              </h2>
+              <div className="flex items-center justify-between border-b pb-1.5 mb-3">
+                <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>📈</span>
+                  <span>Registration Stats</span>
+                </h2>
+                {selectedEvent && eventQrDataUrl && (
+                  <a
+                    href={eventQrDataUrl}
+                    download={`${(selectedEvent.title || "event").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-registration-qr.png`}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-100"
+                  >
+                    <span>📥</span>
+                    <span>Download Registration QR</span>
+                  </a>
+                )}
+              </div>
               {stats ? (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                   <StatCard label="Total Registrations" value={stats.totalRegistrations} color="border-l-indigo-500" />

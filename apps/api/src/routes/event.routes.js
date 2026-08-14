@@ -1,11 +1,12 @@
 import express from "express";
 import multer from "multer";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth, requireRole, requireEventAccess } from "../middleware/auth.js";
 import { Event } from "../models/Event.js";
 import { Attendee } from "../models/Attendee.js";
 import { EntryLog } from "../models/EntryLog.js";
 import { Gate } from "../models/Gate.js";
 import { User } from "../models/User.js";
+import { EventAssignment } from "../models/EventAssignment.js";
 import { parseAttendeeCsv, parseAttendeeSpreadsheet } from "../utils/csv.js";
 import { registerAttendee } from "../services/attendeeService.js";
 const upload = multer({ storage: multer.memoryStorage() });
@@ -66,19 +67,41 @@ eventRouter.post("/", requireRole("admin"), async (req, res) => {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
   const publicSlug = `${slugBase}-${Math.random().toString(36).slice(2, 8)}`;
+  const userId = req.user.id || req.user.sub;
   const event = await Event.create({
     title: normalizedTitle,
     date: parsedDate,
     location: normalizedLocation,
     description: String(description || "").trim(),
     publicSlug,
-    createdBy: req.user.sub
+    createdBy: userId
   });
+
+  // Automatically assign creator as event_admin
+  await EventAssignment.create({
+    userId,
+    eventId: event._id,
+    role: "event_admin"
+  });
+
   res.status(201).json(event);
 });
-eventRouter.get("/", async (_req, res) => {
-  const events = await Event.find().sort({ date: 1 }).lean();
-  res.json(events);
+
+eventRouter.get("/", async (req, res) => {
+  const userId = req.user.id || req.user.sub;
+  const userRole = req.user.role;
+
+  // Super admin / legacy admin gets all events
+  if (userRole === "super_admin" || userRole === "admin") {
+    const events = await Event.find().sort({ date: 1 }).lean();
+    return res.json(events);
+  }
+
+  // Event admin / event staff gets assigned events only
+  const assignments = await EventAssignment.find({ userId }).select("eventId").lean();
+  const eventIds = assignments.map((a) => a.eventId);
+  const events = await Event.find({ _id: { $in: eventIds } }).sort({ date: 1 }).lean();
+  return res.json(events);
 });
 /**
  * @openapi
@@ -101,7 +124,7 @@ eventRouter.get("/", async (_req, res) => {
  *             schema: { $ref: '#/components/schemas/EventStats' }
  *       401: { description: Unauthorized }
  */
-eventRouter.get("/:eventId/stats", async (req, res) => {
+eventRouter.get("/:eventId/stats", requireEventAccess(["event_admin", "event_staff"]), async (req, res) => {
   const [total, checkedIn, logs] = await Promise.all([
     Attendee.countDocuments({ eventId: req.params.eventId }),
     Attendee.countDocuments({ eventId: req.params.eventId, isCheckedIn: true }),
@@ -118,64 +141,15 @@ eventRouter.get("/:eventId/stats", async (req, res) => {
     recentLogs: logs
   });
 });
-/**
- * @openapi
- * /api/events/{eventId}/attendees:
- *   get:
- *     tags: [Attendees]
- *     summary: List all attendees for an event
- *     security: [{bearerAuth: []}]
- *     parameters:
- *       - in: path
- *         name: eventId
- *         required: true
- *         schema: { type: string }
- *     responses:
- *       200:
- *         description: Array of attendees
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items: { $ref: '#/components/schemas/Attendee' }
- *   post:
- *     tags: [Attendees]
- *     summary: Manually register a single attendee (admin only)
- *     security: [{bearerAuth: []}]
- *     parameters:
- *       - in: path
- *         name: eventId
- *         required: true
- *         schema: { type: string }
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [name, email]
- *             properties:
- *               name:        { type: string, example: "Bob Smith" }
- *               email:       { type: string, format: email }
- *               phoneNumber: { type: string }
- *     responses:
- *       201:
- *         description: Attendee created and QR ticket emailed
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Attendee' }
- *       404: { description: Event not found }
- *       409: { description: Email already registered for this event }
- *       401: { description: Unauthorized }
- *       403: { description: Forbidden – admin role required }
- */
-eventRouter.get("/:eventId/attendees", async (req, res) => {
+
+eventRouter.get("/:eventId/attendees", requireEventAccess(["event_admin", "event_staff"]), async (req, res) => {
   const attendees = await Attendee.find({ eventId: req.params.eventId })
     .sort({ createdAt: -1 })
     .lean();
   res.json(attendees);
 });
-eventRouter.post("/:eventId/attendees", requireRole("admin"), async (req, res) => {
+
+eventRouter.post("/:eventId/attendees", requireRole("admin"), requireEventAccess(["event_admin"]), async (req, res) => {
   const event = await Event.findById(req.params.eventId);
   if (!event) {
     return res.status(404).json({ message: "Event not found" });
@@ -198,44 +172,8 @@ eventRouter.post("/:eventId/attendees", requireRole("admin"), async (req, res) =
     throw error;
   }
 });
-/**
- * @openapi
- * /api/events/{eventId}/attendees/bulk:
- *   post:
- *     tags: [Attendees]
- *     summary: Bulk-import attendees from a CSV or Excel file (admin only)
- *     description: >
- *       Upload a .csv, .xlsx, or .xls file with columns: Name, Email, Phone Number.
- *       Duplicate emails within the same event are skipped and reported in the errors array.
- *     security: [{bearerAuth: []}]
- *     parameters:
- *       - in: path
- *         name: eventId
- *         required: true
- *         schema: { type: string }
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             required: [file]
- *             properties:
- *               file:
- *                 type: string
- *                 format: binary
- *     responses:
- *       200:
- *         description: Import summary
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/BulkUploadResult' }
- *       400: { description: Missing file or unsupported format }
- *       404: { description: Event not found }
- *       401: { description: Unauthorized }
- *       403: { description: Forbidden – admin role required }
- */
-eventRouter.post("/:eventId/attendees/bulk", requireRole("admin"), upload.single("file"), async (req, res) => {
+
+eventRouter.post("/:eventId/attendees/bulk", requireRole("admin"), requireEventAccess(["event_admin"]), upload.single("file"), async (req, res) => {
   const event = await Event.findById(req.params.eventId);
   if (!event) {
     return res.status(404).json({ message: "Event not found" });
@@ -269,7 +207,7 @@ eventRouter.post("/:eventId/attendees/bulk", requireRole("admin"), upload.single
   return res.json({ totalRows: rows.length, created, errors });
 });
 
-eventRouter.put("/:eventId/attendees/:attendeeId", requireRole("admin"), async (req, res) => {
+eventRouter.put("/:eventId/attendees/:attendeeId", requireRole("admin"), requireEventAccess(["event_admin"]), async (req, res) => {
   const { name, email, phoneNumber } = req.body;
   if (!name || !email) {
     return res.status(400).json({ message: "Name and email are required" });
@@ -321,7 +259,7 @@ eventRouter.put("/:eventId/attendees/:attendeeId", requireRole("admin"), async (
   }
 });
 
-eventRouter.delete("/:eventId/attendees/:attendeeId", requireRole("admin"), async (req, res) => {
+eventRouter.delete("/:eventId/attendees/:attendeeId", requireRole("admin"), requireEventAccess(["event_admin"]), async (req, res) => {
   try {
     const result = await Attendee.deleteOne({ _id: req.params.attendeeId, eventId: req.params.eventId });
     if (result.deletedCount === 0) {
@@ -334,7 +272,7 @@ eventRouter.delete("/:eventId/attendees/:attendeeId", requireRole("admin"), asyn
 });
 
 // List all gates for an event
-eventRouter.get("/:eventId/gates", requireAuth, async (req, res) => {
+eventRouter.get("/:eventId/gates", requireAuth, requireEventAccess(["event_admin", "event_staff"]), async (req, res) => {
   try {
     const gates = await Gate.find({ eventId: req.params.eventId }).sort({ name: 1 }).lean();
     return res.json(gates);
@@ -344,7 +282,7 @@ eventRouter.get("/:eventId/gates", requireAuth, async (req, res) => {
 });
 
 // Create a new gate for an event (admin only)
-eventRouter.post("/:eventId/gates", requireAuth, requireRole("admin"), async (req, res) => {
+eventRouter.post("/:eventId/gates", requireAuth, requireRole("admin"), requireEventAccess(["event_admin"]), async (req, res) => {
   const { name, description } = req.body;
   if (!name) {
     return res.status(400).json({ message: "Gate name is required" });
@@ -369,7 +307,7 @@ eventRouter.post("/:eventId/gates", requireAuth, requireRole("admin"), async (re
 });
 
 // Delete a gate for an event (admin only)
-eventRouter.delete("/:eventId/gates/:gateId", requireAuth, requireRole("admin"), async (req, res) => {
+eventRouter.delete("/:eventId/gates/:gateId", requireAuth, requireRole("admin"), requireEventAccess(["event_admin"]), async (req, res) => {
   try {
     const result = await Gate.deleteOne({ _id: req.params.gateId, eventId: req.params.eventId });
     if (result.deletedCount === 0) {

@@ -1,5 +1,5 @@
 import express from "express";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth, requireRole, requireEventAccess } from "../middleware/auth.js";
 import { createCheckinService } from "../services/checkinService.js";
 import { extractTicketUuid } from "../utils/ticket.js";
 
@@ -9,7 +9,7 @@ export const scanRouter = express.Router();
 
 scanRouter.use(requireAuth, requireRole("admin", "staff"));
 
-scanRouter.post("/validate", async (req, res) => {
+scanRouter.post("/validate", requireEventAccess(["event_admin", "event_staff"]), async (req, res) => {
   const { ticketUuid, gateNumber } = req.body;
   const normalizedTicketUuid = extractTicketUuid(ticketUuid);
 

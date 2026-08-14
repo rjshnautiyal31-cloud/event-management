@@ -7,8 +7,8 @@ const userSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true },
     role: {
       type: String,
-      enum: ["admin", "staff"],
-      default: "staff"
+      enum: ["super_admin", "event_admin", "event_staff", "admin", "staff"],
+      default: "event_staff"
     },
     assignedGateId: {
       type: mongoose.Schema.Types.ObjectId,

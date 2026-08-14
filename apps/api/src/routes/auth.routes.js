@@ -2,6 +2,8 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import { User } from "../models/User.js";
+import { Gate } from "../models/Gate.js";
+import { EventAssignment } from "../models/EventAssignment.js";
 import { signToken } from "../utils/jwt.js";
 import { env } from "../config/env.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
@@ -149,8 +151,8 @@ authRouter.post("/login", async (req, res) => {
  *       409: { description: User already exists }
  */
 authRouter.get("/staff", requireAuth, requireRole("admin"), async (_req, res) => {
-  // Fetch both staff and admin accounts for full user management and populate assignedGateId
-  const users = await User.find({ role: { $in: ["admin", "staff"] } })
+  // Fetch all staff and admin accounts for full user management and populate assignedGateId
+  const users = await User.find({ role: { $in: ["super_admin", "event_admin", "event_staff", "admin", "staff"] } })
     .populate("assignedGateId")
     .sort({ createdAt: -1 })
     .lean();
@@ -177,8 +179,7 @@ authRouter.post("/staff", requireAuth, requireRole("admin"), async (req, res) =>
     return res.status(409).json({ message: "User already exists" });
   }
 
-  // Ensure role is valid, defaulting to staff
-  const userRole = (role === "admin" || role === "staff") ? role : "staff";
+  const userRole = (role === "admin" || role === "super_admin" || role === "event_admin" || role === "event_staff" || role === "staff") ? role : "event_staff";
   const gateId = assignedGateId && mongoose.Types.ObjectId.isValid(assignedGateId) ? assignedGateId : null;
 
   const passwordHash = await bcrypt.hash(password, 10);
@@ -189,6 +190,17 @@ authRouter.post("/staff", requireAuth, requireRole("admin"), async (req, res) =>
     role: userRole,
     assignedGateId: gateId
   });
+
+  if (gateId) {
+    const gate = await Gate.findById(gateId).lean();
+    if (gate) {
+      await EventAssignment.updateOne(
+        { userId: user._id, eventId: gate.eventId },
+        { $set: { role: "event_staff", assignedGateId: gate._id } },
+        { upsert: true }
+      );
+    }
+  }
 
   const populated = await User.findById(user._id).populate("assignedGateId");
   return res.status(201).json({
@@ -211,10 +223,22 @@ authRouter.put("/staff/:userId", requireAuth, requireRole("admin"), async (req, 
 
     if (name) user.name = name.trim();
     if (email) user.email = email.toLowerCase().trim();
-    if (role === "admin" || role === "staff") user.role = role;
+    if (role) user.role = role;
     
     if (assignedGateId !== undefined) {
-      user.assignedGateId = assignedGateId && mongoose.Types.ObjectId.isValid(assignedGateId) ? assignedGateId : null;
+      const newGateId = assignedGateId && mongoose.Types.ObjectId.isValid(assignedGateId) ? assignedGateId : null;
+      user.assignedGateId = newGateId;
+
+      if (newGateId) {
+        const gate = await Gate.findById(newGateId).lean();
+        if (gate) {
+          await EventAssignment.updateOne(
+            { userId: user._id, eventId: gate.eventId },
+            { $set: { role: "event_staff", assignedGateId: gate._id } },
+            { upsert: true }
+          );
+        }
+      }
     }
 
     await user.save();

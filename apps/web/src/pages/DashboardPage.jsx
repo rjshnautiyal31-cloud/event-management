@@ -38,7 +38,7 @@ export function DashboardPage({ auth }) {
   const [editUserForm, setEditUserForm] = useState({ name: "", email: "", role: "staff", assignedGateId: "" });
   const [editUserError, setEditUserError] = useState("");
 
-  const isAdmin = auth.user?.role === "admin";
+  const isAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin" || auth.user?.role === "event_admin";
 
   async function loadEvents() {
     try {

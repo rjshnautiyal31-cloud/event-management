@@ -3,7 +3,8 @@ import { Link, Navigate } from "react-router-dom";
 import QRCode from "qrcode";
 
 export function QRGeneratorPage({ auth }) {
-  if (auth.user?.role !== "admin") {
+  const isAdminRole = auth.user?.role === "admin" || auth.user?.role === "super_admin" || auth.user?.role === "event_admin";
+  if (!isAdminRole) {
     return <Navigate to="/dashboard" replace />;
   }
 

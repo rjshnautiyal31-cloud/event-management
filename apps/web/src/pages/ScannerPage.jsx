@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 
 export function ScannerPage({ auth }) {
-  const isAdmin = auth.user?.role === "admin";
+  const isAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin" || auth.user?.role === "event_admin";
   const [result, setResult] = useState(null);
   const [gateNumber, setGateNumber] = useState(auth.user?.assignedGateName || "Gate A");
   const [isProcessing, setIsProcessing] = useState(false);

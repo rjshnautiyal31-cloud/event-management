@@ -10,7 +10,8 @@ function ProtectedRoute({ token, user, adminOnly = false, children }) {
   if (!token) {
     return <Navigate to="/login" replace />;
   }
-  if (adminOnly && user?.role !== "admin") {
+  const isAdminRole = user?.role === "admin" || user?.role === "super_admin" || user?.role === "event_admin";
+  if (adminOnly && !isAdminRole) {
     return <Navigate to="/dashboard" replace />;
   }
   return children;

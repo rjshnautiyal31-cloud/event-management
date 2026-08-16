@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 
 export function ScannerPage({ auth }) {
-  const isAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin" || auth.user?.role === "event_admin";
+  const isSuperAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin";
   const [result, setResult] = useState(null);
   const [gateNumber, setGateNumber] = useState(auth.user?.assignedGateName || "Gate A");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -78,7 +78,7 @@ export function ScannerPage({ auth }) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              {isAdmin && (
+              {isSuperAdmin && (
                 <Link 
                   to="/generator" 
                   className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all"

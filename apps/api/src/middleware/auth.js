@@ -1,6 +1,7 @@
 import { verifyToken } from "../utils/jwt.js";
 import { EventAssignment } from "../models/EventAssignment.js";
 import { Attendee } from "../models/Attendee.js";
+import { Event } from "../models/Event.js";
 
 export function requireAuth(req, res, next) {
   const header = req.headers.authorization || "";
@@ -27,7 +28,7 @@ export function requireRole(...roles) {
     if (!req.user) {
       return res.status(401).json({ message: "Authentication required" });
     }
-    // Support alias roles: 'admin' maps to 'super_admin' or 'admin', 'staff' maps to 'event_staff' or 'staff'
+    // Support alias roles: 'admin' maps to 'super_admin' or 'admin' or 'event_admin', 'staff' maps to 'event_staff' or 'staff'
     const userRole = req.user.role;
     const isAllowed = roles.some((role) => {
       if (role === "admin" && (userRole === "admin" || userRole === "super_admin" || userRole === "event_admin")) return true;
@@ -72,18 +73,41 @@ export function requireEventAccess(allowedRoles = ["event_admin", "event_staff"]
       return res.status(400).json({ message: "Event context (eventId) is required for authorization" });
     }
 
-    // 3. Query EventAssignment collection for explicit grants
-    const assignment = await EventAssignment.findOne({
+    // 3. Query event object to check if user is creator
+    const event = await Event.findById(eventId).select("createdBy").lean();
+    const isCreator = event && event.createdBy && event.createdBy.toString() === userId.toString();
+
+    // 4. Query EventAssignment collection for explicit grants
+    let assignment = await EventAssignment.findOne({
       userId,
       eventId
     }).lean();
+
+    // If user created the event or is event_admin with created event, auto-grant event_admin
+    if (!assignment && (isCreator || userRole === "event_admin")) {
+      assignment = { userId, eventId, role: "event_admin" };
+      // Auto-heal missing assignment record in background
+      EventAssignment.updateOne(
+        { userId, eventId },
+        { $setOnInsert: { role: "event_admin", assignedGateId: null } },
+        { upsert: true }
+      ).catch(() => {});
+    }
 
     if (!assignment) {
       return res.status(403).json({ message: "Access denied: You are not assigned to this event" });
     }
 
-    // 4. Role Hierarchy & Permission Validation
-    if (allowedRoles.length > 0 && !allowedRoles.includes(assignment.role)) {
+    const assignedRole = assignment.role || (isCreator ? "event_admin" : userRole);
+
+    // 5. Role Hierarchy & Permission Validation with alias matching
+    const isAllowed = allowedRoles.some((role) => {
+      if (role === "event_admin" && (assignedRole === "event_admin" || assignedRole === "admin" || userRole === "event_admin")) return true;
+      if (role === "event_staff" && (assignedRole === "event_staff" || assignedRole === "staff" || assignedRole === "event_admin" || userRole === "event_admin")) return true;
+      return assignedRole === role;
+    });
+
+    if (!isAllowed) {
       return res.status(403).json({ message: "Access denied: Insufficient permissions for this event" });
     }
 

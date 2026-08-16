@@ -38,7 +38,8 @@ export function DashboardPage({ auth }) {
   const [editUserForm, setEditUserForm] = useState({ name: "", email: "", role: "staff", assignedGateId: "" });
   const [editUserError, setEditUserError] = useState("");
 
-  const isAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin" || auth.user?.role === "event_admin";
+  const isSuperAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin";
+  const isAdmin = isSuperAdmin || auth.user?.role === "event_admin";
 
   async function loadEvents() {
     try {
@@ -387,7 +388,7 @@ export function DashboardPage({ auth }) {
             </div>
             
             <div className="flex items-center gap-2">
-              {isAdmin && (
+              {isSuperAdmin && (
                 <Link 
                   to="/generator" 
                   className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-700 hover:bg-indigo-600 transition-colors px-4 py-2 text-xs font-semibold text-white shadow-sm"
@@ -761,16 +762,6 @@ export function DashboardPage({ auth }) {
                   <span>📈</span>
                   <span>Registration Stats</span>
                 </h2>
-                {selectedEvent && eventQrDataUrl && (
-                  <a
-                    href={eventQrDataUrl}
-                    download={`${(selectedEvent.title || "event").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-registration-qr.png`}
-                    className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-100"
-                  >
-                    <span>📥</span>
-                    <span>Download Registration QR</span>
-                  </a>
-                )}
               </div>
               {stats ? (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">

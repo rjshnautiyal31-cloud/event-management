@@ -12,7 +12,7 @@ export function DashboardPage({ auth }) {
   const [bulkResult, setBulkResult] = useState(null);
   const [manualAttendee, setManualAttendee] = useState({ name: "", email: "", phoneNumber: "" });
   const [staffUsers, setStaffUsers] = useState([]);
-  const [staffForm, setStaffForm] = useState({ name: "", email: "", password: "", role: "staff", assignedGateId: "" });
+  const [staffForm, setStaffForm] = useState({ name: "", email: "", password: "", role: "event_staff", assignedGateId: "" });
   const [form, setForm] = useState({ title: "", date: "", location: "", description: "" });
   const [activeAttendeeQr, setActiveAttendeeQr] = useState(null);
 
@@ -35,7 +35,7 @@ export function DashboardPage({ auth }) {
 
   // New features: user edit/delete states
   const [editingUser, setEditingUser] = useState(null);
-  const [editUserForm, setEditUserForm] = useState({ name: "", email: "", role: "staff", assignedGateId: "" });
+  const [editUserForm, setEditUserForm] = useState({ name: "", email: "", role: "event_staff", assignedGateId: "" });
   const [editUserError, setEditUserError] = useState("");
 
   const isSuperAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin";
@@ -217,9 +217,10 @@ export function DashboardPage({ auth }) {
         method: "POST",
         body: staffForm
       });
-      const createdRole = staffForm.role === "admin" ? "Admin" : "Staff";
-      setStaffForm({ name: "", email: "", password: "", role: "staff", assignedGateId: "" });
-      setStaffSuccess(`${createdRole} user account created successfully!`);
+      const roleLabels = { super_admin: "Super Admin", event_admin: "Event Admin", event_staff: "Event Staff" };
+      const createdRole = roleLabels[staffForm.role] || "User";
+      setStaffForm({ name: "", email: "", password: "", role: "event_staff", assignedGateId: "" });
+      setStaffSuccess(`${createdRole} account created successfully!`);
       await loadStaff();
     } catch (err) {
       setStaffError(err.message);
@@ -529,13 +530,11 @@ export function DashboardPage({ auth }) {
                     <>
                       <option value="event_admin">Role: Event Admin</option>
                       <option value="super_admin">Role: Super Admin</option>
-                      <option value="staff">Role: Staff (Legacy)</option>
-                      <option value="admin">Role: Admin (Legacy)</option>
                     </>
                   )}
                 </select>
                 
-                {(staffForm.role === "staff" || staffForm.role === "event_staff") && (
+                {staffForm.role === "event_staff" && (
                   <select
                     className="w-full rounded-lg border border-slate-200 p-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none text-slate-700 font-semibold animate-scale-up"
                     value={staffForm.assignedGateId}
@@ -1170,13 +1169,11 @@ export function DashboardPage({ auth }) {
                       <>
                         <option value="event_admin">Event Admin (Scoped Access)</option>
                         <option value="super_admin">Super Admin (Global Access)</option>
-                        <option value="staff">Staff (Legacy)</option>
-                        <option value="admin">Admin (Legacy)</option>
                       </>
                     )}
                   </select>
                 </div>
-                {(editUserForm.role === "staff" || editUserForm.role === "event_staff") && (
+                {editUserForm.role === "event_staff" && (
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Assigned Gate</label>
                     <select

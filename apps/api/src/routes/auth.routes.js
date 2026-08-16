@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import { User } from "../models/User.js";
 import { Gate } from "../models/Gate.js";
 import { EventAssignment } from "../models/EventAssignment.js";
+import { runAclBackfill } from "../scripts/migrate-acl.js";
 import { signToken } from "../utils/jwt.js";
 import { env } from "../config/env.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
@@ -274,6 +275,15 @@ authRouter.delete("/staff/:userId", requireAuth, requireRole("admin"), async (re
     return res.json({ message: "User account deleted successfully" });
   } catch (error) {
     return res.status(500).json({ message: error.message });
+  }
+});
+
+authRouter.post("/run-migration", requireAuth, requireRole("admin"), async (_req, res) => {
+  try {
+    await runAclBackfill();
+    return res.json({ message: "ACL migration completed successfully on server" });
+  } catch (error) {
+    return res.status(500).json({ message: error?.message || "Migration failed" });
   }
 });
 

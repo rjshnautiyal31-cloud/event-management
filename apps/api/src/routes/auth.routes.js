@@ -151,23 +151,79 @@ authRouter.post("/login", async (req, res) => {
  *       403: { description: Forbidden – admin role required }
  *       409: { description: User already exists }
  */
-authRouter.get("/staff", requireAuth, requireRole("admin"), async (_req, res) => {
-  // Fetch all staff and admin accounts for full user management and populate assignedGateId
-  const users = await User.find({ role: { $in: ["super_admin", "event_admin", "event_staff", "admin", "staff"] } })
-    .populate("assignedGateId")
-    .sort({ createdAt: -1 })
-    .lean();
-  return res.json(users.map((user) => ({
-    id: user._id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    assignedGateId: user.assignedGateId?._id || null,
-    assignedGateName: user.assignedGateId?.name || null
-  })));
+import { Event } from "../models/Event.js";
+
+async function getManagedEventIdsForUser(userId) {
+  const assignments = await EventAssignment.find({ userId, role: "event_admin" }).select("eventId").lean();
+  const assignedEventIds = assignments.map((a) => a.eventId.toString());
+  const createdEvents = await Event.find({ createdBy: userId }).select("_id").lean();
+  const createdEventIds = createdEvents.map((e) => e._id.toString());
+  return [...new Set([...assignedEventIds, ...createdEventIds])];
+}
+
+authRouter.get("/staff", requireAuth, requireRole("admin"), async (req, res) => {
+  const currentRole = req.user.role;
+  const currentUserId = req.user.id || req.user.sub;
+
+  if (currentRole === "super_admin" || currentRole === "admin") {
+    // Super Admins see all system accounts
+    const users = await User.find({ role: { $in: ["super_admin", "event_admin", "event_staff", "admin", "staff"] } })
+      .populate("assignedGateId")
+      .sort({ createdAt: -1 })
+      .lean();
+    return res.json(users.map((user) => ({
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      assignedGateId: user.assignedGateId?._id || null,
+      assignedGateName: user.assignedGateId?.name || null
+    })));
+  }
+
+  if (currentRole === "event_admin") {
+    // Event Admins see ONLY event_staff assigned to their managed events
+    const managedEventIds = await getManagedEventIdsForUser(currentUserId);
+    const managedGates = await Gate.find({ eventId: { $in: managedEventIds } }).select("_id").lean();
+    const managedGateIds = managedGates.map((g) => g._id);
+
+    const staffAssignments = await EventAssignment.find({
+      eventId: { $in: managedEventIds },
+      role: "event_staff"
+    }).select("userId").lean();
+    const staffUserIds = staffAssignments.map((a) => a.userId);
+
+    const users = await User.find({
+      $and: [
+        { role: { $in: ["event_staff", "staff"] } },
+        {
+          $or: [
+            { assignedGateId: { $in: managedGateIds } },
+            { _id: { $in: staffUserIds } }
+          ]
+        }
+      ]
+    })
+      .populate("assignedGateId")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json(users.map((user) => ({
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      assignedGateId: user.assignedGateId?._id || null,
+      assignedGateName: user.assignedGateId?.name || null
+    })));
+  }
+
+  return res.status(403).json({ message: "Insufficient permissions" });
 });
 
 authRouter.post("/staff", requireAuth, requireRole("admin"), async (req, res) => {
+  const currentRole = req.user.role;
+  const currentUserId = req.user.id || req.user.sub;
   const { name, email, password, role, assignedGateId } = req.body;
   const normalizedEmail = String(email || "").toLowerCase();
 
@@ -180,8 +236,29 @@ authRouter.post("/staff", requireAuth, requireRole("admin"), async (req, res) =>
     return res.status(409).json({ message: "User already exists" });
   }
 
-  const userRole = (role === "admin" || role === "super_admin" || role === "event_admin" || role === "event_staff" || role === "staff") ? role : "event_staff";
+  // Permission check for event_admin
+  if (currentRole === "event_admin") {
+    if (role === "super_admin" || role === "admin" || role === "event_admin") {
+      return res.status(403).json({ message: "Event Admins can only create Event Staff accounts" });
+    }
+  }
+
+  let userRole = role;
+  if (currentRole === "event_admin") {
+    userRole = "event_staff";
+  } else {
+    userRole = (role === "admin" || role === "super_admin" || role === "event_admin" || role === "event_staff" || role === "staff") ? role : "event_staff";
+  }
+
   const gateId = assignedGateId && mongoose.Types.ObjectId.isValid(assignedGateId) ? assignedGateId : null;
+
+  if (currentRole === "event_admin" && gateId) {
+    const managedEventIds = await getManagedEventIdsForUser(currentUserId);
+    const gate = await Gate.findById(gateId).lean();
+    if (!gate || !managedEventIds.includes(gate.eventId.toString())) {
+      return res.status(403).json({ message: "Selected gate does not belong to your managed events" });
+    }
+  }
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await User.create({
@@ -215,19 +292,41 @@ authRouter.post("/staff", requireAuth, requireRole("admin"), async (req, res) =>
 });
 
 authRouter.put("/staff/:userId", requireAuth, requireRole("admin"), async (req, res) => {
+  const currentRole = req.user.role;
+  const currentUserId = req.user.id || req.user.sub;
   const { name, email, role, assignedGateId } = req.body;
+
   try {
     const user = await User.findById(req.params.userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
+    // Scoping check for event_admin
+    if (currentRole === "event_admin") {
+      if (user.role === "super_admin" || user.role === "admin" || user.role === "event_admin") {
+        return res.status(403).json({ message: "Event Admins cannot modify administrator accounts" });
+      }
+      if (role && (role === "super_admin" || role === "admin" || role === "event_admin")) {
+        return res.status(403).json({ message: "Event Admins cannot elevate roles to administrator" });
+      }
+    }
+
     if (name) user.name = name.trim();
     if (email) user.email = email.toLowerCase().trim();
-    if (role) user.role = role;
+    if (role && currentRole !== "event_admin") user.role = role;
     
     if (assignedGateId !== undefined) {
       const newGateId = assignedGateId && mongoose.Types.ObjectId.isValid(assignedGateId) ? assignedGateId : null;
+      
+      if (currentRole === "event_admin" && newGateId) {
+        const managedEventIds = await getManagedEventIdsForUser(currentUserId);
+        const gate = await Gate.findById(newGateId).lean();
+        if (!gate || !managedEventIds.includes(gate.eventId.toString())) {
+          return res.status(403).json({ message: "Selected gate does not belong to your managed events" });
+        }
+      }
+
       user.assignedGateId = newGateId;
 
       if (newGateId) {
@@ -258,6 +357,7 @@ authRouter.put("/staff/:userId", requireAuth, requireRole("admin"), async (req, 
 });
 
 authRouter.delete("/staff/:userId", requireAuth, requireRole("admin"), async (req, res) => {
+  const currentRole = req.user.role;
   try {
     const user = await User.findById(req.params.userId);
     if (!user) {
@@ -268,7 +368,14 @@ authRouter.delete("/staff/:userId", requireAuth, requireRole("admin"), async (re
 
     // Safety check: Prevent users from deleting their own logged-in account
     if (user._id.toString() === currentUserId?.toString()) {
-      return res.status(400).json({ message: "You cannot delete your own admin account" });
+      return res.status(400).json({ message: "You cannot delete your own account" });
+    }
+
+    // Scoping check for event_admin
+    if (currentRole === "event_admin") {
+      if (user.role === "super_admin" || user.role === "admin" || user.role === "event_admin") {
+        return res.status(403).json({ message: "Event Admins cannot delete administrator accounts" });
+      }
     }
 
     await User.deleteOne({ _id: req.params.userId });

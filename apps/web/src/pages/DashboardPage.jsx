@@ -525,10 +525,14 @@ export function DashboardPage({ auth }) {
                   onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}
                 >
                   <option value="event_staff">Role: Event Staff</option>
-                  <option value="event_admin">Role: Event Admin</option>
-                  <option value="super_admin">Role: Super Admin</option>
-                  <option value="staff">Role: Staff (Legacy)</option>
-                  <option value="admin">Role: Admin (Legacy)</option>
+                  {isSuperAdmin && (
+                    <>
+                      <option value="event_admin">Role: Event Admin</option>
+                      <option value="super_admin">Role: Super Admin</option>
+                      <option value="staff">Role: Staff (Legacy)</option>
+                      <option value="admin">Role: Admin (Legacy)</option>
+                    </>
+                  )}
                 </select>
                 
                 {(staffForm.role === "staff" || staffForm.role === "event_staff") && (
@@ -547,7 +551,7 @@ export function DashboardPage({ auth }) {
                 )}
               </div>
               <button className="rounded-lg bg-indigo-600 hover:bg-indigo-700 transition-colors px-4 py-2.5 text-xs text-white font-bold shadow-sm shadow-indigo-100">
-                Create System Account
+                {isSuperAdmin ? "Create System Account" : "Create Event Staff Account"}
               </button>
               {staffError && <p className="text-xs text-red-600 font-semibold">{staffError}</p>}
               {staffSuccess && <p className="text-xs text-emerald-600 font-semibold">{staffSuccess}</p>}
@@ -556,10 +560,10 @@ export function DashboardPage({ auth }) {
             <div className="space-y-3">
               <h2 className="text-base font-bold text-slate-900 border-b pb-2 flex items-center gap-1.5">
                 <span>🛡️</span>
-                <span>System User Accounts</span>
+                <span>{isSuperAdmin ? "System User Accounts" : "Event Staff Accounts"}</span>
               </h2>
               <div className="space-y-2 text-sm max-h-[280px] overflow-y-auto pr-1">
-                {staffUsers.length === 0 && <p className="text-slate-400 text-xs italic">No system users found.</p>}
+                {staffUsers.length === 0 && <p className="text-slate-400 text-xs italic">{isSuperAdmin ? "No system users found." : "No staff accounts found for your events."}</p>}
                 {staffUsers.map((staff) => {
                   const isSuper = staff.role === "super_admin" || staff.role === "admin";
                   const isEventAdmin = staff.role === "event_admin";
@@ -1162,10 +1166,14 @@ export function DashboardPage({ auth }) {
                     onChange={(e) => setEditUserForm({ ...editUserForm, role: e.target.value })}
                   >
                     <option value="event_staff">Event Staff (Scanner Access)</option>
-                    <option value="event_admin">Event Admin (Scoped Access)</option>
-                    <option value="super_admin">Super Admin (Global Access)</option>
-                    <option value="staff">Staff (Legacy)</option>
-                    <option value="admin">Admin (Legacy)</option>
+                    {isSuperAdmin && (
+                      <>
+                        <option value="event_admin">Event Admin (Scoped Access)</option>
+                        <option value="super_admin">Super Admin (Global Access)</option>
+                        <option value="staff">Staff (Legacy)</option>
+                        <option value="admin">Admin (Legacy)</option>
+                      </>
+                    )}
                   </select>
                 </div>
                 {(editUserForm.role === "staff" || editUserForm.role === "event_staff") && (

@@ -523,11 +523,14 @@ export function DashboardPage({ auth }) {
                   value={staffForm.role}
                   onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}
                 >
-                  <option value="staff">Role: Staff</option>
-                  <option value="admin">Role: Admin</option>
+                  <option value="event_staff">Role: Event Staff</option>
+                  <option value="event_admin">Role: Event Admin</option>
+                  <option value="super_admin">Role: Super Admin</option>
+                  <option value="staff">Role: Staff (Legacy)</option>
+                  <option value="admin">Role: Admin (Legacy)</option>
                 </select>
                 
-                {staffForm.role === "staff" && (
+                {(staffForm.role === "staff" || staffForm.role === "event_staff") && (
                   <select
                     className="w-full rounded-lg border border-slate-200 p-2.5 text-sm bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none text-slate-700 font-semibold animate-scale-up"
                     value={staffForm.assignedGateId}
@@ -556,64 +559,75 @@ export function DashboardPage({ auth }) {
               </h2>
               <div className="space-y-2 text-sm max-h-[280px] overflow-y-auto pr-1">
                 {staffUsers.length === 0 && <p className="text-slate-400 text-xs italic">No system users found.</p>}
-                {staffUsers.map((staff) => (
-                  <div key={staff.id} className="rounded-xl border border-slate-100 p-3 bg-slate-50/50 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                    <div className="space-y-1">
-                      <div>
-                        <span className="font-bold text-slate-900">{staff.name}</span>
-                        <span className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                          staff.role === "admin"
-                            ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
-                            : "bg-slate-100 text-slate-700 border border-slate-200"
-                        }`}>
-                          {staff.role === "admin" ? "Admin" : "Staff"}
-                        </span>
-                      </div>
-                      <p className="text-slate-500 text-xs font-medium">{staff.email}</p>
-                      
-                      {staff.role === "staff" && (
-                        <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-1.5">
-                          <span className="font-semibold text-[11px] text-slate-400 uppercase tracking-wider">Assign Post:</span>
-                          <select
-                            value={staff.assignedGateId || ""}
-                            onChange={(e) => handleReassignGate(staff.id, e.target.value)}
-                            className="rounded-md border border-slate-200 bg-white p-1 text-slate-700 text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          >
-                            <option value="">None (Default)</option>
-                            {gates.map((g) => (
-                              <option key={g._id} value={g._id}>
-                                {g.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
+                {staffUsers.map((staff) => {
+                  const isSuper = staff.role === "super_admin" || staff.role === "admin";
+                  const isEventAdmin = staff.role === "event_admin";
+                  const roleBadgeText = isSuper
+                    ? "Super Admin"
+                    : isEventAdmin
+                    ? "Event Admin"
+                    : "Event Staff";
+                  const roleBadgeStyle = isSuper
+                    ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
+                    : isEventAdmin
+                    ? "bg-purple-50 text-purple-700 border border-purple-100"
+                    : "bg-slate-100 text-slate-700 border border-slate-200";
 
-                      <div className="flex gap-2 pt-2">
-                        <button
-                          onClick={() => handleStartEditUser(staff)}
-                          className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-800 transition-colors"
-                        >
-                          Edit Profile
-                        </button>
-                        {auth.user?.id !== staff.id && (
-                          <button
-                            onClick={() => handleDeleteUser(staff.id, staff.name)}
-                            className="text-[10px] font-bold uppercase tracking-wider text-red-500 hover:text-red-700 transition-colors"
-                          >
-                            Delete
-                          </button>
+                  return (
+                    <div key={staff.id} className="rounded-xl border border-slate-100 p-3 bg-slate-50/50 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                      <div className="space-y-1">
+                        <div>
+                          <span className="font-bold text-slate-900">{staff.name}</span>
+                          <span className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${roleBadgeStyle}`}>
+                            {roleBadgeText}
+                          </span>
+                        </div>
+                        <p className="text-slate-500 text-xs font-medium">{staff.email}</p>
+                        
+                        {(staff.role === "staff" || staff.role === "event_staff") && (
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 pt-1.5">
+                            <span className="font-semibold text-[11px] text-slate-400 uppercase tracking-wider">Assign Post:</span>
+                            <select
+                              value={staff.assignedGateId || ""}
+                              onChange={(e) => handleReassignGate(staff.id, e.target.value)}
+                              className="rounded-md border border-slate-200 bg-white p-1 text-slate-700 text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            >
+                              <option value="">None (Default)</option>
+                              {gates.map((g) => (
+                                <option key={g._id} value={g._id}>
+                                  {g.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         )}
+
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            onClick={() => handleStartEditUser(staff)}
+                            className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-800 transition-colors"
+                          >
+                            Edit Profile
+                          </button>
+                          {auth.user?.id !== staff.id && (
+                            <button
+                              onClick={() => handleDeleteUser(staff.id, staff.name)}
+                              className="text-[10px] font-bold uppercase tracking-wider text-red-500 hover:text-red-700 transition-colors"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
                       </div>
+                      
+                      {(staff.role === "staff" || staff.role === "event_staff") && staff.assignedGateName && (
+                        <span className="inline-flex items-center rounded-lg bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700 border border-emerald-100 animate-scale-up shadow-sm">
+                          📍 {staff.assignedGateName}
+                        </span>
+                      )}
                     </div>
-                    
-                    {staff.role === "staff" && staff.assignedGateName && (
-                      <span className="inline-flex items-center rounded-lg bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700 border border-emerald-100 animate-scale-up shadow-sm">
-                        📍 {staff.assignedGateName}
-                      </span>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1156,11 +1170,14 @@ export function DashboardPage({ auth }) {
                     value={editUserForm.role}
                     onChange={(e) => setEditUserForm({ ...editUserForm, role: e.target.value })}
                   >
-                    <option value="staff">Staff (Scanner Access)</option>
-                    <option value="admin">Admin (Full Access)</option>
+                    <option value="event_staff">Event Staff (Scanner Access)</option>
+                    <option value="event_admin">Event Admin (Scoped Access)</option>
+                    <option value="super_admin">Super Admin (Global Access)</option>
+                    <option value="staff">Staff (Legacy)</option>
+                    <option value="admin">Admin (Legacy)</option>
                   </select>
                 </div>
-                {editUserForm.role === "staff" && (
+                {(editUserForm.role === "staff" || editUserForm.role === "event_staff") && (
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Assigned Gate</label>
                     <select

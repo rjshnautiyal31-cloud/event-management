@@ -46,6 +46,46 @@ export function DashboardPage({ auth }) {
   const [editUserForm, setEditUserForm] = useState({ name: "", email: "", role: "event_staff", assignedGateId: "" });
   const [editUserError, setEditUserError] = useState("");
 
+  // Map of attendee IDs to generated QR Data URLs
+  const [attendeeQrMap, setAttendeeQrMap] = useState({});
+
+  useEffect(() => {
+    if (!attendees || !attendees.length) {
+      setAttendeeQrMap({});
+      return;
+    }
+
+    let isMounted = true;
+
+    async function generateAttendeeQrs() {
+      const map = {};
+      for (const a of attendees) {
+        if (a.ticketQrDataUrl) {
+          map[a._id] = a.ticketQrDataUrl;
+        } else {
+          const payload = a.ticketUuid || JSON.stringify({ attendeeId: a._id, eventId: a.eventId });
+          try {
+            const url = await QRCode.toDataURL(payload, {
+              width: 240,
+              margin: 1,
+              color: { dark: "#0f172a", light: "#ffffff" }
+            });
+            map[a._id] = url;
+          } catch (e) {
+            console.error("Failed to generate attendee QR:", e);
+          }
+        }
+      }
+      if (isMounted) {
+        setAttendeeQrMap(map);
+      }
+    }
+
+    generateAttendeeQrs();
+
+    return () => { isMounted = false; };
+  }, [attendees]);
+
   const isSuperAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin";
   const isAdmin = isSuperAdmin || auth.user?.role === "event_admin";
 
@@ -725,57 +765,60 @@ export function DashboardPage({ auth }) {
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100 max-h-[560px] overflow-y-auto">
-                  {filteredAttendees.map((a) => (
-                    <div key={a._id} className="p-3.5 sm:p-4 hover:bg-slate-50/80 transition-colors flex items-center justify-between gap-3">
-                      
-                      <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                        {/* Direct Visible Inline Attendee QR Code */}
-                        {a.ticketQrDataUrl ? (
-                          <button
-                            onClick={() => setActiveAttendeeQr(a.ticketQrDataUrl)}
-                            className="shrink-0 group relative p-1 bg-white rounded-xl border border-slate-200 shadow-xs hover:border-indigo-400 hover:shadow-md transition-all"
-                            title="Click to view full QR pass"
-                          >
-                            <img src={a.ticketQrDataUrl} alt={`${a.name} QR`} className="w-14 h-14 object-contain rounded-lg" />
-                            <span className="absolute inset-0 bg-indigo-600/10 opacity-0 group-hover:opacity-100 rounded-xl transition-opacity flex items-center justify-center text-[10px] font-extrabold text-indigo-700">
-                              🔍
-                            </span>
-                          </button>
-                        ) : (
-                          <div className="shrink-0 w-14 h-14 bg-slate-100 rounded-xl border border-slate-200/80 flex items-center justify-center text-[10px] text-slate-400 font-semibold">
-                            No QR
-                          </div>
-                        )}
+                  {filteredAttendees.map((a) => {
+                    const qrUrl = attendeeQrMap[a._id] || a.ticketQrDataUrl;
 
-                        <div className="space-y-0.5 min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-slate-900 text-sm truncate">{a.name}</span>
-                            <span
-                              className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
-                                a.isCheckedIn
-                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                  : "bg-amber-50 text-amber-700 border border-amber-200"
-                              }`}
+                    return (
+                      <div key={a._id} className="p-3.5 sm:p-4 hover:bg-slate-50/80 transition-colors flex items-center justify-between gap-3">
+                        
+                        <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                          {/* Direct Visible Inline Attendee QR Code */}
+                          {qrUrl ? (
+                            <button
+                              onClick={() => setActiveAttendeeQr(qrUrl)}
+                              className="shrink-0 group relative p-1 bg-white rounded-xl border border-slate-200 shadow-xs hover:border-indigo-400 hover:shadow-md transition-all"
+                              title="Click to view full QR pass"
                             >
-                              {a.isCheckedIn ? "Checked In" : "Pending"}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-500 truncate font-medium">{a.email}</p>
-                          {a.phoneNumber && <p className="text-[11px] text-slate-400 font-mono">{a.phoneNumber}</p>}
-                        </div>
-                      </div>
+                              <img src={qrUrl} alt={`${a.name} QR`} className="w-14 h-14 object-contain rounded-lg" />
+                              <span className="absolute inset-0 bg-indigo-600/10 opacity-0 group-hover:opacity-100 rounded-xl transition-opacity flex items-center justify-center text-[10px] font-extrabold text-indigo-700">
+                                🔍
+                              </span>
+                            </button>
+                          ) : (
+                            <div className="shrink-0 w-14 h-14 bg-slate-100 rounded-xl border border-slate-200/80 flex items-center justify-center text-[10px] text-slate-400 font-semibold animate-pulse">
+                              Loading...
+                            </div>
+                          )}
 
-                      {/* Attendee Actions */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {a.ticketQrDataUrl && (
-                          <button
-                            onClick={() => setActiveAttendeeQr(a.ticketQrDataUrl)}
-                            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 border border-slate-200 text-xs font-bold transition-colors"
-                            title="Expand Ticket QR"
-                          >
-                            <span>🎟️ Expand QR</span>
-                          </button>
-                        )}
+                          <div className="space-y-0.5 min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-extrabold text-slate-900 text-sm truncate">{a.name}</span>
+                              <span
+                                className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                                  a.isCheckedIn
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : "bg-amber-50 text-amber-700 border border-amber-200"
+                                }`}
+                              >
+                                {a.isCheckedIn ? "Checked In" : "Pending"}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 truncate font-medium">{a.email}</p>
+                            {a.phoneNumber && <p className="text-[11px] text-slate-400 font-mono">{a.phoneNumber}</p>}
+                          </div>
+                        </div>
+
+                        {/* Attendee Actions */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {qrUrl && (
+                            <button
+                              onClick={() => setActiveAttendeeQr(qrUrl)}
+                              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 border border-slate-200 text-xs font-bold transition-colors"
+                              title="Expand Ticket QR"
+                            >
+                              <span>🎟️ Expand QR</span>
+                            </button>
+                          )}
                         <button
                           onClick={() => handleStartEdit(a)}
                           className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 text-xs font-semibold transition-colors"
@@ -792,7 +835,8 @@ export function DashboardPage({ auth }) {
                         </button>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

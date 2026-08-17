@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import QRCode from "qrcode";
+import { Navbar } from "../components/Navbar.jsx";
 
 export function QRGeneratorPage({ auth }) {
   const isAdminRole = auth.user?.role === "admin" || auth.user?.role === "super_admin" || auth.user?.role === "event_admin";
@@ -158,49 +159,8 @@ export function QRGeneratorPage({ auth }) {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-16">
-      {/* Top Header */}
-      <nav className="bg-white border-b border-slate-100 shadow-sm sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2.5">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white font-bold text-base shadow-md shadow-indigo-100">
-                QR
-              </span>
-              <div className="flex flex-col">
-                <span className="font-extrabold text-slate-900 tracking-tight leading-none text-base">
-                  QR Studio
-                </span>
-                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">
-                  Enterprise Suite
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Link 
-                to="/dashboard" 
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm"
-              >
-                <span>Dashboard</span>
-                <span className="text-[10px]">➔</span>
-              </Link>
-              <Link 
-                to="/scan" 
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 transition-colors px-4 py-2 text-xs font-semibold text-white shadow-sm"
-              >
-                <span>Live Validator</span>
-                <span className="text-[10px]">📷</span>
-              </Link>
-              <button 
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm" 
-                onClick={auth.logout}
-              >
-                <span>Logout</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+      {/* Shared Navbar Header & Hamburger Menu */}
+      <Navbar auth={auth} />
 
       {/* Main Content Area */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">

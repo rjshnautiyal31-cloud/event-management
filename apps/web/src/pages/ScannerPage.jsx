@@ -2,6 +2,7 @@ import { Html5QrcodeScanner } from "html5-qrcode";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { Navbar } from "../components/Navbar.jsx";
 
 export function ScannerPage({ auth }) {
   const isSuperAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin";
@@ -65,39 +66,8 @@ export function ScannerPage({ auth }) {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-12">
-      {/* Premium Top Navigation */}
-      <nav className="bg-white border-b border-slate-100 shadow-sm sticky top-0 z-40">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold text-sm shadow-md">
-                QR
-              </span>
-              <span className="font-bold text-slate-900 tracking-tight text-base sm:text-lg">
-                Gate Validator
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              {isSuperAdmin && (
-                <Link 
-                  to="/generator" 
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all"
-                >
-                  <span>QR Generator</span>
-                  <span className="text-[10px]">🎨</span>
-                </Link>
-              )}
-              <Link 
-                to="/dashboard" 
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-all"
-              >
-                <span>Dashboard</span>
-                <span className="text-[10px]">➔</span>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
+      {/* Shared Navbar Header & Hamburger Menu */}
+      <Navbar auth={auth} />
 
       <div className="mx-auto max-w-lg px-4 sm:px-6 mt-6 space-y-5 animate-scale-up">
         {/* Real-time Scan Result Alerts with Cooldown UI */}

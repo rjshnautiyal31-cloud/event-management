@@ -24,12 +24,12 @@ export function LoginPage({ auth }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <span className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-indigo-600 text-white font-bold text-xl shadow-md shadow-indigo-200">
-          QR
+        <span className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-[#0A2D59] text-white font-black text-xl shadow-lg shadow-[#0A2D59]/20">
+          Q
         </span>
-        <h2 className="mt-4 text-center text-3xl font-extrabold text-slate-900 tracking-tight">
+        <h2 className="mt-4 text-center text-3xl font-black text-[#0A2D59] tracking-tight">
           Admin Gate Control
         </h2>
         <p className="mt-2 text-center text-sm text-slate-600 font-medium">
@@ -38,8 +38,8 @@ export function LoginPage({ auth }) {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0 animate-scale-up">
-        <div className="bg-white py-8 px-6 shadow-md rounded-2xl border border-slate-100 relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 to-violet-600" />
+        <div className="bg-white py-8 px-6 shadow-md rounded-2xl border border-slate-200/80 relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#0A2D59]" />
           
           <form className="space-y-5" onSubmit={handleSubmit}>
             <div>
@@ -48,7 +48,7 @@ export function LoginPage({ auth }) {
               </label>
               <input 
                 type="email"
-                className="w-full rounded-lg border border-slate-200 p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400" 
+                className="w-full rounded-xl bg-slate-50 border border-slate-200 p-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59] transition-all placeholder:text-slate-400" 
                 placeholder="you@domain.com"
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
@@ -61,7 +61,7 @@ export function LoginPage({ auth }) {
                 Password
               </label>
               <input
-                className="w-full rounded-lg border border-slate-200 p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400"
+                className="w-full rounded-xl bg-slate-50 border border-slate-200 p-3 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59] transition-all placeholder:text-slate-400"
                 type="password"
                 placeholder="••••••••"
                 value={password}
@@ -70,13 +70,13 @@ export function LoginPage({ auth }) {
               />
             </div>
 
-            <button className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 transition-colors py-2.5 text-white font-semibold text-sm shadow-sm shadow-indigo-100 flex items-center justify-center gap-1.5">
+            <button className="w-full rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors py-3 text-white font-bold text-sm shadow-md shadow-[#0A2D59]/20 flex items-center justify-center gap-1.5">
               <span>Sign In to Dashboard</span>
               <span className="text-xs">➔</span>
             </button>
             
             {error && (
-              <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-xs font-semibold text-red-700 flex items-center gap-1.5">
+              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-700 flex items-center gap-1.5">
                 <span>⚠️</span>
                 <span>{error}</span>
               </div>
@@ -87,4 +87,3 @@ export function LoginPage({ auth }) {
     </div>
   );
 }
-

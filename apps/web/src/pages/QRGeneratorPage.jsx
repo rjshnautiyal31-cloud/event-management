@@ -9,7 +9,7 @@ export function QRGeneratorPage({ auth }) {
   }
 
   const [url, setUrl] = useState("https://example.com");
-  const [fgColor, setFgColor] = useState("#4f46e5"); // Premium Indigo
+  const [fgColor, setFgColor] = useState("#0A2D59"); // Brand Navy #0A2D59
   const [bgColor, setBgColor] = useState("#ffffff");
   const [size, setSize] = useState(256);
   const [margin, setMargin] = useState(4);

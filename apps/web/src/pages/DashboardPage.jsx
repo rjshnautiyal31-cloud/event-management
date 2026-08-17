@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import QRCode from "qrcode";
@@ -24,6 +24,11 @@ export function DashboardPage({ auth }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [attendeeFilter, setAttendeeFilter] = useState("all"); // "all" | "checked_in" | "pending"
 
+  // High-Volume Pagination & Infinite Scroll States for 100s/1000s of Attendees
+  const [pageSize, setPageSize] = useState(25);
+  const [visibleCount, setVisibleCount] = useState(25);
+  const attendeeListContainerRef = useRef(null);
+
   // Gates management and context-specific messages
   const [gates, setGates] = useState([]);
   const [newGateName, setNewGateName] = useState("");
@@ -48,43 +53,6 @@ export function DashboardPage({ auth }) {
 
   // Map of attendee IDs to generated QR Data URLs
   const [attendeeQrMap, setAttendeeQrMap] = useState({});
-
-  useEffect(() => {
-    if (!attendees || !attendees.length) {
-      setAttendeeQrMap({});
-      return;
-    }
-
-    let isMounted = true;
-
-    async function generateAttendeeQrs() {
-      const map = {};
-      for (const a of attendees) {
-        if (a.ticketQrDataUrl) {
-          map[a._id] = a.ticketQrDataUrl;
-        } else {
-          const payload = a.ticketUuid || JSON.stringify({ attendeeId: a._id, eventId: a.eventId });
-          try {
-            const url = await QRCode.toDataURL(payload, {
-              width: 240,
-              margin: 1,
-              color: { dark: "#0f172a", light: "#ffffff" }
-            });
-            map[a._id] = url;
-          } catch (e) {
-            console.error("Failed to generate attendee QR:", e);
-          }
-        }
-      }
-      if (isMounted) {
-        setAttendeeQrMap(map);
-      }
-    }
-
-    generateAttendeeQrs();
-
-    return () => { isMounted = false; };
-  }, [attendees]);
 
   const isSuperAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin";
   const isAdmin = isSuperAdmin || auth.user?.role === "event_admin";
@@ -143,6 +111,77 @@ export function DashboardPage({ auth }) {
       }
     })();
   }, [selectedEventId, auth.token]);
+
+  // Reset pagination count whenever search, filter, or event changes
+  useEffect(() => {
+    setVisibleCount(pageSize);
+  }, [searchQuery, attendeeFilter, selectedEventId, pageSize]);
+
+  // Filtered attendees search & status logic
+  const filteredAttendees = attendees.filter((a) => {
+    const matchesSearch =
+      a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      a.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (a.phoneNumber && a.phoneNumber.includes(searchQuery));
+    
+    if (attendeeFilter === "checked_in") return matchesSearch && a.isCheckedIn;
+    if (attendeeFilter === "pending") return matchesSearch && !a.isCheckedIn;
+    return matchesSearch;
+  });
+
+  // Slice for visible items based on current pagination
+  const displayedAttendees = filteredAttendees.slice(0, visibleCount);
+
+  // Generate QR codes on-demand only for currently visible attendees (High-Performance Scaling)
+  useEffect(() => {
+    if (!displayedAttendees || !displayedAttendees.length) return;
+
+    let isMounted = true;
+
+    async function generateAttendeeQrs() {
+      const map = { ...attendeeQrMap };
+      let changed = false;
+
+      for (const a of displayedAttendees) {
+        if (!map[a._id]) {
+          if (a.ticketQrDataUrl) {
+            map[a._id] = a.ticketQrDataUrl;
+            changed = true;
+          } else {
+            const payload = a.ticketUuid || JSON.stringify({ attendeeId: a._id, eventId: a.eventId });
+            try {
+              const url = await QRCode.toDataURL(payload, {
+                width: 200,
+                margin: 1,
+                color: { dark: "#0A2D59", light: "#ffffff" }
+              });
+              map[a._id] = url;
+              changed = true;
+            } catch (e) {
+              console.error("Failed to generate attendee QR:", e);
+            }
+          }
+        }
+      }
+      if (isMounted && changed) {
+        setAttendeeQrMap(map);
+      }
+    }
+
+    generateAttendeeQrs();
+
+    return () => { isMounted = false; };
+  }, [displayedAttendees]);
+
+  // Infinite scroll listener for attendee list container
+  function handleAttendeeScroll(e) {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    if (scrollHeight - scrollTop - clientHeight < 120) {
+      if (visibleCount < filteredAttendees.length) {
+        setVisibleCount((prev) => Math.min(prev + pageSize, filteredAttendees.length));
+      }
+    }
+  }
 
   async function createGate(e) {
     e.preventDefault();
@@ -400,38 +439,26 @@ export function DashboardPage({ auth }) {
       QRCode.toDataURL(publicRegistrationUrl, {
         width: 360,
         margin: 2,
-        color: { dark: "#0f172a", light: "#ffffff" }
+        color: { dark: "#0A2D59", light: "#ffffff" }
       })
         .then((url) => setEventQrDataUrl(url))
         .catch((err) => console.error("Failed to generate event QR:", err));
     }
   }, [publicRegistrationUrl]);
 
-  // Filtered attendees search & status logic
-  const filteredAttendees = attendees.filter((a) => {
-    const matchesSearch =
-      a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (a.phoneNumber && a.phoneNumber.includes(searchQuery));
-    
-    if (attendeeFilter === "checked_in") return matchesSearch && a.isCheckedIn;
-    if (attendeeFilter === "pending") return matchesSearch && !a.isCheckedIn;
-    return matchesSearch;
-  });
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans pb-mobile-nav">
       
-      {/* 1. Light Professional App Header */}
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 py-3 flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 rounded-xl bg-indigo-600 flex items-center justify-center font-black text-white text-lg shadow-md shadow-indigo-500/20">
+      {/* 1. App Header with #0A2D59 Brand Styling */}
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 py-3 flex items-center justify-between shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-xl bg-[#0A2D59] flex items-center justify-center font-black text-white text-lg shadow-md shadow-[#0A2D59]/20">
             Q
           </div>
           <div>
-            <h1 className="text-sm font-bold text-slate-900 leading-tight">EventQR Hub</h1>
+            <h1 className="text-sm font-black text-[#0A2D59] tracking-tight leading-tight">EventQR Hub</h1>
             <p className="text-[11px] text-slate-500 font-medium">
-              {auth.user?.name} · <span className="text-indigo-600 font-bold capitalize">{auth.user?.role?.replace("_", " ")}</span>
+              {auth.user?.name} · <span className="text-[#0A2D59] font-bold capitalize">{auth.user?.role?.replace("_", " ")}</span>
             </p>
           </div>
         </div>
@@ -447,7 +474,7 @@ export function DashboardPage({ auth }) {
           )}
           <Link
             to="/scan"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 transition-colors px-3.5 py-1.5 text-xs font-bold text-white shadow-sm shadow-indigo-600/30"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-3.5 py-1.5 text-xs font-bold text-white shadow-sm shadow-[#0A2D59]/20"
           >
             <span>📷 Scanner</span>
           </Link>
@@ -460,7 +487,7 @@ export function DashboardPage({ auth }) {
         </div>
       </header>
 
-      {/* 2. Top Event Switcher & Navigation Header */}
+      {/* 2. Top Event Switcher & Tab Selector Header */}
       <div className="bg-white border-b border-slate-200/80 px-4 py-3 shadow-xs">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           
@@ -469,7 +496,7 @@ export function DashboardPage({ auth }) {
             <select
               value={selectedEventId}
               onChange={(e) => setSelectedEventId(e.target.value)}
-              className="flex-1 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-sm font-bold text-slate-850 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all truncate"
+              className="flex-1 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-sm font-bold text-slate-850 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59] transition-all truncate"
             >
               {events.length === 0 && <option value="">No events found</option>}
               {events.map((e) => (
@@ -482,7 +509,7 @@ export function DashboardPage({ auth }) {
             {isAdmin && (
               <button
                 onClick={() => setCreateEventModalOpen(true)}
-                className="shrink-0 rounded-xl bg-slate-900 hover:bg-slate-800 transition-colors px-3.5 py-2 text-xs font-bold text-white shadow-sm"
+                className="shrink-0 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-3.5 py-2 text-xs font-bold text-white shadow-sm"
               >
                 + New Event
               </button>
@@ -494,7 +521,7 @@ export function DashboardPage({ auth }) {
             <button
               onClick={() => setActiveTab("overview")}
               className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                activeTab === "overview" ? "bg-white text-indigo-600 shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
+                activeTab === "overview" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               📊 Overview
@@ -502,12 +529,12 @@ export function DashboardPage({ auth }) {
             <button
               onClick={() => setActiveTab("attendees")}
               className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                activeTab === "attendees" ? "bg-white text-indigo-600 shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
+                activeTab === "attendees" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               <span>👥 Attendees</span>
               {stats && (
-                <span className="bg-indigo-100 text-indigo-700 text-[10px] px-1.5 py-0.5 rounded-full font-extrabold">
+                <span className="bg-[#0A2D59]/10 text-[#0A2D59] text-[10px] px-1.5 py-0.5 rounded-full font-extrabold">
                   {stats.totalRegistrations}
                 </span>
               )}
@@ -515,7 +542,7 @@ export function DashboardPage({ auth }) {
             <button
               onClick={() => setActiveTab("gates")}
               className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                activeTab === "gates" ? "bg-white text-indigo-600 shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
+                activeTab === "gates" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               📍 Gates
@@ -524,7 +551,7 @@ export function DashboardPage({ auth }) {
               <button
                 onClick={() => setActiveTab("team")}
                 className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                  activeTab === "team" ? "bg-white text-indigo-600 shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
+                  activeTab === "team" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
                 }`}
               >
                 🛡️ Team
@@ -557,14 +584,14 @@ export function DashboardPage({ auth }) {
             {selectedEvent ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 
-                {/* Event Hero Details Card */}
+                {/* Event Hero Details Card with #0A2D59 Branding */}
                 <div className="md:col-span-2 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-lg border border-indigo-100 mb-2">
+                      <span className="inline-flex items-center gap-1 bg-[#0A2D59]/10 text-[#0A2D59] text-xs font-bold px-2.5 py-1 rounded-lg border border-[#0A2D59]/20 mb-2">
                         🟢 Active Event Workspace
                       </span>
-                      <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">{selectedEvent.title}</h2>
+                      <h2 className="text-2xl font-extrabold text-[#0A2D59] tracking-tight">{selectedEvent.title}</h2>
                     </div>
                   </div>
 
@@ -601,7 +628,7 @@ export function DashboardPage({ auth }) {
                       <input
                         readOnly
                         value={publicRegistrationUrl}
-                        className="flex-1 rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-xs font-mono text-indigo-700 font-semibold focus:outline-none select-all truncate"
+                        className="flex-1 rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-xs font-mono text-[#0A2D59] font-semibold focus:outline-none select-all truncate"
                       />
                       <button
                         onClick={() => {
@@ -609,7 +636,7 @@ export function DashboardPage({ auth }) {
                           setCopiedLink(true);
                           setTimeout(() => setCopiedLink(false), 2000);
                         }}
-                        className="shrink-0 rounded-xl bg-indigo-600 hover:bg-indigo-700 transition-colors px-4 py-2.5 text-xs font-bold text-white shadow-sm shadow-indigo-600/20"
+                        className="shrink-0 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-4 py-2.5 text-xs font-bold text-white shadow-sm"
                       >
                         {copiedLink ? "Copied! ✅" : "Copy Link"}
                       </button>
@@ -636,7 +663,7 @@ export function DashboardPage({ auth }) {
                     <a
                       href={eventQrDataUrl}
                       download={`${(selectedEvent.title || "event").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-registration-qr.png`}
-                      className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3.5 py-2 rounded-xl border border-indigo-200/80 transition-colors"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0A2D59] bg-[#0A2D59]/10 hover:bg-[#0A2D59]/20 px-3.5 py-2 rounded-xl border border-[#0A2D59]/20 transition-colors"
                     >
                       <span>📥</span>
                       <span>Download Registration QR</span>
@@ -650,7 +677,7 @@ export function DashboardPage({ auth }) {
                 {isAdmin && (
                   <button
                     onClick={() => setCreateEventModalOpen(true)}
-                    className="rounded-xl bg-indigo-600 hover:bg-indigo-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm"
+                    className="rounded-xl bg-[#0A2D59] hover:bg-[#082247] px-4 py-2.5 text-xs font-bold text-white shadow-sm"
                   >
                     + Create Your First Event
                   </button>
@@ -692,7 +719,7 @@ export function DashboardPage({ auth }) {
                       <span>⏱️</span>
                       <span>Recent Scan Activity & Entry Logs</span>
                     </h3>
-                    <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100">
+                    <span className="text-[11px] font-bold text-[#0A2D59] bg-[#0A2D59]/10 px-2.5 py-0.5 rounded-full border border-[#0A2D59]/20">
                       {stats?.recentLogs?.length || 0} Scans Recorded
                     </span>
                   </div>
@@ -755,7 +782,7 @@ export function DashboardPage({ auth }) {
           </div>
         )}
 
-        {/* TAB 2: 👥 ATTENDEES & CHECK-IN WORKSPACE */}
+        {/* TAB 2: 👥 ATTENDEES & HIGH-VOLUME SCALABLE ROSTER */}
         {activeTab === "attendees" && (
           <div className="space-y-4 animate-fade-in">
             
@@ -766,17 +793,17 @@ export function DashboardPage({ auth }) {
                   <span className="absolute left-3.5 top-2.5 text-slate-400 text-xs">🔍</span>
                   <input
                     type="text"
-                    placeholder="Search attendee by name, email, or phone..."
+                    placeholder="Search 100s of attendees by name, email, or phone..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full rounded-xl bg-slate-50 border border-slate-200 pl-9 pr-3.5 py-2 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    className="w-full rounded-xl bg-slate-50 border border-slate-200 pl-9 pr-3.5 py-2 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                   />
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => setWalkInSheetOpen(true)}
-                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 transition-colors px-4 py-2 text-xs font-bold text-white shadow-sm shadow-indigo-600/20"
+                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-4 py-2 text-xs font-bold text-white shadow-sm shadow-[#0A2D59]/20"
                   >
                     <span>+ Walk-In Guest</span>
                   </button>
@@ -789,42 +816,62 @@ export function DashboardPage({ auth }) {
                 </div>
               </div>
 
-              {/* Status Filter Pills */}
-              <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
-                <button
-                  onClick={() => setAttendeeFilter("all")}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    attendeeFilter === "all" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  All ({attendees.length})
-                </button>
-                <button
-                  onClick={() => setAttendeeFilter("checked_in")}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    attendeeFilter === "checked_in" ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  Checked In ({attendees.filter((a) => a.isCheckedIn).length})
-                </button>
-                <button
-                  onClick={() => setAttendeeFilter("pending")}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    attendeeFilter === "pending" ? "bg-amber-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  Pending ({attendees.filter((a) => !a.isCheckedIn).length})
-                </button>
+              {/* Status Filter Pills & High-Volume Batch Selector */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => setAttendeeFilter("all")}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      attendeeFilter === "all" ? "bg-[#0A2D59] text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    All ({attendees.length})
+                  </button>
+                  <button
+                    onClick={() => setAttendeeFilter("checked_in")}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      attendeeFilter === "checked_in" ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    Checked In ({attendees.filter((a) => a.isCheckedIn).length})
+                  </button>
+                  <button
+                    onClick={() => setAttendeeFilter("pending")}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      attendeeFilter === "pending" ? "bg-amber-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    Pending ({attendees.filter((a) => !a.isCheckedIn).length})
+                  </button>
+                </div>
+
+                {/* Page Batch Size Control */}
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-500 font-medium">Batch Size:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    className="rounded-lg bg-slate-50 border border-slate-200 px-2 py-1 text-xs font-bold text-slate-700 focus:outline-none"
+                  >
+                    <option value={25}>25 per view</option>
+                    <option value={50}>50 per view</option>
+                    <option value={100}>100 per view</option>
+                    <option value={250}>250 (All)</option>
+                  </select>
+                </div>
               </div>
             </div>
 
-            {/* Attendee Roster List with Direct Visible QR Codes */}
+            {/* Attendee Roster List with High-Volume Virtual Scroll & Lazy QR Rendering */}
             <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
               <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-xs font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                <h3 className="text-xs font-extrabold text-[#0A2D59] uppercase tracking-wider flex items-center gap-1.5">
                   <span>📜</span>
-                  <span>Attendee Roster ({filteredAttendees.length})</span>
+                  <span>Attendee Roster ({filteredAttendees.length} Total Records)</span>
                 </h3>
+                <span className="text-[11px] font-bold text-slate-500">
+                  Showing 1–{displayedAttendees.length} of {filteredAttendees.length}
+                </span>
               </div>
 
               {filteredAttendees.length === 0 ? (
@@ -832,8 +879,12 @@ export function DashboardPage({ auth }) {
                   No attendees matching your search/filter criteria.
                 </div>
               ) : (
-                <div className="divide-y divide-slate-100 max-h-[560px] overflow-y-auto">
-                  {filteredAttendees.map((a) => {
+                <div
+                  ref={attendeeListContainerRef}
+                  onScroll={handleAttendeeScroll}
+                  className="divide-y divide-slate-100 max-h-[580px] overflow-y-auto"
+                >
+                  {displayedAttendees.map((a) => {
                     const qrUrl = attendeeQrMap[a._id] || a.ticketQrDataUrl;
 
                     return (
@@ -844,11 +895,11 @@ export function DashboardPage({ auth }) {
                           {qrUrl ? (
                             <button
                               onClick={() => setActiveAttendeeQr(qrUrl)}
-                              className="shrink-0 group relative p-1 bg-white rounded-xl border border-slate-200 shadow-xs hover:border-indigo-400 hover:shadow-md transition-all"
+                              className="shrink-0 group relative p-1 bg-white rounded-xl border border-slate-200 shadow-xs hover:border-[#0A2D59] hover:shadow-md transition-all"
                               title="Click to view full QR pass"
                             >
                               <img src={qrUrl} alt={`${a.name} QR`} className="w-14 h-14 object-contain rounded-lg" />
-                              <span className="absolute inset-0 bg-indigo-600/10 opacity-0 group-hover:opacity-100 rounded-xl transition-opacity flex items-center justify-center text-[10px] font-extrabold text-indigo-700">
+                              <span className="absolute inset-0 bg-[#0A2D59]/10 opacity-0 group-hover:opacity-100 rounded-xl transition-opacity flex items-center justify-center text-[10px] font-extrabold text-[#0A2D59]">
                                 🔍
                               </span>
                             </button>
@@ -881,30 +932,43 @@ export function DashboardPage({ auth }) {
                           {qrUrl && (
                             <button
                               onClick={() => setActiveAttendeeQr(qrUrl)}
-                              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 border border-slate-200 text-xs font-bold transition-colors"
+                              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-[#0A2D59]/10 hover:text-[#0A2D59] text-slate-600 border border-slate-200 text-xs font-bold transition-colors"
                               title="Expand Ticket QR"
                             >
                               <span>🎟️ Expand QR</span>
                             </button>
                           )}
-                        <button
-                          onClick={() => handleStartEdit(a)}
-                          className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 text-xs font-semibold transition-colors"
-                          title="Edit Attendee"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDeleteAttendee(a._id)}
-                          className="p-2 rounded-xl bg-slate-100 hover:bg-red-50 hover:text-red-600 text-red-500 border border-slate-200 text-xs font-semibold transition-colors"
-                          title="Delete Attendee"
-                        >
-                          🗑️
-                        </button>
+                          <button
+                            onClick={() => handleStartEdit(a)}
+                            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 text-xs font-semibold transition-colors"
+                            title="Edit Attendee"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAttendee(a._id)}
+                            className="p-2 rounded-xl bg-slate-100 hover:bg-red-50 hover:text-red-600 text-red-500 border border-slate-200 text-xs font-semibold transition-colors"
+                            title="Delete Attendee"
+                          >
+                            🗑️
+                          </button>
+                        </div>
                       </div>
-                    </div>
                     );
                   })}
+
+                  {/* Infinite Scroll / Load More Trigger */}
+                  {visibleCount < filteredAttendees.length && (
+                    <div className="p-4 bg-slate-50 border-t border-slate-100 text-center">
+                      <button
+                        onClick={() => setVisibleCount((prev) => Math.min(prev + pageSize, filteredAttendees.length))}
+                        className="rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-all px-6 py-2.5 text-xs font-bold text-white shadow-sm"
+                      >
+                        ⚡ Load Next {Math.min(pageSize, filteredAttendees.length - visibleCount)} Attendees (Showing {visibleCount} of {filteredAttendees.length})
+                      </button>
+                      <p className="text-[10px] text-slate-400 mt-1 font-medium">Or scroll down to load automatically</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -915,18 +979,18 @@ export function DashboardPage({ auth }) {
         {activeTab === "gates" && (
           <div className="space-y-6 animate-fade-in">
             
-            {/* Live Camera Scanner Launcher Banner */}
-            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            {/* Live Camera Scanner Launcher Banner with #0A2D59 Branding */}
+            <div className="bg-gradient-to-r from-[#0A2D59] via-[#0D386F] to-[#0A2D59] rounded-2xl p-6 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="space-y-1">
                 <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-400/20">
                   LIVE VALIDATOR
                 </span>
                 <h2 className="text-xl font-extrabold text-white">Entrance Camera Scanner</h2>
-                <p className="text-xs text-indigo-200 font-medium">Scan physical or mobile QR passes at your entrance gates in real time.</p>
+                <p className="text-xs text-indigo-100 font-medium">Scan physical or mobile QR passes at your entrance gates in real time.</p>
               </div>
               <Link
                 to="/scan"
-                className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 transition-colors px-5 py-3 text-xs font-bold text-white shadow-lg shadow-indigo-600/30"
+                className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-white text-[#0A2D59] hover:bg-slate-100 transition-colors px-5 py-3 text-xs font-black shadow-lg"
               >
                 <span>📷 Open Live Scanner</span>
               </Link>
@@ -935,7 +999,7 @@ export function DashboardPage({ auth }) {
             {/* Gates Management Card */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-5">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-xs font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                <h3 className="text-xs font-extrabold text-[#0A2D59] uppercase tracking-wider flex items-center gap-1.5">
                   <span>📍</span>
                   <span>Entrance Gates & Posts ({gates.length})</span>
                 </h3>
@@ -947,12 +1011,12 @@ export function DashboardPage({ auth }) {
                   placeholder="New Gate Name (e.g. Gate 1, VIP Entrance)"
                   value={newGateName}
                   onChange={(e) => setNewGateName(e.target.value)}
-                  className="flex-1 rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="flex-1 rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                   required
                 />
                 <button
                   type="submit"
-                  className="shrink-0 rounded-xl bg-indigo-600 hover:bg-indigo-700 transition-colors px-4 py-2.5 text-xs font-bold text-white shadow-sm"
+                  className="shrink-0 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-4 py-2.5 text-xs font-bold text-white shadow-sm"
                 >
                   + Add Post
                 </button>
@@ -986,21 +1050,21 @@ export function DashboardPage({ auth }) {
               
               {/* Create Staff Form Card */}
               <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-                <h3 className="text-xs font-extrabold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center gap-1.5">
+                <h3 className="text-xs font-extrabold text-[#0A2D59] uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center gap-1.5">
                   <span>➕</span>
                   <span>{isSuperAdmin ? "Create System Account" : "Create Event Staff"}</span>
                 </h3>
 
                 <form onSubmit={createStaffUser} className="space-y-3">
                   <input
-                    className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                     placeholder="Full Name"
                     value={staffForm.name}
                     onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })}
                     required
                   />
                   <input
-                    className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                     placeholder="Email Address"
                     type="email"
                     value={staffForm.email}
@@ -1008,7 +1072,7 @@ export function DashboardPage({ auth }) {
                     required
                   />
                   <input
-                    className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                     placeholder="Temporary Password"
                     type="password"
                     value={staffForm.password}
@@ -1018,7 +1082,7 @@ export function DashboardPage({ auth }) {
 
                   <div className="grid grid-cols-2 gap-2">
                     <select
-                      className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                       value={staffForm.role}
                       onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}
                     >
@@ -1033,7 +1097,7 @@ export function DashboardPage({ auth }) {
 
                     {staffForm.role === "event_staff" && (
                       <select
-                        className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                        className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                         value={staffForm.assignedGateId}
                         onChange={(e) => setStaffForm({ ...staffForm, assignedGateId: e.target.value })}
                       >
@@ -1049,7 +1113,7 @@ export function DashboardPage({ auth }) {
 
                   <button
                     type="submit"
-                    className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 transition-colors p-2.5 text-xs font-bold text-white shadow-sm shadow-indigo-600/20"
+                    className="w-full rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors p-2.5 text-xs font-bold text-white shadow-sm"
                   >
                     {isSuperAdmin ? "Create System Account" : "Create Staff Account"}
                   </button>
@@ -1058,7 +1122,7 @@ export function DashboardPage({ auth }) {
 
               {/* Staff Accounts List Card */}
               <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-                <h3 className="text-xs font-extrabold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center gap-1.5">
+                <h3 className="text-xs font-extrabold text-[#0A2D59] uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center gap-1.5">
                   <span>🛡️</span>
                   <span>{isSuperAdmin ? "System Accounts" : "Event Staff Accounts"} ({staffUsers.length})</span>
                 </h3>
@@ -1079,14 +1143,14 @@ export function DashboardPage({ auth }) {
                         <div className="flex items-center justify-between">
                           <div>
                             <span className="font-bold text-slate-900 text-xs">{staff.name}</span>
-                            <span className="ml-2 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 border border-indigo-200/60">
+                            <span className="ml-2 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20">
                               {roleBadgeText}
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => handleStartEditUser(staff)}
-                              className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 uppercase tracking-wider"
+                              className="text-[10px] font-bold text-[#0A2D59] hover:underline uppercase tracking-wider"
                             >
                               Edit
                             </button>
@@ -1135,7 +1199,7 @@ export function DashboardPage({ auth }) {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="w-full max-w-lg bg-white border-t sm:border border-slate-200 rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl animate-slide-up space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <h3 className="text-base font-extrabold text-[#0A2D59] flex items-center gap-2">
                 <span>📝</span>
                 <span>Walk-In Guest Registration</span>
               </h3>
@@ -1155,7 +1219,7 @@ export function DashboardPage({ auth }) {
                   placeholder="e.g. Jane Doe"
                   value={manualAttendee.name}
                   onChange={(e) => setManualAttendee({ ...manualAttendee, name: e.target.value })}
-                  className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                   required
                 />
               </div>
@@ -1167,7 +1231,7 @@ export function DashboardPage({ auth }) {
                   placeholder="jane.doe@example.com"
                   value={manualAttendee.email}
                   onChange={(e) => setManualAttendee({ ...manualAttendee, email: e.target.value })}
-                  className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                   required
                 />
               </div>
@@ -1179,7 +1243,7 @@ export function DashboardPage({ auth }) {
                   placeholder="+1234567890"
                   value={manualAttendee.phoneNumber}
                   onChange={(e) => setManualAttendee({ ...manualAttendee, phoneNumber: e.target.value })}
-                  className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="w-full rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                 />
               </div>
 
@@ -1193,7 +1257,7 @@ export function DashboardPage({ auth }) {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-4 py-3 text-xs font-bold text-white shadow-md shadow-indigo-600/20 transition-colors"
+                  className="flex-1 rounded-xl bg-[#0A2D59] hover:bg-[#082247] px-4 py-3 text-xs font-bold text-white shadow-md transition-colors"
                 >
                   Register Guest
                 </button>
@@ -1208,7 +1272,7 @@ export function DashboardPage({ auth }) {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="w-full max-w-lg bg-white border-t sm:border border-slate-200 rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl animate-slide-up space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <h3 className="text-base font-extrabold text-[#0A2D59] flex items-center gap-2">
                 <span>📥</span>
                 <span>Bulk Attendee Spreadsheet Import</span>
               </h3>
@@ -1233,7 +1297,7 @@ export function DashboardPage({ auth }) {
                 />
                 <label
                   htmlFor="bulk-file-input"
-                  className="inline-block rounded-xl bg-indigo-600 hover:bg-indigo-700 cursor-pointer px-4 py-2 text-xs font-bold text-white shadow-sm"
+                  className="inline-block rounded-xl bg-[#0A2D59] hover:bg-[#082247] cursor-pointer px-4 py-2 text-xs font-bold text-white shadow-sm"
                 >
                   Choose Spreadsheet File
                 </label>
@@ -1243,7 +1307,7 @@ export function DashboardPage({ auth }) {
                 <span className="text-slate-500 font-medium">Need standard formatting?</span>
                 <button
                   onClick={downloadSampleCsv}
-                  className="text-indigo-600 font-bold hover:underline"
+                  className="text-[#0A2D59] font-bold hover:underline"
                 >
                   Download Sample CSV
                 </button>
@@ -1258,7 +1322,7 @@ export function DashboardPage({ auth }) {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <h3 className="text-base font-extrabold text-[#0A2D59] flex items-center gap-2">
                 <span>➕</span>
                 <span>Create New Event</span>
               </h3>
@@ -1276,14 +1340,14 @@ export function DashboardPage({ auth }) {
                 placeholder="Event Title"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                 required
               />
               <input
                 type="datetime-local"
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                 required
               />
               <input
@@ -1291,7 +1355,7 @@ export function DashboardPage({ auth }) {
                 placeholder="Location / Venue"
                 value={form.location}
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
-                className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                 required
               />
               <textarea
@@ -1299,7 +1363,7 @@ export function DashboardPage({ auth }) {
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 rows={2}
-                className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none"
+                className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59] resize-none"
               />
 
               <div className="pt-2 flex items-center gap-2">
@@ -1312,7 +1376,7 @@ export function DashboardPage({ auth }) {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors"
+                  className="flex-1 rounded-xl bg-[#0A2D59] hover:bg-[#082247] px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors"
                 >
                   Create Event
                 </button>
@@ -1326,13 +1390,13 @@ export function DashboardPage({ auth }) {
       {activeAttendeeQr && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center space-y-4 max-w-xs w-full shadow-2xl">
-            <h4 className="text-sm font-extrabold text-slate-900">Attendee Ticket QR Pass</h4>
+            <h4 className="text-sm font-extrabold text-[#0A2D59]">Attendee Ticket QR Pass</h4>
             <div className="p-3 bg-white rounded-2xl inline-block shadow-sm border border-slate-200">
               <img src={activeAttendeeQr} alt="Ticket QR Pass" className="w-48 h-48 object-contain" />
             </div>
             <button
               onClick={() => setActiveAttendeeQr(null)}
-              className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 py-2.5 text-xs font-bold text-white transition-colors"
+              className="w-full rounded-xl bg-[#0A2D59] hover:bg-[#082247] py-2.5 text-xs font-bold text-white transition-colors"
             >
               Close Preview
             </button>
@@ -1345,7 +1409,7 @@ export function DashboardPage({ auth }) {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl space-y-4 animate-scale-up">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+              <h3 className="text-sm font-extrabold text-[#0A2D59] flex items-center gap-2">
                 <span>✏️</span>
                 <span>Edit Attendee Profile</span>
               </h3>
@@ -1364,7 +1428,7 @@ export function DashboardPage({ auth }) {
                   type="text"
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                   required
                 />
               </div>
@@ -1374,7 +1438,7 @@ export function DashboardPage({ auth }) {
                   type="email"
                   value={editForm.email}
                   onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                  className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                   required
                 />
               </div>
@@ -1384,7 +1448,7 @@ export function DashboardPage({ auth }) {
                   type="tel"
                   value={editForm.phoneNumber}
                   onChange={(e) => setEditForm({ ...editForm, phoneNumber: e.target.value })}
-                  className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                 />
               </div>
 
@@ -1400,7 +1464,7 @@ export function DashboardPage({ auth }) {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors"
+                  className="flex-1 rounded-xl bg-[#0A2D59] hover:bg-[#082247] px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors"
                 >
                   Save Changes
                 </button>
@@ -1415,7 +1479,7 @@ export function DashboardPage({ auth }) {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl space-y-4 animate-scale-up">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+              <h3 className="text-sm font-extrabold text-[#0A2D59] flex items-center gap-2">
                 <span>🛡️</span>
                 <span>Edit User Account</span>
               </h3>
@@ -1434,7 +1498,7 @@ export function DashboardPage({ auth }) {
                   type="text"
                   value={editUserForm.name}
                   onChange={(e) => setEditUserForm({ ...editUserForm, name: e.target.value })}
-                  className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                   required
                 />
               </div>
@@ -1444,7 +1508,7 @@ export function DashboardPage({ auth }) {
                   type="email"
                   value={editUserForm.email}
                   onChange={(e) => setEditUserForm({ ...editUserForm, email: e.target.value })}
-                  className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                   required
                 />
               </div>
@@ -1453,7 +1517,7 @@ export function DashboardPage({ auth }) {
                 <select
                   value={editUserForm.role}
                   onChange={(e) => setEditUserForm({ ...editUserForm, role: e.target.value })}
-                  className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                 >
                   <option value="event_staff">Event Staff (Scanner Access)</option>
                   {isSuperAdmin && (
@@ -1471,7 +1535,7 @@ export function DashboardPage({ auth }) {
                   <select
                     value={editUserForm.assignedGateId}
                     onChange={(e) => setEditUserForm({ ...editUserForm, assignedGateId: e.target.value })}
-                    className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                   >
                     <option value="">No Gate Assigned</option>
                     {gates.map((g) => (
@@ -1495,7 +1559,7 @@ export function DashboardPage({ auth }) {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors"
+                  className="flex-1 rounded-xl bg-[#0A2D59] hover:bg-[#082247] px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors"
                 >
                   Update Account
                 </button>
@@ -1505,12 +1569,12 @@ export function DashboardPage({ auth }) {
         </div>
       )}
 
-      {/* 10. Mobile Fixed Bottom Navigation Bar (Clean Light PWA Style) */}
+      {/* 10. Mobile Fixed Bottom Navigation Bar with #0A2D59 Branding */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/80 py-2 px-4 flex items-center justify-around md:hidden shadow-xl">
         <button
           onClick={() => setActiveTab("overview")}
           className={`flex flex-col items-center gap-1 transition-all ${
-            activeTab === "overview" ? "text-indigo-600 font-bold scale-105" : "text-slate-500 hover:text-slate-800"
+            activeTab === "overview" ? "text-[#0A2D59] font-black scale-105" : "text-slate-500 hover:text-slate-800"
           }`}
         >
           <span className="text-lg">📊</span>
@@ -1520,13 +1584,13 @@ export function DashboardPage({ auth }) {
         <button
           onClick={() => setActiveTab("attendees")}
           className={`flex flex-col items-center gap-1 transition-all relative ${
-            activeTab === "attendees" ? "text-indigo-600 font-bold scale-105" : "text-slate-500 hover:text-slate-800"
+            activeTab === "attendees" ? "text-[#0A2D59] font-black scale-105" : "text-slate-500 hover:text-slate-800"
           }`}
         >
           <span className="text-lg">👥</span>
           <span className="text-[10px] font-bold">Attendees</span>
           {stats && (
-            <span className="absolute -top-1 -right-2 bg-indigo-600 text-white text-[9px] font-black h-4 w-4 rounded-full flex items-center justify-center">
+            <span className="absolute -top-1 -right-2 bg-[#0A2D59] text-white text-[9px] font-black h-4 w-4 rounded-full flex items-center justify-center">
               {stats.totalRegistrations}
             </span>
           )}
@@ -1535,7 +1599,7 @@ export function DashboardPage({ auth }) {
         <button
           onClick={() => setActiveTab("gates")}
           className={`flex flex-col items-center gap-1 transition-all ${
-            activeTab === "gates" ? "text-indigo-600 font-bold scale-105" : "text-slate-500 hover:text-slate-800"
+            activeTab === "gates" ? "text-[#0A2D59] font-black scale-105" : "text-slate-500 hover:text-slate-800"
           }`}
         >
           <span className="text-lg">📍</span>
@@ -1546,7 +1610,7 @@ export function DashboardPage({ auth }) {
           <button
             onClick={() => setActiveTab("team")}
             className={`flex flex-col items-center gap-1 transition-all ${
-              activeTab === "team" ? "text-indigo-600 font-bold scale-105" : "text-slate-500 hover:text-slate-800"
+              activeTab === "team" ? "text-[#0A2D59] font-black scale-105" : "text-slate-500 hover:text-slate-800"
             }`}
           >
             <span className="text-lg">🛡️</span>

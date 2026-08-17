@@ -13,7 +13,13 @@ export function DashboardPage({ auth }) {
   const [manualAttendee, setManualAttendee] = useState({ name: "", email: "", phoneNumber: "" });
   const [staffUsers, setStaffUsers] = useState([]);
   const [staffForm, setStaffForm] = useState({ name: "", email: "", password: "", role: "event_staff", assignedGateId: "" });
-  const [form, setForm] = useState({ title: "", date: "", location: "", description: "" });
+  const [form, setForm] = useState({
+    title: "",
+    date: new Date().toISOString().split("T")[0],
+    time: "09:00",
+    location: "",
+    description: ""
+  });
   const [activeAttendeeQr, setActiveAttendeeQr] = useState(null);
 
   // App Shell Navigation & Sheet States
@@ -238,12 +244,24 @@ export function DashboardPage({ auth }) {
     setEventError("");
     setEventSuccess("");
     try {
+      const combinedDateTime = form.date && form.time ? `${form.date}T${form.time}` : form.date;
       const created = await api("/api/events", {
         token: auth.token,
         method: "POST",
-        body: form
+        body: {
+          title: form.title,
+          date: combinedDateTime,
+          location: form.location,
+          description: form.description
+        }
       });
-      setForm({ title: "", date: "", location: "", description: "" });
+      setForm({
+        title: "",
+        date: new Date().toISOString().split("T")[0],
+        time: "09:00",
+        location: "",
+        description: ""
+      });
       setEventSuccess("Event created successfully!");
       setCreateEventModalOpen(false);
       await loadEvents();
@@ -1343,13 +1361,72 @@ export function DashboardPage({ auth }) {
                 className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                 required
               />
-              <input
-                type="datetime-local"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
-                required
-              />
+              {/* Event Date & Time Selector with Native Calendar + Manual Text Input */}
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+                      Event Date
+                    </label>
+                    <input
+                      type="date"
+                      value={form.date}
+                      onClick={(e) => e.target.showPicker?.()}
+                      onChange={(e) => setForm({ ...form, date: e.target.value })}
+                      className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+                      Event Time
+                    </label>
+                    <input
+                      type="time"
+                      value={form.time}
+                      onClick={(e) => e.target.showPicker?.()}
+                      onChange={(e) => setForm({ ...form, time: e.target.value })}
+                      className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Date Shortcuts */}
+                <div className="flex items-center gap-1.5 pt-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Quick Preset:</span>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, date: new Date().toISOString().split("T")[0] })}
+                    className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-slate-600 transition-colors"
+                  >
+                    📅 Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const tomorrow = new Date();
+                      tomorrow.setDate(tomorrow.getDate() + 1);
+                      setForm({ ...form, date: tomorrow.toISOString().split("T")[0] });
+                    }}
+                    className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-slate-600 transition-colors"
+                  >
+                    🚀 Tomorrow
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextWeek = new Date();
+                      nextWeek.setDate(nextWeek.getDate() + 7);
+                      setForm({ ...form, date: nextWeek.toISOString().split("T")[0] });
+                    }}
+                    className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-[10px] font-bold text-slate-600 transition-colors"
+                  >
+                    📆 Next Week
+                  </button>
+                </div>
+              </div>
               <input
                 type="text"
                 placeholder="Location / Venue"

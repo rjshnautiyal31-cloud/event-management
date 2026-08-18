@@ -1,7 +1,16 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 
-export function Navbar({ auth, activeTab, onSelectTab, onOpenCreateEvent, onOpenWalkIn, onOpenBulkImport }) {
+export function Navbar({
+  auth,
+  activeTab,
+  onSelectTab,
+  onOpenCreateEvent,
+  onOpenWalkIn,
+  onOpenBulkImport,
+  onOpenSwitcher,
+  selectedEventTitle
+}) {
   const [hamburgerMenuOpen, setHamburgerMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -47,6 +56,22 @@ export function Navbar({ auth, activeTab, onSelectTab, onOpenCreateEvent, onOpen
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Header Command Switcher Pill Trigger */}
+          {onOpenSwitcher && (
+            <button
+              onClick={onOpenSwitcher}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-[#0A2D59] border border-slate-200 px-3 py-1.5 text-xs font-bold transition-all shadow-2xs active:scale-98 cursor-pointer"
+              title="Search and switch events (⌘K)"
+            >
+              <span className="text-xs">⚡</span>
+              <span className="max-w-[120px] sm:max-w-[200px] truncate font-extrabold">
+                {selectedEventTitle || "Switch Event"}
+              </span>
+              <span className="hidden md:inline-block text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-500">
+                ⌘K
+              </span>
+            </button>
+          )}
           {location.pathname !== "/dashboard" && (
             <Link
               to="/dashboard"
@@ -168,20 +193,37 @@ export function Navbar({ auth, activeTab, onSelectTab, onOpenCreateEvent, onOpen
                   </button>
 
                   {isAdmin && (
-                    <button
-                      onClick={() => handleNavTab("team")}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        activeTab === "team" && location.pathname === "/dashboard"
-                          ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
-                          : "text-slate-700 hover:bg-slate-100"
-                      }`}
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <span>🛡️</span>
-                        <span>Team & Staff Access</span>
-                      </span>
-                      <span className="text-[10px] font-extrabold text-slate-400">➔</span>
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleNavTab("events")}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          activeTab === "events" && location.pathname === "/dashboard"
+                            ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
+                            : "text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <span>🗓️</span>
+                          <span>Events Directory</span>
+                        </span>
+                        <span className="text-[10px] font-extrabold text-slate-400">➔</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleNavTab("team")}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          activeTab === "team" && location.pathname === "/dashboard"
+                            ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
+                            : "text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <span>🛡️</span>
+                          <span>Team & Staff Access</span>
+                        </span>
+                        <span className="text-[10px] font-extrabold text-slate-400">➔</span>
+                      </button>
+                    </>
                   )}
                 </div>
               </div>

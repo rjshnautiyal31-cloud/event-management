@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import QRCode from "qrcode";
 import { Navbar } from "../components/Navbar.jsx";
+import { EventSwitcherModal } from "../components/EventSwitcherModal.jsx";
 
 export function DashboardPage({ auth }) {
   const [events, setEvents] = useState([]);
@@ -24,10 +25,14 @@ export function DashboardPage({ auth }) {
   const [activeAttendeeQr, setActiveAttendeeQr] = useState(null);
 
   // App Shell Navigation & Sheet States
-  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "attendees" | "gates" | "team"
+  const [activeTab, setActiveTab] = useState("overview"); // "overview" | "attendees" | "gates" | "team" | "events"
   const [walkInSheetOpen, setWalkInSheetOpen] = useState(false);
   const [bulkImportSheetOpen, setBulkImportSheetOpen] = useState(false);
   const [createEventModalOpen, setCreateEventModalOpen] = useState(false);
+  const [switcherModalOpen, setSwitcherModalOpen] = useState(false);
+  const [eventSearchQuery, setEventSearchQuery] = useState("");
+  const [eventDirectoryFilter, setEventDirectoryFilter] = useState("all"); // "all" | "upcoming" | "past"
+  const [eventDirectoryPage, setEventDirectoryPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [attendeeFilter, setAttendeeFilter] = useState("all"); // "all" | "checked_in" | "pending"
   const [hamburgerMenuOpen, setHamburgerMenuOpen] = useState(false);
@@ -477,6 +482,8 @@ export function DashboardPage({ auth }) {
         onOpenCreateEvent={() => setCreateEventModalOpen(true)}
         onOpenWalkIn={() => setWalkInSheetOpen(true)}
         onOpenBulkImport={() => setBulkImportSheetOpen(true)}
+        onOpenSwitcher={() => setSwitcherModalOpen(true)}
+        selectedEventTitle={selectedEvent?.title}
       />
 
       {/* 2. Top Event Switcher & Tab Selector Header */}
@@ -484,24 +491,35 @@ export function DashboardPage({ auth }) {
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span className="text-base">📅</span>
-            <select
-              value={selectedEventId}
-              onChange={(e) => setSelectedEventId(e.target.value)}
-              className="flex-1 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-sm font-bold text-slate-850 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59] transition-all truncate"
+            {/* Interactive Command Switcher Pill Trigger */}
+            <button
+              onClick={() => setSwitcherModalOpen(true)}
+              className="flex-1 flex items-center justify-between rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3.5 py-2 text-xs font-bold text-slate-800 transition-all cursor-pointer shadow-2xs group"
+              title="Click or press ⌘K to search & switch events"
             >
-              {events.length === 0 && <option value="">No events found</option>}
-              {events.map((e) => (
-                <option key={e._id} value={e._id}>
-                  {e.title} ({new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })})
-                </option>
-              ))}
-            </select>
+              <div className="flex items-center gap-2 truncate">
+                <span className="text-xs">⚡</span>
+                <span className="truncate font-black text-[#0A2D59]">
+                  {selectedEvent?.title || "Select Event..."}
+                </span>
+                {selectedEvent && (
+                  <span className="text-[11px] font-semibold text-slate-500 hidden sm:inline">
+                    ({new Date(selectedEvent.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })})
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[10px] font-mono font-extrabold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200 shadow-2xs">
+                  ⌘K Search
+                </span>
+                <span className="text-xs text-slate-400 group-hover:text-slate-600">▼</span>
+              </div>
+            </button>
             
             {isAdmin && (
               <button
                 onClick={() => setCreateEventModalOpen(true)}
-                className="shrink-0 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-3.5 py-2 text-xs font-bold text-white shadow-sm"
+                className="shrink-0 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-3.5 py-2 text-xs font-bold text-white shadow-sm cursor-pointer"
               >
                 + New Event
               </button>
@@ -512,7 +530,7 @@ export function DashboardPage({ auth }) {
           <div className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0">
             <button
               onClick={() => setActiveTab("overview")}
-              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                 activeTab === "overview" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
               }`}
             >
@@ -520,7 +538,7 @@ export function DashboardPage({ auth }) {
             </button>
             <button
               onClick={() => setActiveTab("attendees")}
-              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeTab === "attendees" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
               }`}
             >
@@ -533,21 +551,31 @@ export function DashboardPage({ auth }) {
             </button>
             <button
               onClick={() => setActiveTab("gates")}
-              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                 activeTab === "gates" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
               }`}
             >
               📍 Gates
             </button>
             {isAdmin && (
-              <button
-                onClick={() => setActiveTab("team")}
-                className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                  activeTab === "team" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                🛡️ Team
-              </button>
+              <>
+                <button
+                  onClick={() => setActiveTab("events")}
+                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    activeTab === "events" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  🗓️ Events
+                </button>
+                <button
+                  onClick={() => setActiveTab("team")}
+                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    activeTab === "team" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  🛡️ Team
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -1184,6 +1212,184 @@ export function DashboardPage({ auth }) {
           </div>
         )}
 
+        {/* TAB 5: Events Directory & Management Workspace */}
+        {activeTab === "events" && isAdmin && (
+          <div className="space-y-6 animate-scale-up">
+            
+            {/* Header Title & Quick Search Bar */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                <div>
+                  <h3 className="text-base font-black text-[#0A2D59] flex items-center gap-2">
+                    <span>🗓️</span>
+                    <span>Managed Events Directory</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    View, search, filter, and switch across all events in your account
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setCreateEventModalOpen(true)}
+                  className="rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-4 py-2.5 text-xs font-bold text-white shadow-sm flex items-center gap-1.5 self-start sm:self-center cursor-pointer"
+                >
+                  <span>+</span>
+                  <span>Create New Event</span>
+                </button>
+              </div>
+
+              {/* Filters Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <div className="relative flex-1">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">
+                    🔍
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Filter events by title, venue, or date..."
+                    value={eventSearchQuery}
+                    onChange={(e) => {
+                      setEventSearchQuery(e.target.value);
+                      setEventDirectoryPage(1);
+                    }}
+                    className="w-full rounded-xl bg-slate-50 border border-slate-200 pl-9 pr-8 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
+                  />
+                  {eventSearchQuery && (
+                    <button
+                      onClick={() => setEventSearchQuery("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={eventDirectoryFilter}
+                    onChange={(e) => {
+                      setEventDirectoryFilter(e.target.value);
+                      setEventDirectoryPage(1);
+                    }}
+                    className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none"
+                  >
+                    <option value="all">All Events ({events.length})</option>
+                    <option value="upcoming">Active & Upcoming</option>
+                    <option value="past">Past Events</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Events Directory Table */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">Event Title</th>
+                      <th className="py-3 px-4">Date & Time</th>
+                      <th className="py-3 px-4">Venue Location</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4">Public Pass Link</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {events
+                      .filter((ev) => {
+                        const query = eventSearchQuery.trim().toLowerCase();
+                        const matchesQuery =
+                          !query ||
+                          ev.title?.toLowerCase().includes(query) ||
+                          ev.location?.toLowerCase().includes(query) ||
+                          new Date(ev.date).toLocaleDateString().toLowerCase().includes(query);
+
+                        if (!matchesQuery) return false;
+
+                        const todayStr = new Date().toISOString().split("T")[0];
+                        const evDateStr = new Date(ev.date).toISOString().split("T")[0];
+                        if (eventDirectoryFilter === "upcoming") return evDateStr >= todayStr;
+                        if (eventDirectoryFilter === "past") return evDateStr < todayStr;
+                        return true;
+                      })
+                      .map((ev) => {
+                        const isSelected = ev._id === selectedEventId;
+                        const evDate = new Date(ev.date);
+                        const todayStr = new Date().toISOString().split("T")[0];
+                        const evDateStr = evDate.toISOString().split("T")[0];
+                        const isToday = evDateStr === todayStr;
+                        const isPast = evDateStr < todayStr;
+
+                        return (
+                          <tr key={ev._id} className={isSelected ? "bg-[#0A2D59]/5" : "hover:bg-slate-50/80"}>
+                            <td className="py-3.5 px-4">
+                              <span className="font-extrabold text-slate-900 text-xs">{ev.title}</span>
+                              {ev.description && (
+                                <p className="text-[11px] text-slate-400 font-normal truncate max-w-xs mt-0.5">
+                                  {ev.description}
+                                </p>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 font-semibold text-slate-700 whitespace-nowrap">
+                              📅 {evDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            </td>
+                            <td className="py-3.5 px-4 text-slate-600 max-w-xs truncate">
+                              📍 {ev.location || "N/A"}
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              {isToday ? (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase">
+                                  🟢 Live Today
+                                </span>
+                              ) : isPast ? (
+                                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold uppercase">
+                                  🏁 Ended
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold uppercase">
+                                  🗓 Upcoming
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              {ev.publicSlug ? (
+                                <a
+                                  href={`/register/${ev.publicSlug}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs font-bold text-[#0A2D59] hover:underline flex items-center gap-1"
+                                >
+                                  <span>🔗 Registration Page</span>
+                                  <span className="text-[10px]">↗</span>
+                                </a>
+                              ) : (
+                                <span className="text-slate-400 font-normal">N/A</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                              <button
+                                onClick={() => setSelectedEventId(ev._id)}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                  isSelected
+                                    ? "bg-[#0A2D59] text-white shadow-2xs"
+                                    : "bg-slate-100 hover:bg-[#0A2D59] hover:text-white text-slate-700 border border-slate-200"
+                                }`}
+                              >
+                                {isSelected ? "Active ✓" : "Switch Event"}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        )}
+
       </main>
 
       {/* 4. Touch-Friendly Slide-Up Bottom Sheet for Walk-In Registration */}
@@ -1659,6 +1865,18 @@ export function DashboardPage({ auth }) {
 
         {isAdmin && (
           <button
+            onClick={() => setActiveTab("events")}
+            className={`flex flex-col items-center gap-1 transition-all ${
+              activeTab === "events" ? "text-[#0A2D59] font-black scale-105" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <span className="text-lg">🗓️</span>
+            <span className="text-[10px] font-bold">Events</span>
+          </button>
+        )}
+
+        {isAdmin && (
+          <button
             onClick={() => setActiveTab("team")}
             className={`flex flex-col items-center gap-1 transition-all ${
               activeTab === "team" ? "text-[#0A2D59] font-black scale-105" : "text-slate-500 hover:text-slate-800"
@@ -1669,6 +1887,16 @@ export function DashboardPage({ auth }) {
           </button>
         )}
       </nav>
+
+      {/* High-Volume Event Switcher Command Palette Modal */}
+      <EventSwitcherModal
+        isOpen={switcherModalOpen}
+        onClose={() => setSwitcherModalOpen(false)}
+        events={events}
+        selectedEventId={selectedEventId}
+        onSelectEvent={(eventId) => setSelectedEventId(eventId)}
+        onOpenCreateModal={() => setCreateEventModalOpen(true)}
+      />
 
     </div>
   );

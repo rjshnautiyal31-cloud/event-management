@@ -1355,7 +1355,7 @@ export function DashboardPage({ auth }) {
                             <td className="py-3.5 px-4 whitespace-nowrap">
                               {ev.publicSlug ? (
                                 <a
-                                  href={`/register/${ev.publicSlug}`}
+                                  href={`/#/register/${ev.publicSlug}`}
                                   target="_blank"
                                   rel="noreferrer"
                                   className="text-xs font-bold text-[#0A2D59] hover:underline flex items-center gap-1"

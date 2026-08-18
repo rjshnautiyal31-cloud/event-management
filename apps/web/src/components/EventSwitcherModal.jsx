@@ -101,7 +101,7 @@ export function EventSwitcherModal({
 
   const copyPublicLink = (publicSlug, e) => {
     e.stopPropagation();
-    const link = `${window.location.origin}/register/${publicSlug}`;
+    const link = `${window.location.origin}/#/register/${publicSlug}`;
     navigator.clipboard.writeText(link);
     setCopiedSlug(publicSlug);
     setTimeout(() => setCopiedSlug(""), 2000);

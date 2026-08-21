@@ -7,40 +7,9 @@ import { Video } from "../models/Video.js";
 import { Project } from "../models/Project.js";
 import { queueService } from "../services/queue/index.js";
 import { env } from "../config/env.js";
+import { createMusicalMelodyWavBuffer } from "../services/music/index.js";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller);
-
-// Pure JS WAV audio buffer generator
-function createSineWavBuffer(durationSeconds = 15, frequency = 440, sampleRate = 44100) {
-  const numSamples = Math.floor(sampleRate * durationSeconds);
-  const dataSize = numSamples * 2;
-  const buffer = Buffer.alloc(44 + dataSize);
-
-  buffer.write("RIFF", 0);
-  buffer.writeUInt32LE(36 + dataSize, 4);
-  buffer.write("WAVE", 8);
-
-  buffer.write("fmt ", 12);
-  buffer.writeUInt32LE(16, 16);
-  buffer.writeUInt16LE(1, 20);
-  buffer.writeUInt16LE(1, 22);
-  buffer.writeUInt32LE(sampleRate, 24);
-  buffer.writeUInt32LE(sampleRate * 2, 28);
-  buffer.writeUInt16LE(2, 32);
-  buffer.writeUInt16LE(16, 34);
-
-  buffer.write("data", 36);
-  buffer.writeUInt32LE(dataSize, 40);
-
-  for (let i = 0; i < numSamples; i++) {
-    const t = i / sampleRate;
-    const sample = Math.sin(2 * Math.PI * frequency * t) * 0.3;
-    const val = Math.max(-32768, Math.min(32767, Math.floor(sample * 32767)));
-    buffer.writeInt16LE(val, 44 + i * 2);
-  }
-
-  return buffer;
-}
 
 // Pure JS 24-bit solid color BMP image generator
 function createSolidBmpBuffer(width = 800, height = 600, colorHex = "0A2D59") {
@@ -108,7 +77,7 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     let effectiveAudioPath = audioPath;
     if (!effectiveAudioPath) {
       const fallbackWavPath = path.join(uploadDir, "fallback_audio.wav");
-      const wavBuffer = createSineWavBuffer(16, 440, 44100);
+      const wavBuffer = createMusicalMelodyWavBuffer(16, 44100);
       await fs.writeFile(fallbackWavPath, wavBuffer);
       effectiveAudioPath = fallbackWavPath;
     }
@@ -137,7 +106,8 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     await new Promise((resolve, reject) => {
       command
         .outputOptions([
-          "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p,r=25",
+          "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+          "-r", "25",
           "-c:v", "libx264",
           "-preset", "ultrafast",
           "-c:a", "aac",

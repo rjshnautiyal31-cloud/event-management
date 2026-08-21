@@ -2,43 +2,61 @@ import path from "path";
 import fs from "fs/promises";
 import { env } from "../../config/env.js";
 
-// Pure Node.js 16-bit PCM WAV Audio Generator (Zero-Cost Local Dev, No lavfi/ffmpeg required)
-function createSineWavBuffer(durationSeconds = 15, frequency = 440, sampleRate = 44100) {
+// Pure Node.js Pleasant Musical Synth Generator (Zero-Cost Local Dev, No lavfi/external dependencies)
+export function createMusicalMelodyWavBuffer(durationSeconds = 15, sampleRate = 44100) {
   const numSamples = Math.floor(sampleRate * durationSeconds);
-  const dataSize = numSamples * 2; // 16-bit = 2 bytes per sample
+  const dataSize = numSamples * 2;
   const buffer = Buffer.alloc(44 + dataSize);
 
-  // RIFF Chunk Descriptor
+  // WAV Header
   buffer.write("RIFF", 0);
   buffer.writeUInt32LE(36 + dataSize, 4);
   buffer.write("WAVE", 8);
 
-  // fmt Subchunk
   buffer.write("fmt ", 12);
-  buffer.writeUInt32LE(16, 16); // Subchunk1Size (16 for PCM)
-  buffer.writeUInt16LE(1, 20);  // AudioFormat (1 for PCM)
-  buffer.writeUInt16LE(1, 22);  // NumChannels (1 mono)
-  buffer.writeUInt32LE(sampleRate, 24); // SampleRate
-  buffer.writeUInt32LE(sampleRate * 2, 28); // ByteRate (SampleRate * NumChannels * BitsPerSample/8)
-  buffer.writeUInt16LE(2, 32);  // BlockAlign
-  buffer.writeUInt16LE(16, 34); // BitsPerSample
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20); // PCM
+  buffer.writeUInt16LE(1, 22); // Mono
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * 2, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
 
-  // data Subchunk
   buffer.write("data", 36);
   buffer.writeUInt32LE(dataSize, 40);
 
-  // Write 16-bit PCM Sine Wave Samples
+  // Chord progression frequencies (C maj, A min, F maj, G maj)
+  const chords = [
+    [261.63, 329.63, 392.00], // C major
+    [220.00, 261.63, 329.63], // A minor
+    [174.61, 220.00, 261.63], // F major
+    [196.00, 246.94, 293.66]  // G major
+  ];
+
   for (let i = 0; i < numSamples; i++) {
     const t = i / sampleRate;
-    const sample = Math.sin(2 * Math.PI * frequency * t) * 0.3; // 30% volume
-    const val = Math.max(-32768, Math.min(32767, Math.floor(sample * 32767)));
+    const chordIndex = Math.floor((t / 3.75)) % chords.length;
+    const currentChord = chords[chordIndex];
+
+    let sample = 0;
+    currentChord.forEach((freq) => {
+      // Main fundamental note + soft 2nd harmonic
+      const note = Math.sin(2 * Math.PI * freq * t) * 0.15 + Math.sin(2 * Math.PI * freq * 2 * t) * 0.05;
+      sample += note;
+    });
+
+    // Add gentle rhythmic arpeggio pulse
+    const arpeggioFreq = currentChord[Math.floor((t * 4) % 3)];
+    sample += Math.sin(2 * Math.PI * arpeggioFreq * t) * 0.08;
+
+    const val = Math.max(-32768, Math.min(32767, Math.floor(sample * 16000)));
     buffer.writeInt16LE(val, 44 + i * 2);
   }
 
   return buffer;
 }
 
-// Local Synthetic Audio Generator (Zero-Cost Local Dev)
+// Local Synthetic Music Adapter (Zero-Cost Local Dev)
 class LocalSynthMusicAdapter {
   async generateMusic({ genre = "Pop", durationSeconds = 15 }) {
     const filename = `local_synth_${Date.now()}.wav`;
@@ -46,8 +64,8 @@ class LocalSynthMusicAdapter {
     await fs.mkdir(uploadDir, { recursive: true });
     const outputPath = path.join(uploadDir, filename);
 
-    // Generate pure WAV audio buffer
-    const wavBuffer = createSineWavBuffer(durationSeconds, 440, 44100);
+    // Generate harmonic musical melody audio buffer
+    const wavBuffer = createMusicalMelodyWavBuffer(durationSeconds, 44100);
     await fs.writeFile(outputPath, wavBuffer);
 
     return {

@@ -1,8 +1,13 @@
 import path from "path";
 import fs from "fs/promises";
+import https from "https";
+import ffmpeg from "fluent-ffmpeg";
+import ffmpegInstaller from "ffmpeg-static";
 import { env } from "../../config/env.js";
 
-// Pure Node.js Pleasant Musical Synth Generator (Zero-Cost Local Dev, No lavfi/external dependencies)
+ffmpeg.setFfmpegPath(ffmpegInstaller);
+
+// Pure Node.js Pleasant Musical Synth Generator
 export function createMusicalMelodyWavBuffer(durationSeconds = 15, sampleRate = 44100) {
   const numSamples = Math.floor(sampleRate * durationSeconds);
   const dataSize = numSamples * 2;
@@ -40,12 +45,10 @@ export function createMusicalMelodyWavBuffer(durationSeconds = 15, sampleRate = 
 
     let sample = 0;
     currentChord.forEach((freq) => {
-      // Main fundamental note + soft 2nd harmonic
       const note = Math.sin(2 * Math.PI * freq * t) * 0.15 + Math.sin(2 * Math.PI * freq * 2 * t) * 0.05;
       sample += note;
     });
 
-    // Add gentle rhythmic arpeggio pulse
     const arpeggioFreq = currentChord[Math.floor((t * 4) % 3)];
     sample += Math.sin(2 * Math.PI * arpeggioFreq * t) * 0.08;
 
@@ -56,26 +59,88 @@ export function createMusicalMelodyWavBuffer(durationSeconds = 15, sampleRate = 
   return buffer;
 }
 
-// Local Synthetic Music Adapter (Zero-Cost Local Dev)
+// Fetch Vocal Audio Stream for Lyrics
+async function fetchVocalAudioForLyrics(lyricsText, tempVocalPath) {
+  // Clean bracket headers e.g. [Verse 1], [Chorus]
+  const cleanLyrics = lyricsText
+    .replace(/\[.*?\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 200); // Keep vocal snippet within length limit
+
+  if (!cleanLyrics) return false;
+
+  const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&q=${encodeURIComponent(cleanLyrics)}&tl=en`;
+  const agent = new https.Agent({ rejectUnauthorized: false });
+
+  return new Promise((resolve) => {
+    const file = fs.createWriteStream(tempVocalPath);
+    const req = https.get(url, { agent, headers: { "User-Agent": "Mozilla/5.0" } }, (res) => {
+      if (res.statusCode === 200) {
+        res.pipe(file);
+        file.on("finish", () => {
+          file.close(() => resolve(true));
+        });
+      } else {
+        resolve(false);
+      }
+    });
+    req.on("error", () => resolve(false));
+  });
+}
+
+// Local Vocal & Music Song Adapter
 class LocalSynthMusicAdapter {
-  async generateMusic({ genre = "Pop", durationSeconds = 15 }) {
-    const filename = `local_synth_${Date.now()}.wav`;
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 15 }) {
+    const timestamp = Date.now();
     const uploadDir = path.join(process.cwd(), "uploads");
     await fs.mkdir(uploadDir, { recursive: true });
-    const outputPath = path.join(uploadDir, filename);
 
-    // Generate harmonic musical melody audio buffer
+    const bgPath = path.join(uploadDir, `bg_${timestamp}.wav`);
+    const vocalPath = path.join(uploadDir, `vocal_${timestamp}.mp3`);
+    const outputFilename = `local_song_${timestamp}.mp3`;
+    const outputPath = path.join(uploadDir, outputFilename);
+
+    // 1. Generate background musical chord progression
     const wavBuffer = createMusicalMelodyWavBuffer(durationSeconds, 44100);
-    await fs.writeFile(outputPath, wavBuffer);
+    await fs.writeFile(bgPath, wavBuffer);
+
+    // 2. Fetch vocal audio for lyrics
+    const hasVocals = await fetchVocalAudioForLyrics(lyrics, vocalPath);
+
+    // 3. Mix vocal audio track with background music using FFmpeg
+    if (hasVocals) {
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(bgPath)
+          .input(vocalPath)
+          .complexFilter([
+            "[0:a]volume=0.35[bg]",
+            "[1:a]volume=1.0[voc]",
+            "[bg][voc]amix=inputs=2:duration=first[a]"
+          ])
+          .outputOptions(["-map", "[a]", "-c:a", "libmp3lame", "-b:a", "192k"])
+          .save(outputPath)
+          .on("end", resolve)
+          .on("error", reject);
+      });
+
+      // Cleanup temporary stem files
+      await fs.unlink(bgPath).catch(() => {});
+      await fs.unlink(vocalPath).catch(() => {});
+    } else {
+      // Fallback if offline / vocal fetch failed
+      await fs.rename(bgPath, outputPath);
+    }
 
     return {
-      audioUrl: `http://localhost:${env.port}/uploads/${filename}`,
+      audioUrl: `http://localhost:${env.port}/uploads/${outputFilename}`,
       durationSeconds
     };
   }
 }
 
-// Suno/External API Music Adapter (Cloud Production)
+// Suno/External Cloud API Music Adapter
 class SunoMusicAdapter {
   async generateMusic({ lyrics, genre, durationSeconds = 30 }) {
     return {

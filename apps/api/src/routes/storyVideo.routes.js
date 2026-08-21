@@ -116,7 +116,7 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
     const lyricsText = await generateLyricsWithGemini(project.activeStoryAnalysisId.summary, targetGenre);
 
     const musicEngine = getMusicProvider();
-    const audioResult = await musicEngine.generateMusic({ genre: targetGenre, durationSeconds: 15 });
+    const audioResult = await musicEngine.generateMusic({ lyrics: lyricsText, genre: targetGenre, durationSeconds: 15 });
 
     const songDoc = await Song.create({
       projectId: project._id,

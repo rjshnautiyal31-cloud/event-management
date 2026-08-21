@@ -1,26 +1,26 @@
 # Event QR Check-In System: Comprehensive User Guide
 
-Welcome to the **Event QR Check-In System**! This application is designed to help you create events, register attendees (either via a public form, walk-in additions, or bulk CSV import), distribute unique QR tickets, and check-in attendees at different gates with double-scan prevention and zero-lag mobile performance.
+Welcome to the **Event QR Check-In System**! This application is designed to help you create and manage events at scale, register attendees (via a public form, walk-in additions, or bulk CSV import), distribute unique QR tickets with inline image attachments, and check-in attendees at different gates with double-scan prevention and zero-lag performance.
 
 ---
 
 ## Table of Contents
 1. [First-Time Admin Setup](#1-first-time-admin-setup)
-2. [Event Creation & Public Forms](#2-event-creation--public-forms)
-3. [User & Staff Management](#3-user--staff-management)
-4. [Event Gate Management](#4-event-gate-management)
-5. [Attendee Management & Bulk Importing](#5-attendee-management--bulk-importing)
-6. [QR Code Check-In Scanning](#6-qr-code-check-in-scanning)
-7. [Email Ticket Deliveries (Resend vs SMTP)](#7-email-ticket-deliveries-resend-vs-smtp)
-8. [Responsive Viewports & Troubleshooting](#8-responsive-viewports--troubleshooting)
+2. [Navigation & High-Volume Event Management](#2-navigation--high-volume-event-management)
+3. [Event Creation & Quick Pickers](#3-event-creation--quick-pickers)
+4. [User, Staff & Role Management](#4-user-staff--role-management)
+5. [Event Gate Management](#5-event-gate-management)
+6. [Attendee Management & High-Volume Virtual Roster](#6-attendee-management--high-volume-virtual-roster)
+7. [QR Code Check-In Scanning](#7-qr-code-check-in-scanning)
+8. [Email Ticket Deliveries (Resend vs SMTP)](#8-email-ticket-deliveries-resend-vs-smtp)
 
 ---
 
 ## 1. First-Time Admin Setup
 
-When you deploy the application for the first time, you must bootstrap your very first **Administrator** account:
+When you deploy the application for the first time, bootstrap your initial **Super Administrator** account:
 
-1. **Bootstrap Endpoint**: If you are in development, you can send a `POST` request to `/api/auth/setup-admin` with the body:
+1. **Bootstrap Endpoint**: Send a `POST` request to `/api/auth/setup-admin` with the body:
    ```json
    {
      "setupKey": "setup-admin", // Configured via ADMIN_SETUP_KEY env var
@@ -29,167 +29,89 @@ When you deploy the application for the first time, you must bootstrap your very
      "password": "your_secure_password"
    }
    ```
-2. **Local/Render Config**:
-   Ensure `ADMIN_SETUP_KEY` is set inside your backend's environment variables before booting.
-3. Once bootstrapped, go to your deployed link (e.g., `https://event-qr-web.onrender.com/login`) and log in using your newly created admin credentials.
+2. **Environment Configuration**: Ensure `ADMIN_SETUP_KEY` is set inside your backend's environment variables (`apps/api/.env`).
+3. Once bootstrapped, navigate to `/login` and log in using your newly created admin credentials.
 
 ---
 
-## 2. Event Creation & Public Forms
+## 2. Navigation & High-Volume Event Management
 
-Once logged in as an Admin, your primary workspace is the **Event Admin Dashboard**.
+### **Universal `#0A2D59` Navigation Bar (`Navbar`)**
+- Present across all pages (`/dashboard`, `/generator`, `/scan`).
+- Click the **Hamburger Menu (`☰`)** button in the top left to reveal the slide-over drawer panel for 1-tap navigation between **Overview Hub**, **Attendee Roster**, **Gates & Posts**, **Events Directory**, and **Team Access**.
 
-### **Creating an Event**
-1. Locate the **Create Event** form at the top of the dashboard.
-2. Enter the **Title**, **Date/Time**, **Location**, and **Description**.
-3. Click **Create Event**.
-4. The event will appear instantly inside your **Events List** card on the left side of the screen.
+### **Command Switcher Palette (`⌘K` / `Ctrl+K`)**
+When managing dozens, hundreds, or thousands of events:
+1. Click the **Event Switcher Pill** in the header or press `⌘K` (`Ctrl+K` on Windows/Linux) to launch the **Command Switcher Palette**.
+2. **Search Input**: Type any keyword to instantly filter events by title, venue location, or date.
+3. **Category Tabs**: Toggle between `⚡ Active & Upcoming`, `🕒 Past Events`, and `⭐ Pinned / Favorites`.
+4. **Pinning Events**: Click the `⭐ Pin` button on any event card to pin it to your favorites for instant access across sessions.
 
-### **Obtaining the Public Registration Link & QR Code**
-1. Click on your newly created event in the **Events List**.
-2. Directly below the list, you will see the **Public Registration Link** along with a **Copy Link** button and a live **Event Registration QR Code**.
-3. Click **📥 Download Registration QR** to download a high-resolution PNG QR code image.
-4. Share the link or print/distribute the QR code poster. When attendees scan the QR code using any smartphone camera, it instantly directs them to the event registration form (`/#/register/your-event-slug-abc123`).
-5. When users submit the registration form, **their unique QR entrance ticket will instantly render on their screen** (with options to download or print), and a copy will be emailed to them!
+### **Events Directory Workspace Tab**
+1. Switch to the **🗓️ Events** tab in your dashboard.
+2. View the full-width data table listing all managed events with real-time text search, status filters (`🟢 Live Today`, `🗓 Upcoming`, `🏁 Ended`), public pass links (`/#/register/:slug`), and 1-tap active event switching.
 
 ---
 
-## 3. User & Staff Management
+## 3. Event Creation & Quick Pickers
 
-The Admin Dashboard provides complete control over who can scan tickets and manage data. There are two primary system roles:
-* **Admin (Full Access)**: Can create events, create user accounts, manage gates, add/edit/delete attendees, bulk import records, and view metrics.
-* **Staff (Scanner Only)**: Can only access the **Scanner Page** (`/scan`) to validate attendee tickets. They are locked out of admin dashboard features.
+1. Click **+ New Event** in the header or dashboard.
+2. **Quick Date & Time Pickers**:
+   - Use 1-tap preset buttons: `📅 Today`, `🚀 Tomorrow`, `📆 Next Week`.
+   - Native calendar and time popups open automatically on tap/click.
+3. Click **Create Event**. Your new event becomes active immediately.
+
+### **Public Registration Pass Links**
+- Share the public pass link (`/#/register/your-event-slug`) or print the **Event Registration QR Code**.
+- When attendees submit the form, their unique QR entrance ticket renders instantly on-screen and is automatically emailed to them with an inline QR image (`cid:qrcode`).
+
+---
+
+## 4. User, Staff & Role Management
+
+The system features granular role-based access control:
+- **`super_admin`**: Full system control across all events, user accounts, and global settings.
+- **`event_admin`**: Full management access to assigned events, attendees, and gates.
+- **`event_staff`**: Restricted to the **Scanner Page** (`/scan`) to validate tickets at assigned gates.
 
 ### **Creating and Assigning Users**
-1. Locate the **Create System User Account** card in your dashboard.
-2. Enter their **Full name**, **Email address**, and **Password**.
-3. Under the **Role** dropdown, select:
-   * **Role: Staff** — if they are entry-gate scanning agents.
-   * **Role: Admin** — if they are co-managers.
-4. If you select **Role: Staff**, an additional dropdown will appear allowing you to assign them to a specific **Gate** (e.g., *Gate 1*, *Main Gate*).
-5. Click **Create User**.
-
-### **Inline Gate Reassignment**
-You don't need to recreate or edit a staff profile to reassign them to a different entrance gate. 
-* In the **System User Accounts** list, locate the staff member's card.
-* Under their name, select a new gate from the **Assign Gate** dropdown.
-* The system instantly updates their profile on-the-fly and locks their scanner page to the newly assigned gate!
+1. Go to the **Team & Staff Access** section in the dashboard.
+2. Enter the staff member's **Name**, **Email**, and **Password**.
+3. Select their **Role** and optional **Assigned Gate**.
+4. Scanner accounts are **automatically locked to their assigned gate upon login**, eliminating mis-scan errors.
 
 ---
 
-## 4. Event Gate Management
+## 5. Event Gate Management
 
-If your event has multiple entry points, you can manage them seamlessly through the **Event Gates Management** panel.
-
-1. **Gate Creation**:
-   - Select an event from the list.
-   - Locate the **Event Gates Management** card on the left panel (directly below the Events list).
-   - Enter a name (e.g., `VIP Gate`, `Gate B`, `North Entrance`) and click **Add Gate**.
-   - The gate is now registered in your system.
-2. **Staff Linking**:
-   - Go to your Staff Users list and assign any scanner agent to your newly created gate.
-3. **Scanner Locking**:
-   - When that staff member logs into `https://event-qr-web.onrender.com/scan`, the app detects their assigned gate and **automatically locks and pre-fills** their scanner's Gate Number input! They can begin scanning immediately with zero setup required.
+1. Go to the **Gates & Posts** tab.
+2. Enter a gate name (e.g., `Gate A - Main Entrance`, `VIP Gate`) and click **Add Gate**.
+3. Assign staff members to specific gates from the user list. Staff scanners update instantly.
 
 ---
 
-## 5. Attendee Management & Bulk Importing
+## 6. Attendee Management & High-Volume Virtual Roster
 
-The **Attendees** table grid is your operational control center.
-
-### **Grid Columns (Adaptive Viewports)**
-The attendees grid is fully responsive and adjusts dynamically to prevent overlapping:
-- **Mobile (Portrait)**: Displays **Name, Status, Actions** (Optimized for small phone screens).
-- **Mobile (Landscape)**: Displays **Name, Email, Status, Actions**.
-- **Tablet**: Displays **Name, Email, Phone, Status, Gate, Actions**.
-- **Desktop**: Displays all fields, including **Checked-In At (date/time)** and **Gate Name**.
-
-### **Actions Available:**
-* **View QR**: Opens a modern modal with the attendee's ticket. You can click **Download QR** to save the ticket as a high-quality `.png` image to send directly to them via WhatsApp, Slack, etc.
-* **Edit**: Opens an inline modal to update their Name, Email, or Phone. If you edit their Name or Email, the system **automatically sends them an updated ticket email** in the background!
-* **Delete**: Removes their record from the event database securely.
-
-### **Manual Walk-In Addition**
-To register someone manually (e.g. at the door):
-1. In the **Registration Stats** card, locate the manual add form at the bottom.
-2. Enter their name, email, and phone, and click **Add**.
-3. They will instantly appear in your attendee list, and their ticket will be emailed to them in the background!
-
-### **Bulk Importing from CSV / Excel**
-To import thousands of attendees in seconds:
-1. Click the **📥 Download Sample CSV** button on the Bulk Upload card to download the exact required template.
-2. **Column Names Expected**:
-   * `Name` (or `fullname`): The attendee's full name.
-   * `Email`: Their email address (used to send the ticket).
-   * `Phone Number` (or `phone`): Their phone number (optional).
-3. Save your file as a `.csv` or `.xlsx` format.
-4. Choose the file in the **Bulk Upload** selector.
-5. The system automatically handles **BOM signatures** (invisible Excel artifacts), trims spaces, normalizes casing, and begins importing.
-6. A detailed **Import Report Summary** will display showing:
-   - Total rows found.
-   - Successfully created accounts.
-   - A scrollable **Row Failures** list detailing the exact email address and reason (e.g. `Duplicate email`) of skipped records, so you never have to guess.
+The **Attendee Roster** is engineered for high-volume crowds (100s to 1,000s of attendees):
+- **Real-Time Search**: Search by attendee name, email, or phone number.
+- **Status Filters**: Filter by `All`, `Checked In`, or `Pending`.
+- **Batching & Infinite Scroll**: Select page size (25 / 50 / 100 / All) or scroll smoothly with virtualized batch rendering.
+- **Inline QR Thumbnails**: Click any QR thumbnail to open a high-resolution modal for printing or re-sending tickets.
+- **Bulk CSV Import**: Import large guest lists with automatic BOM stripping, duplicate filtering, and instant batch ticket generation.
 
 ---
 
-## 6. QR Code Check-In Scanning
+## 7. QR Code Check-In Scanning
 
-Scanners use the **Scanner Page** (`/scan`) to validate entries.
-
-### **Executing Scans**
-1. Access `/scan` on your smartphone, tablet, or laptop.
-2. Ensure you have entered your designated **Gate Number** (this is pre-filled if assigned by an admin).
-3. Grant camera permissions when prompted.
-4. Point the camera at the attendee's digital (on-phone) or printed QR code.
-5. The scan evaluates instantly and displays **above-the-fold color-coded feedback**:
-   * 🟢 **ACCESS GRANTED** (Success): Attendee is successfully checked in! Shows name and timestamp.
-   * 🟡 **ALREADY CHECKED IN** (Warning): This ticket has already been validated. Displays the original check-in time and gate.
-   * 🔴 **INVALID TICKET** (Error): Ticket UUID is fake or doesn't belong to this event.
-
-### **Atomic Check-In Lock (Security)**
-The check-in execution utilizes an atomic write lock on MongoDB. If two entry doors scan the exact same ticket at the exact same split-second, only the first transaction is authorized, while the second will immediately display **"Already Checked In"**, fully preventing multi-entry fraud.
+1. Staff members open the **Scanner Page** (`/scan`).
+2. The scanner uses the device camera to scan tickets in real-time.
+3. **Atomic Single-Scan Validation**:
+   - `🟢 VALID TICKET`: Displays attendee details and records check-in timestamp and gate location.
+   - `🔴 DUPLICATE SCAN`: Alerts staff immediately if a ticket has already been checked in, showing original check-in time and gate.
 
 ---
 
-## 7. Email Ticket Deliveries (Resend vs SMTP)
+## 8. Email Ticket Deliveries (Resend vs SMTP)
 
-To ensure attendees receive their tickets, you must configure an email driver.
-
-### **Option A: Resend API (HTTP over Port 443 - Highly Recommended & Free)**
-**Render blocks standard SMTP ports (25, 465, 587) on their Free Tier.** To send emails on Render Free Tier for free, you must use Resend's HTTP API over standard port `443` (which is never blocked).
-1. Go to [Resend.com](https://resend.com) and sign up for a free account.
-2. Under **API Keys**, create a new key with full permissions and copy it (starts with `re_`).
-3. Add these variables to your Backend Web Service on Render:
-   - `RESEND_API_KEY` = `re_your_api_key_here`
-   - `SENDER_EMAIL` = `onboarding@resend.dev` *(or your verified custom domain email)*
-4. **Note**: If you use `onboarding@resend.dev`, Resend restricts deliveries strictly to your own sign-up email address for safety. To send to *any* attendee email, verify your own domain in Resend's **Domains** tab and change `SENDER_EMAIL` to `tickets@yourdomain.com`.
-
-### **Option B: Gmail SMTP (Requires Render Paid Tier)**
-If you are running on a Paid Render tier (Starter or above) or your own VPS, you can use standard SMTP:
-1. Go to your Google Account ➔ **Security**.
-2. Turn **2-Step Verification** ON.
-3. Search for **"App passwords"**, create one for `Event QR Tickets`, and copy the 16-character code.
-4. Add these variables to your Backend Service:
-   - `SMTP_HOST` = `smtp.gmail.com`
-   - `SMTP_PORT` = `465`
-   - `SMTP_USER` = `your-email@gmail.com`
-   - `SMTP_PASS` = `your16characterapppass` *(without spaces)*
-   - `SENDER_EMAIL` = `your-email@gmail.com`
-
----
-
-## 8. Responsive Viewports & Troubleshooting
-
-### **My page displays "Not Found" on deep links**
-If deep links like `https://your-app.onrender.com/register/slug` return a static 404, ensure you have set up a **Rewrite rule** on your Render Static Site dashboard:
-- **Source**: `/*`
-- **Destination**: `/index.html`
-- **Action**: `Rewrite` (NOT Redirect).
-*(I have added a `_redirects` file to automate this, but double check the Render settings if it persists).*
-
-### **Failed to Fetch errors on the signup page**
-Ensure that you have set the `VITE_API_BASE` environment variable in your Frontend Static Site settings on Render, and that you have clicked **"Clear Cache and Deploy"** so that Vite compiles the frontend with your live backend API URL instead of `localhost`.
-
----
-
-Now you are fully prepared to run a seamless, secure, and modern QR check-in event! Enjoy using the system!
+- **Resend API Integration** (`RESEND_API_KEY`): Recommended for cloud platforms like Render's Free Tier (bypasses blocked outbound SMTP ports 25, 465, and 587).
+- **Inline CID Attachments** (`cid:qrcode`): QR ticket images are embedded inline as Content-ID attachments, guaranteeing crisp image rendering across Gmail, Outlook, Yahoo, and mobile mail apps.

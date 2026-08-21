@@ -1,23 +1,46 @@
 # Event Management and QR Check-in System
 
-A full-stack, enterprise-grade monorepo for event registration, unique QR ticket generation, physical gate management, and on-site QR validation with duplicate-scan prevention.
+A full-stack, enterprise-grade monorepo for high-volume event registration, unique QR ticket generation, physical gate management, and fast on-site QR validation with duplicate-scan prevention.
 
-## Modern Features Added (July 2026) 🚀
+---
 
-- **Resend Email API Integration**: Standard HTTPS integration allowing direct email ticket deliveries on Render's Free Tier (completely bypassing blocked SMTP ports 25, 465, and 587).
-- **Event Gates Management**: Create, delete, and monitor physical gates (e.g. *Gate A, VIP Gate, Main Entrance*) per event.
-- **Dynamic Staff-Gate Assignment**: Assign scanner staff to specific gates from the dashboard with instant inline reassignments.
-- **Automatic Scanner Gate Locking**: Staff scanners are automatically locked to their assigned gate upon login to eliminate gate-typing mistakes.
-- **Decoupled Check-in Logs**: Entry logs denormalize name and email at check-in so that history is preserved even if an attendee is later deleted.
-- **Fully Responsive Mobile Table Grid**: Progressive disclosure table hiding secondary columns on small screens, preventing horizontal overflow on smartphones.
-- **Attendees Edit & Delete**: Modals to edit attendee details with background-triggered email ticket updates, plus secure cascading deletions.
-- **Centralized Session Expiration Redirect**: Expired JWT tokens automatically trigger local logouts and gracefully redirect to `/login` inline.
-- **Inline Contextual Error Reporting**: Success/error alerts are placed directly within each form component (in-frame) instead of at the bottom of the page.
+## Key Features 🚀
+
+- **`#0A2D59` Deep Navy Brand Identity & Universal Top Navigation**:
+  - Unified `#0A2D59` branding across all application pages (`LoginPage`, `DashboardPage`, `QRGeneratorPage`, `ScannerPage`).
+  - Sticky top header featuring a **Hamburger (`☰`) Slide-Over Drawer Navigation Panel**.
+
+- **High-Volume Event Switcher Command Palette (`⌘K` / `Ctrl+K`)**:
+  - Real-time instant search input filtering by **title**, **venue location**, or **date**.
+  - Categorized tabs: `⚡ Active & Upcoming`, `🕒 Past Events`, and `⭐ Pinned / Favorites` (pinned events persist in `localStorage`).
+  - Batch pagination (10 / 25 / 50 per page) designed for scaling to 1,000+ events.
+
+- **`🗓️ Managed Events Directory` Workspace**:
+  - Dedicated full-width table view listing all managed events with real-time text search, status filters (`🟢 Live Today`, `🗓 Upcoming`, `🏁 Ended`), public registration links (`/#/register/:slug`), and 1-tap active event switching.
+
+- **High-Volume Attendee Roster (100s / 1000s of Attendees)**:
+  - Real-time text search, status filters (`All`, `Checked In`, `Pending`), batch size selector (25 / 50 / 100 / All), and **Virtual Infinite Scroll / Lazy Loading**.
+  - Inline QR Code thumbnail preview & high-resolution expand modal.
+
+- **Inline CID Attachment Ticket Emails (`cid:qrcode`)**:
+  - Automatic email tickets sent via Resend API or SMTP using `cid:qrcode` Content-ID inline attachment embedding (eliminating broken images in Gmail, Outlook, and Yahoo).
+
+- **Enhanced Create Event & Date/Time Presets**:
+  - Native date & time pickers with 1-tap quick presets (`📅 Today`, `🚀 Tomorrow`, `📆 Next Week`), native `showPicker()` popups, and full manual entry support.
+
+- **Event Gates & Automated Staff Locking**:
+  - Create, delete, and monitor physical gates per event (*Gate A, VIP Gate, Main Entrance*).
+  - Staff scanner accounts automatically lock to their assigned gate upon login to prevent mis-scans.
+
+- **Decoupled Check-in Logs**:
+  - Denormalizes attendee name and email into `entrylogs` at check-in so historical records are preserved even if an attendee profile is subsequently deleted.
+
+---
 
 ## Monorepo Layout
 
-- `apps/api`: Node.js Express backend, Mongoose/MongoDB, token signers, CSV parser, and check-in validators.
-- `apps/web`: React + Vite + Tailwind CSS frontend, html5-qrcode scanner integration, responsive dashboard, and public registration.
+- `apps/api`: Node.js Express backend, Mongoose/MongoDB, token signers, CSV parser, Resend/Nodemailer email engine, and check-in validators.
+- `apps/web`: React + Vite + Tailwind CSS frontend, HashRouter navigation, html5-qrcode scanner integration, responsive dashboard, and public registration portal.
 
 ---
 
@@ -28,23 +51,23 @@ A full-stack, enterprise-grade monorepo for event registration, unique QR ticket
 - `name` (string)
 - `email` (unique)
 - `passwordHash` (bcrypt)
-- `role` (`admin` | `staff`)
+- `role` (`super_admin` | `event_admin` | `event_staff`)
 - `assignedGateId` -> Reference to `gates._id` (null if none)
 - timestamps
 
 ### `events`
 - `_id`
-- `title`
-- `date`
-- `location`
-- `description`
-- `publicSlug` (unique)
-- `createdBy` -> `users._id`
+- `title` (string)
+- `date` (date/iso string)
+- `location` (string)
+- `description` (string)
+- `publicSlug` (unique string)
+- `createdBy` -> Reference to `users._id`
 - timestamps
 
 ### `gates`
 - `_id`
-- `eventId` -> `events._id`
+- `eventId` -> Reference to `events._id`
 - `name` (string)
 - `description` (string)
 - timestamps
@@ -52,23 +75,23 @@ A full-stack, enterprise-grade monorepo for event registration, unique QR ticket
 
 ### `attendees`
 - `_id`
-- `eventId` -> `events._id`
-- `name`
-- `email`
-- `phoneNumber`
+- `eventId` -> Reference to `events._id`
+- `name` (string)
+- `email` (string)
+- `phoneNumber` (string)
 - `ticketUuid` (unique UUID encoded in QR)
 - `qrCodeDataUrl` (base64 PNG)
-- `isCheckedIn` (default `false`)
-- `checkedInAt` (nullable)
+- `isCheckedIn` (boolean, default `false`)
+- `checkedInAt` (nullable date)
 - `checkedInGate` (string)
 - timestamps
 - index: `(eventId, email)` unique
 
 ### `entrylogs`
 - `_id`
-- `attendeeId` -> `attendees._id` (nullable)
-- `eventId` -> `events._id`
-- `timestamp`
+- `attendeeId` -> Reference to `attendees._id` (nullable)
+- `eventId` -> Reference to `events._id`
+- `timestamp` (date)
 - `gateNumber` (string)
 - `attendeeName` (string - denormalized for persistence)
 - `attendeeEmail` (string - denormalized for persistence)
@@ -79,42 +102,36 @@ A full-stack, enterprise-grade monorepo for event registration, unique QR ticket
 ## API Endpoints
 
 ### Auth & User Accounts
-- `POST /api/auth/setup-admin`
-  - Bootstraps the first admin (`setupKey`, `name`, `email`, `password`)
-- `POST /api/auth/login`
-  - Validates credentials and returns JWT + user profile + populated gate assignments
-- `GET /api/auth/staff` (admin)
-  - Lists all system users (both admin and staff) with populated gate assignments
-- `POST /api/auth/staff` (admin)
-  - Creates a new user with chosen role (`admin` | `staff`) and optional `assignedGateId`
-- `PUT /api/auth/staff/:userId` (admin)
-  - Updates name, email, role, or gate assignment dynamically for an existing user
+- `POST /api/auth/setup-admin`: Bootstraps the first super admin (`setupKey`, `name`, `email`, `password`)
+- `POST /api/auth/login`: Validates credentials and returns JWT + user profile + gate assignments
+- `GET /api/auth/staff` (admin): Lists system users with populated gate assignments
+- `POST /api/auth/staff` (admin): Creates a new user with chosen role (`super_admin` | `event_admin` | `event_staff`) and optional `assignedGateId`
+- `PUT /api/auth/staff/:userId` (admin): Updates name, email, role, or gate assignment dynamically
+- `DELETE /api/auth/staff/:userId` (admin): Removes user account
 
-### Admin Events, Attendees, & Gates
+### Events, Attendees, & Gates
 - `POST /api/events` (admin): Create a new event
-- `GET /api/events` (auth): List all events
+- `GET /api/events` (auth): List all accessible events
 - `GET /api/events/:eventId/stats` (auth): Registration/check-in summary, stats, and recent check-in logs
-- `GET /api/events/:eventId/attendees` (auth): List attendees
-- `POST /api/events/:eventId/attendees` (admin): Create single walkthrough attendee
-- `PUT /api/events/:eventId/attendees/:attendeeId` (admin): Edit name, email, phone. Auto-sends updated ticket if details change
-- `DELETE /api/events/:eventId/attendees/:attendeeId` (admin): Deletes attendee record safely
-- `POST /api/events/:eventId/attendees/bulk` (admin): Robust CSV/Excel import with auto-BOM stripping and case normalization
-- `GET /api/events/:eventId/gates` (auth): List all gates for an event
-- `POST /api/events/:eventId/gates` (admin): Create a physical gate
-- `DELETE /api/events/:eventId/gates/:gateId` (admin): Delete a gate and clear its assignment from staff
+- `GET /api/events/:eventId/attendees` (auth): List attendees with pagination & search
+- `POST /api/events/:eventId/attendees` (admin): Create single walk-in attendee
+- `PUT /api/events/:eventId/attendees/:attendeeId` (admin): Edit attendee details & trigger updated email ticket
+- `DELETE /api/events/:eventId/attendees/:attendeeId` (admin): Safe deletion of attendee
+- `POST /api/events/:eventId/attendees/bulk` (admin): CSV import with BOM stripping & email validation
+- `GET /api/events/:eventId/gates` (auth): List gates for an event
+- `POST /api/events/:eventId/gates` (admin): Create a physical entrance gate
+- `DELETE /api/events/:eventId/gates/:gateId` (admin): Delete gate and unassign staff
 
-### Public Registration
-- `GET /api/public/events/:slug`: Event details for the public signup form
-- `POST /api/public/events/:slug/register`: Creates attendee and returns live QR ticket
+### Public Guest Pass Registration
+- `GET /api/public/events/:slug`: Event details for public signup
+- `POST /api/public/events/:slug/register`: Registers guest, returns ticket UUID & sends email ticket
 
 ### Scanner Validation
-- `POST /api/scan/validate` (auth): Validates scanned UUID. Implements atomic single-scan validation
+- `POST /api/scan/validate` (auth): Validates scanned QR ticket UUID with atomic duplicate-scan prevention
 
 ---
 
 ## Environment Variables
-
-Create these files in your local setup:
 
 ### `apps/api/.env`
 ```env
@@ -123,11 +140,11 @@ MONGO_URI=mongodb://127.0.0.1:27017/event_qr_system
 JWT_SECRET=your_jwt_secret_key
 ADMIN_SETUP_KEY=setup-admin
 
-# EITHER: Set Resend API Key (Recommended for Render Free Tier)
-RESEND_API_KEY=re_your_copied_api_key
-SENDER_EMAIL=onboarding@resend.dev # Or verified custom domain
+# Resend API Key (Recommended for Cloud Hosting / Render)
+RESEND_API_KEY=re_your_api_key
+SENDER_EMAIL=onboarding@resend.dev # Or your verified custom domain
 
-# OR: Set standard SMTP variables (Requires Render Paid Tier)
+# Standard SMTP Fallback
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_USER=your-email@gmail.com
@@ -143,25 +160,24 @@ VITE_API_BASE=http://localhost:4000
 
 ## Quick Start
 
-1. Install dependencies at root:
+1. **Install dependencies at root**:
    ```bash
    npm install
    ```
-2. Start Dev Database, API, and Frontend concurrently:
+
+2. **Start Dev Database, API, and Web App**:
    ```bash
-   # Run API and Web locally
    npm run dev:api  # Starts backend on 4000
    npm run dev:web  # Starts frontend on 5173
    ```
 
-## Production Docker Deployment
-Compile and run with health-checked orchestration:
-```bash
-docker compose up --build -d
-```
+3. **Production Docker Deployment**:
+   ```bash
+   docker compose up --build -d
+   ```
 
 ---
 
-## Docs & User Guide
+## Documentation & Guides
 
-For detailed guidelines, CSV importing tips, SMTP setup, and step-by-step feature execution, please check out our dedicated **[USER_GUIDE.md](./USER_GUIDE.md)**!
+For complete step-by-step instructions, CSV importing formats, and troubleshooting tips, see **[USER_GUIDE.md](./USER_GUIDE.md)**!

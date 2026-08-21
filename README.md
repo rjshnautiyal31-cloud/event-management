@@ -1,37 +1,43 @@
-# Event Management and QR Check-in System
+# Event Management, QR Ticket, & AI Story-to-Video Platform
 
-A full-stack, enterprise-grade monorepo for high-volume event registration, unique QR ticket generation, physical gate management, and fast on-site QR validation with duplicate-scan prevention.
+A full-stack, enterprise-grade monorepo for high-volume event registration, unique QR ticket generation, physical gate management, fast on-site QR validation with duplicate-scan prevention, and an integrated **AI Story-to-Song-to-Video Studio**.
 
 ---
 
 ## Key Features 🚀
 
-- **`#0A2D59` Deep Navy Brand Identity & Universal Top Navigation**:
-  - Unified `#0A2D59` branding across all application pages (`LoginPage`, `DashboardPage`, `QRGeneratorPage`, `ScannerPage`).
-  - Sticky top header featuring a **Hamburger (`☰`) Slide-Over Drawer Navigation Panel**.
+### 1. AI Story-to-Song-to-Video Studio (`/#/studio`)
+- **Event-Scoped AI Stories & Multi-Video Support**:
+  - Associate multiple AI story projects per event. Restrictable via Event ACL (`super_admin` & `event_admin`).
+- **Phase 1: Story Narrative Analysis**:
+  - Analyzes raw event text/narrative using **Google Gemini 2.5 Flash** to extract summary, emotional arc, key themes, mood, and key visual moments.
+- **Phase 2: AI Lyrics & Vocal Song Generation**:
+  - Generates structured song lyrics in target genres (*Pop, Acoustic, Cinematic, Rock*).
+  - Synthesizes vocal singing/narration and layers it over a multi-chord musical backing track.
+- **Phase 3: Event Photos & Media Gallery**:
+  - Upload event photos and media assets stored locally or in S3 buckets.
+- **Phase 4: Scene Storyboard & Timeline Mapping**:
+  - Automatically maps key moments and uploaded event photos into timed scenes with text captions.
+- **Phase 5: High-Definition Video Rendering**:
+  - Stitches photos, vocal audio track, and **burned SRT lower-third scene subtitles** into a 720p/1080p HD MP4 video.
+- **Pluggable Provider Architecture**:
+  - Zero-cost 100% local development mode (*Local Storage, In-Memory Queue, Local Synth, Local FFmpeg*) with seamless cloud toggles (*AWS S3, BullMQ Redis, Suno AI, Replicate/Runway AI Video*) via `.env` flags.
 
+### 2. Core Event & Gate Management
+- **`#0A2D59` Deep Navy Brand Identity & Universal Top Navigation**:
+  - Sticky top header featuring a **Hamburger (`☰`) Slide-Over Drawer Navigation Panel**.
 - **High-Volume Event Switcher Command Palette (`⌘K` / `Ctrl+K`)**:
   - Real-time instant search input filtering by **title**, **venue location**, or **date**.
   - Categorized tabs: `⚡ Active & Upcoming`, `🕒 Past Events`, and `⭐ Pinned / Favorites` (pinned events persist in `localStorage`).
-  - Batch pagination (10 / 25 / 50 per page) designed for scaling to 1,000+ events.
-
 - **`🗓️ Managed Events Directory` Workspace**:
-  - Dedicated full-width table view listing all managed events with real-time text search, status filters (`🟢 Live Today`, `🗓 Upcoming`, `🏁 Ended`), public registration links (`/#/register/:slug`), and 1-tap active event switching.
-
+  - Full-width table view listing all managed events with real-time text search, status filters (`🟢 Live Today`, `🗓 Upcoming`, `🏁 Ended`), public registration links (`/#/register/:slug`), and 1-tap active event switching.
 - **High-Volume Attendee Roster (100s / 1000s of Attendees)**:
   - Real-time text search, status filters (`All`, `Checked In`, `Pending`), batch size selector (25 / 50 / 100 / All), and **Virtual Infinite Scroll / Lazy Loading**.
-  - Inline QR Code thumbnail preview & high-resolution expand modal.
-
 - **Inline CID Attachment Ticket Emails (`cid:qrcode`)**:
   - Automatic email tickets sent via Resend API or SMTP using `cid:qrcode` Content-ID inline attachment embedding (eliminating broken images in Gmail, Outlook, and Yahoo).
-
-- **Enhanced Create Event & Date/Time Presets**:
-  - Native date & time pickers with 1-tap quick presets (`📅 Today`, `🚀 Tomorrow`, `📆 Next Week`), native `showPicker()` popups, and full manual entry support.
-
 - **Event Gates & Automated Staff Locking**:
   - Create, delete, and monitor physical gates per event (*Gate A, VIP Gate, Main Entrance*).
   - Staff scanner accounts automatically lock to their assigned gate upon login to prevent mis-scans.
-
 - **Decoupled Check-in Logs**:
   - Denormalizes attendee name and email into `entrylogs` at check-in so historical records are preserved even if an attendee profile is subsequently deleted.
 
@@ -39,121 +45,89 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
 
 ## Monorepo Layout
 
-- `apps/api`: Node.js Express backend, Mongoose/MongoDB, token signers, CSV parser, Resend/Nodemailer email engine, and check-in validators.
-- `apps/web`: React + Vite + Tailwind CSS frontend, HashRouter navigation, html5-qrcode scanner integration, responsive dashboard, and public registration portal.
+- `apps/api`: Node.js Express backend (ESM), Mongoose/MongoDB, token signers, CSV parser, Resend/Nodemailer email engine, FFmpeg video worker, and AI provider adapters.
+- `apps/web`: React 18 + Vite + Tailwind CSS frontend, HashRouter navigation, html5-qrcode scanner integration, responsive dashboard, AI Studio UI (`ProjectStudioPage.jsx`), and public registration portal.
 
 ---
 
 ## Database Schema (MongoDB Collections)
 
-### `users`
-- `_id`
-- `name` (string)
-- `email` (unique)
-- `passwordHash` (bcrypt)
-- `role` (`super_admin` | `event_admin` | `event_staff`)
-- `assignedGateId` -> Reference to `gates._id` (null if none)
-- timestamps
+### Core Event Collections
+- `users`: User profiles with role-based access (`super_admin` | `event_admin` | `event_staff`) and gate assignments.
+- `events`: Event definitions, dates, locations, public slug, createdBy.
+- `gates`: Physical entrance gates per event.
+- `attendees`: Registered attendees, ticket UUIDs, QR code base64, check-in status.
+- `entrylogs`: Historical check-in log records with denormalized names/emails.
 
-### `events`
-- `_id`
-- `title` (string)
-- `date` (date/iso string)
-- `location` (string)
-- `description` (string)
-- `publicSlug` (unique string)
-- `createdBy` -> Reference to `users._id`
-- timestamps
-
-### `gates`
-- `_id`
-- `eventId` -> Reference to `events._id`
-- `name` (string)
-- `description` (string)
-- timestamps
-- index: `(eventId, name)` unique
-
-### `attendees`
-- `_id`
-- `eventId` -> Reference to `events._id`
-- `name` (string)
-- `email` (string)
-- `phoneNumber` (string)
-- `ticketUuid` (unique UUID encoded in QR)
-- `qrCodeDataUrl` (base64 PNG)
-- `isCheckedIn` (boolean, default `false`)
-- `checkedInAt` (nullable date)
-- `checkedInGate` (string)
-- timestamps
-- index: `(eventId, email)` unique
-
-### `entrylogs`
-- `_id`
-- `attendeeId` -> Reference to `attendees._id` (nullable)
-- `eventId` -> Reference to `events._id`
-- `timestamp` (date)
-- `gateNumber` (string)
-- `attendeeName` (string - denormalized for persistence)
-- `attendeeEmail` (string - denormalized for persistence)
-- timestamps
+### AI Story-to-Video Collections
+- `projects`: Story projects linked to `eventId` with references to active analysis, song, storyboard, and video.
+- `storyanalyses`: Story analysis output (summary, emotional arc, themes, key moments).
+- `songs`: Generated lyrics, audio URL, duration, genre, mood.
+- `medias`: Uploaded photo/image media items per project.
+- `storyboards`: Scene timeline mapping (sceneNumber, start/end timestamps, mediaId, captionText).
+- `videos`: Rendered video documents (videoUrl, durationSeconds, resolution).
+- `generationjobs`: Async background job status tracking (jobType, progressPercent, currentStepMessage).
 
 ---
 
 ## API Endpoints
 
+### AI Story-to-Video Studio (`/api/story-video/*`)
+- `POST /api/story-video/projects` (admin): Create a new AI story project linked to an event.
+- `GET /api/story-video/projects` (auth): List all story projects for an event.
+- `GET /api/story-video/projects/:id` (auth): Fetch details for a specific project.
+- `POST /api/story-video/projects/:id/analyze` (admin): Analyze story narrative using Gemini AI.
+- `POST /api/story-video/projects/:id/lyrics` (admin): Generate AI lyrics and synthesize vocal audio track.
+- `POST /api/story-video/projects/:id/media` (admin): Upload photo/image assets for video stitching.
+- `GET /api/story-video/projects/:id/media` (auth): Get media gallery items for a project.
+- `POST /api/story-video/projects/:id/storyboard` (admin): Generate scene timeline storyboard.
+- `POST /api/story-video/projects/:id/render` (admin): Trigger FFmpeg background video rendering task.
+- `GET /api/story-video/jobs/:jobId` (auth): Poll video rendering job progress.
+
 ### Auth & User Accounts
-- `POST /api/auth/setup-admin`: Bootstraps the first super admin (`setupKey`, `name`, `email`, `password`)
-- `POST /api/auth/login`: Validates credentials and returns JWT + user profile + gate assignments
-- `GET /api/auth/staff` (admin): Lists system users with populated gate assignments
-- `POST /api/auth/staff` (admin): Creates a new user with chosen role (`super_admin` | `event_admin` | `event_staff`) and optional `assignedGateId`
-- `PUT /api/auth/staff/:userId` (admin): Updates name, email, role, or gate assignment dynamically
-- `DELETE /api/auth/staff/:userId` (admin): Removes user account
+- `POST /api/auth/setup-admin`: Bootstrap initial super admin account.
+- `POST /api/auth/login`: Validate credentials and issue JWT.
+- `GET /api/auth/staff` (admin): List staff users.
+- `POST /api/auth/staff` (admin): Create staff user with role & gate assignment.
 
 ### Events, Attendees, & Gates
-- `POST /api/events` (admin): Create a new event
-- `GET /api/events` (auth): List all accessible events
-- `GET /api/events/:eventId/stats` (auth): Registration/check-in summary, stats, and recent check-in logs
-- `GET /api/events/:eventId/attendees` (auth): List attendees with pagination & search
-- `POST /api/events/:eventId/attendees` (admin): Create single walk-in attendee
-- `PUT /api/events/:eventId/attendees/:attendeeId` (admin): Edit attendee details & trigger updated email ticket
-- `DELETE /api/events/:eventId/attendees/:attendeeId` (admin): Safe deletion of attendee
-- `POST /api/events/:eventId/attendees/bulk` (admin): CSV import with BOM stripping & email validation
-- `GET /api/events/:eventId/gates` (auth): List gates for an event
-- `POST /api/events/:eventId/gates` (admin): Create a physical entrance gate
-- `DELETE /api/events/:eventId/gates/:gateId` (admin): Delete gate and unassign staff
-
-### Public Guest Pass Registration
-- `GET /api/public/events/:slug`: Event details for public signup
-- `POST /api/public/events/:slug/register`: Registers guest, returns ticket UUID & sends email ticket
-
-### Scanner Validation
-- `POST /api/scan/validate` (auth): Validates scanned QR ticket UUID with atomic duplicate-scan prevention
+- `POST /api/events` (admin): Create event.
+- `GET /api/events` (auth): List accessible events.
+- `GET /api/events/:eventId/stats` (auth): Event registration & check-in analytics.
+- `GET /api/events/:eventId/attendees` (auth): Paginated attendee list.
+- `POST /api/scan/validate` (auth): Validate scanned QR ticket UUID.
 
 ---
 
-## Environment Variables
+## Environment Variables Configuration
 
 ### `apps/api/.env`
 ```env
 PORT=4000
 MONGO_URI=mongodb://127.0.0.1:27017/event_qr_system
-JWT_SECRET=your_jwt_secret_key
+JWT_SECRET=dev-secret-change-me
 ADMIN_SETUP_KEY=setup-admin
 
-# Resend API Key (Recommended for Cloud Hosting / Render)
+# Configurable AI & Cloud Provider Flags
+STORAGE_PROVIDER=local        # "local" | "s3"
+QUEUE_PROVIDER=memory          # "memory" | "redis"
+MUSIC_PROVIDER=local_synth     # "local_synth" | "suno" | "elevenlabs"
+VIDEO_PROVIDER=local_ffmpeg    # "local_ffmpeg" | "replicate" | "runway"
+LLM_PROVIDER=gemini            # "gemini" | "openai"
+
+# API Keys & Cloud Config
+GEMINI_API_KEY=your_gemini_api_key_here
+REPLICATE_API_KEY=r8_your_replicate_key
+MUSIC_API_KEY=suno_your_music_key
+REDIS_URL=redis://127.0.0.1:6379
+S3_BUCKET=ai-story-media
+S3_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_aws_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret
+
+# Resend / Email Config
 RESEND_API_KEY=re_your_api_key
-SENDER_EMAIL=onboarding@resend.dev # Or your verified custom domain
-
-# Standard SMTP Fallback
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=465
-SMTP_USER=your-email@gmail.com
-SMTP_PASS=your-16-char-app-password
-```
-
-### `apps/web/.env`
-```env
-VITE_API_BASE=http://localhost:4000
+SENDER_EMAIL=onboarding@resend.dev
 ```
 
 ---
@@ -165,19 +139,19 @@ VITE_API_BASE=http://localhost:4000
    npm install
    ```
 
-2. **Start Dev Database, API, and Web App**:
+2. **Start Backend API and Web App**:
    ```bash
-   npm run dev:api  # Starts backend on 4000
-   npm run dev:web  # Starts frontend on 5173
+   npm run dev:api  # Backend API on http://localhost:4000
+   npm run dev:web  # Web App on http://localhost:5173
    ```
 
-3. **Production Docker Deployment**:
-   ```bash
-   docker compose up --build -d
-   ```
+3. **Access AI Story-to-Video Studio**:
+   - Open browser to **`http://localhost:5173/#/studio`**.
+   - Log in as Event Admin / Super Admin to analyze stories, generate lyrics, upload photos, and render event music videos!
 
 ---
 
-## Documentation & Guides
+## Documentation & References
 
-For complete step-by-step instructions, CSV importing formats, and troubleshooting tips, see **[USER_GUIDE.md](./USER_GUIDE.md)**!
+- Technical Implementation Plan: [`ai_story_to_video_implementation_plan.md`](./ai_story_to_video_implementation_plan.md)
+- User Guide: [`USER_GUIDE.md`](./USER_GUIDE.md)

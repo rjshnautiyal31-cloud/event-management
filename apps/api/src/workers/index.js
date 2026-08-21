@@ -119,7 +119,6 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
 
     let concatContent = "";
     effectiveMediaPaths.forEach((imgPath) => {
-      // Escape single quotes for FFmpeg concat format
       const safePath = imgPath.replace(/'/g, "'\\''");
       concatContent += `file '${safePath}'\nduration ${durationPerImage}\n`;
     });
@@ -132,17 +131,17 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     // Build FFmpeg Slideshow Video & Audio Muxing Command
     const command = ffmpeg()
       .input(concatListPath)
-      .inputOptions(["-f concat", "-safe 0"])
+      .inputOptions(["-f", "concat", "-safe", "0"])
       .input(effectiveAudioPath);
 
     await new Promise((resolve, reject) => {
       command
         .outputOptions([
-          "-vf scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p,r=25",
-          "-c:v libx264",
-          "-preset ultrafast",
-          "-c:a aac",
-          "-b:a 192k",
+          "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p,r=25",
+          "-c:v", "libx264",
+          "-preset", "ultrafast",
+          "-c:a", "aac",
+          "-b:a", "192k",
           "-shortest"
         ])
         .save(tempOutputPath)
@@ -152,7 +151,10 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
           await dbJob.save();
         })
         .on("end", resolve)
-        .on("error", reject);
+        .on("error", (err, stdout, stderr) => {
+          console.error("FFmpeg error output:", stderr);
+          reject(err);
+        });
     });
 
     // Clean up temporary concat manifest file

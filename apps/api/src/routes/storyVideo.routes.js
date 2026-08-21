@@ -229,9 +229,14 @@ storyVideoRouter.post("/projects/:id/render", async (req, res, next) => {
       .filter(url => url.includes("/uploads/"))
       .map(url => path.join(process.cwd(), "uploads", path.basename(url)));
 
+    let songDoc = project.activeSongId;
+    if (!songDoc) {
+      songDoc = await Song.findOne({ projectId: project._id }).sort({ createdAt: -1 });
+    }
+
     let audioPath = null;
-    if (project.activeSongId?.audioUrl && project.activeSongId.audioUrl.includes("/uploads/")) {
-      audioPath = path.join(process.cwd(), "uploads", path.basename(project.activeSongId.audioUrl));
+    if (songDoc?.audioUrl && songDoc.audioUrl.includes("/uploads/")) {
+      audioPath = path.join(process.cwd(), "uploads", path.basename(songDoc.audioUrl));
     }
 
     const job = await GenerationJob.create({

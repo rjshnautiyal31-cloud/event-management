@@ -85,10 +85,11 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
   try {
     dbJob.status = "processing";
     dbJob.progressPercent = 15;
-    dbJob.currentStepMessage = "Initializing FFmpeg video rendering engine...";
+    dbJob.currentStepMessage = "Initializing FFmpeg slideshow engine...";
     await dbJob.save();
 
-    const outputFilename = `rendered_video_${Date.now()}.mp4`;
+    const timestamp = Date.now();
+    const outputFilename = `rendered_video_${timestamp}.mp4`;
     const uploadDir = path.join(process.cwd(), "uploads");
     await fs.mkdir(uploadDir, { recursive: true });
     const tempOutputPath = path.join(uploadDir, outputFilename);
@@ -107,46 +108,64 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     let effectiveAudioPath = audioPath;
     if (!effectiveAudioPath) {
       const fallbackWavPath = path.join(uploadDir, "fallback_audio.wav");
-      const wavBuffer = createSineWavBuffer(15, 440, 44100);
+      const wavBuffer = createSineWavBuffer(16, 440, 44100);
       await fs.writeFile(fallbackWavPath, wavBuffer);
       effectiveAudioPath = fallbackWavPath;
     }
 
-    // Build FFmpeg slideshow rendering command
-    let command = ffmpeg();
+    // Build FFmpeg Concat List File for seamless multi-image slideshow
+    const concatListPath = path.join(uploadDir, `concat_${timestamp}.txt`);
+    const durationPerImage = 4; // 4 seconds per image frame
 
+    let concatContent = "";
     effectiveMediaPaths.forEach((imgPath) => {
-      command = command.input(imgPath).loop(4);
+      // Escape single quotes for FFmpeg concat format
+      const safePath = imgPath.replace(/'/g, "'\\''");
+      concatContent += `file '${safePath}'\nduration ${durationPerImage}\n`;
     });
+    // Repeat last image entry without duration per FFmpeg concat demuxer spec
+    const lastPath = effectiveMediaPaths[effectiveMediaPaths.length - 1].replace(/'/g, "'\\''");
+    concatContent += `file '${lastPath}'\n`;
 
-    command = command.input(effectiveAudioPath);
+    await fs.writeFile(concatListPath, concatContent);
+
+    // Build FFmpeg Slideshow Video & Audio Muxing Command
+    const command = ffmpeg()
+      .input(concatListPath)
+      .inputOptions(["-f concat", "-safe 0"])
+      .input(effectiveAudioPath);
 
     await new Promise((resolve, reject) => {
       command
         .outputOptions([
+          "-vf scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p,r=25",
           "-c:v libx264",
-          "-tune stillimage",
+          "-preset ultrafast",
           "-c:a aac",
           "-b:a 192k",
-          "-pix_fmt yuv420p",
           "-shortest"
         ])
         .save(tempOutputPath)
         .on("progress", async (p) => {
           dbJob.progressPercent = Math.min(95, Math.round(p.percent || 50));
-          dbJob.currentStepMessage = "Stitching media frames and audio track...";
+          dbJob.currentStepMessage = "Rendering slideshow frames and audio track...";
           await dbJob.save();
         })
         .on("end", resolve)
         .on("error", reject);
     });
 
+    // Clean up temporary concat manifest file
+    await fs.unlink(concatListPath).catch(() => {});
+
     const publicUrl = `http://localhost:${env.port}/uploads/${outputFilename}`;
+    const totalDurationSeconds = effectiveMediaPaths.length * durationPerImage;
+
     const videoDoc = await Video.create({
       projectId,
       videoUrl: publicUrl,
-      durationSeconds: 15,
-      resolution: "1080p"
+      durationSeconds: totalDurationSeconds,
+      resolution: "720p"
     });
 
     dbJob.status = "completed";

@@ -10,6 +10,74 @@ import { env } from "../config/env.js";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller);
 
+// Pure JS WAV audio buffer generator
+function createSineWavBuffer(durationSeconds = 15, frequency = 440, sampleRate = 44100) {
+  const numSamples = Math.floor(sampleRate * durationSeconds);
+  const dataSize = numSamples * 2;
+  const buffer = Buffer.alloc(44 + dataSize);
+
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + dataSize, 4);
+  buffer.write("WAVE", 8);
+
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * 2, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(dataSize, 40);
+
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    const sample = Math.sin(2 * Math.PI * frequency * t) * 0.3;
+    const val = Math.max(-32768, Math.min(32767, Math.floor(sample * 32767)));
+    buffer.writeInt16LE(val, 44 + i * 2);
+  }
+
+  return buffer;
+}
+
+// Pure JS 24-bit solid color BMP image generator
+function createSolidBmpBuffer(width = 800, height = 600, colorHex = "0A2D59") {
+  const r = parseInt(colorHex.slice(0, 2), 16);
+  const g = parseInt(colorHex.slice(2, 4), 16);
+  const b = parseInt(colorHex.slice(4, 6), 16);
+
+  const rowSize = Math.floor((24 * width + 31) / 32) * 4;
+  const pixelArraySize = rowSize * height;
+  const fileSize = 54 + pixelArraySize;
+
+  const buffer = Buffer.alloc(fileSize);
+
+  buffer.write("BM", 0);
+  buffer.writeUInt32LE(fileSize, 2);
+  buffer.writeUInt32LE(54, 10);
+
+  buffer.writeUInt32LE(40, 14);
+  buffer.writeInt32LE(width, 18);
+  buffer.writeInt32LE(height, 22);
+  buffer.writeUInt16LE(1, 26);
+  buffer.writeUInt16LE(24, 28);
+  buffer.writeUInt32LE(pixelArraySize, 34);
+
+  for (let y = 0; y < height; y++) {
+    const rowOffset = 54 + y * rowSize;
+    for (let x = 0; x < width; x++) {
+      const pxOffset = rowOffset + x * 3;
+      buffer[pxOffset] = b;
+      buffer[pxOffset + 1] = g;
+      buffer[pxOffset + 2] = r;
+    }
+  }
+
+  return buffer;
+}
+
 export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], audioPath = null) {
   const dbJob = await GenerationJob.findById(jobId);
   if (!dbJob) return;
@@ -25,24 +93,33 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     await fs.mkdir(uploadDir, { recursive: true });
     const tempOutputPath = path.join(uploadDir, outputFilename);
 
+    let effectiveMediaPaths = [...mediaPaths];
+
+    // Fallback image if no media uploaded
+    if (effectiveMediaPaths.length === 0) {
+      const fallbackBmpPath = path.join(uploadDir, "fallback_cover.bmp");
+      const bmpBuffer = createSolidBmpBuffer(800, 600, "0A2D59");
+      await fs.writeFile(fallbackBmpPath, bmpBuffer);
+      effectiveMediaPaths.push(fallbackBmpPath);
+    }
+
+    // Fallback audio if no song track generated
+    let effectiveAudioPath = audioPath;
+    if (!effectiveAudioPath) {
+      const fallbackWavPath = path.join(uploadDir, "fallback_audio.wav");
+      const wavBuffer = createSineWavBuffer(15, 440, 44100);
+      await fs.writeFile(fallbackWavPath, wavBuffer);
+      effectiveAudioPath = fallbackWavPath;
+    }
+
     // Build FFmpeg slideshow rendering command
     let command = ffmpeg();
 
-    if (mediaPaths.length > 0) {
-      mediaPaths.forEach((imgPath) => {
-        command = command.input(imgPath).loop(4);
-      });
-    } else {
-      // Fallback synthetic visual input if no images uploaded yet
-      command = command.input("eval=sine:f=100:be=1").inputFormat("lavfi");
-    }
+    effectiveMediaPaths.forEach((imgPath) => {
+      command = command.input(imgPath).loop(4);
+    });
 
-    if (audioPath) {
-      command = command.input(audioPath);
-    } else {
-      // Synthetic audio background
-      command = command.input("eval=sine:f=440:be=2").inputFormat("lavfi");
-    }
+    command = command.input(effectiveAudioPath);
 
     await new Promise((resolve, reject) => {
       command

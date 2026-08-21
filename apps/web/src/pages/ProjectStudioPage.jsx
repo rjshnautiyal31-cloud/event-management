@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { api } from "../api.js";
 
 export function ProjectStudioPage({ token }) {
+  const [events, setEvents] = useState([]);
+  const [selectedEventId, setSelectedEventId] = useState("");
   const [projects, setProjects] = useState([]);
   const [activeProject, setActiveProject] = useState(null);
   const [activeTab, setActiveTab] = useState("story"); // story | lyrics | media | storyboard | render
@@ -26,8 +28,17 @@ export function ProjectStudioPage({ token }) {
   const [rendering, setRendering] = useState(false);
 
   useEffect(() => {
-    loadProjects();
+    loadEvents();
   }, []);
+
+  useEffect(() => {
+    if (selectedEventId) {
+      loadProjects(selectedEventId);
+    } else {
+      setProjects([]);
+      setActiveProject(null);
+    }
+  }, [selectedEventId]);
 
   useEffect(() => {
     if (activeProject) {
@@ -35,12 +46,27 @@ export function ProjectStudioPage({ token }) {
     }
   }, [activeProject]);
 
-  async function loadProjects() {
+  async function loadEvents() {
     try {
-      const data = await api("/api/story-video/projects", { token });
+      const data = await api("/api/events", { token });
+      const eventList = Array.isArray(data) ? data : data.events || [];
+      setEvents(eventList);
+      if (eventList.length > 0) {
+        setSelectedEventId(eventList[0]._id);
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function loadProjects(eventId) {
+    try {
+      const data = await api(`/api/story-video/projects?eventId=${eventId}`, { token });
       setProjects(data);
-      if (data.length > 0 && !activeProject) {
+      if (data.length > 0) {
         setActiveProject(data[0]);
+      } else {
+        setActiveProject(null);
       }
     } catch (err) {
       setError(err.message);
@@ -58,20 +84,20 @@ export function ProjectStudioPage({ token }) {
 
   async function handleCreateProject(e) {
     e.preventDefault();
-    if (!newTitle || !newStory) return;
+    if (!newTitle || !newStory || !selectedEventId) return;
     setLoading(true);
     setError("");
     try {
       const project = await api("/api/story-video/projects", {
         token,
         method: "POST",
-        body: { title: newTitle, storyText: newStory }
+        body: { eventId: selectedEventId, title: newTitle, storyText: newStory }
       });
-      setSuccess("Project created successfully!");
+      setSuccess("Story Project created for Event successfully!");
       setNewTitle("");
       setNewTitleStory("");
       setShowCreateModal(false);
-      await loadProjects();
+      await loadProjects(selectedEventId);
       setActiveProject(project);
     } catch (err) {
       setError(err.message);
@@ -90,8 +116,8 @@ export function ProjectStudioPage({ token }) {
         token,
         method: "POST"
       });
-      setSuccess("Story analyzed by Gemini!");
-      await loadProjects();
+      setSuccess("Story analyzed with Gemini AI!");
+      await loadProjects(selectedEventId);
       const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
       setActiveProject(updated);
       setActiveTab("lyrics");
@@ -113,7 +139,7 @@ export function ProjectStudioPage({ token }) {
         method: "POST",
         body: { genre: selectedGenre }
       });
-      setSuccess("Lyrics & synth audio track generated!");
+      setSuccess("AI Lyrics & synth audio track generated!");
       const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
       setActiveProject(updated);
       setActiveTab("media");
@@ -211,24 +237,44 @@ export function ProjectStudioPage({ token }) {
     }, 2000);
   }
 
+  const selectedEvent = events.find(ev => ev._id === selectedEventId);
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 text-slate-800">
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#0A2D59] text-white p-6 rounded-2xl shadow-xl mb-8">
         <div>
           <h1 className="text-2xl font-black flex items-center gap-2">
-            <span>🎬</span> AI Story-to-Song-to-Video Studio
+            <span>🎬</span> Event AI Story-to-Video Studio
           </h1>
           <p className="text-slate-300 text-sm mt-1">
-            Turn memories and stories into AI lyrics, music tracks, and MP4 videos locally.
+            Generate AI lyrics, music tracks, and MP4 videos for your events (Event Admin & Super Admin Access).
           </p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="bg-white text-[#0A2D59] hover:bg-slate-100 font-bold px-5 py-2.5 rounded-xl shadow transition text-sm flex items-center gap-1.5 self-start md:self-auto"
-        >
-          <span>✨</span> New Project
-        </button>
+
+        {/* Event Context Selector */}
+        <div className="flex items-center gap-3 bg-white/10 p-2.5 rounded-xl border border-white/20">
+          <label className="text-xs font-extrabold uppercase text-slate-200">Event:</label>
+          <select
+            value={selectedEventId}
+            onChange={(e) => setSelectedEventId(e.target.value)}
+            className="bg-white text-slate-900 text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none"
+          >
+            {events.map((ev) => (
+              <option key={ev._id} value={ev._id}>
+                {ev.title}
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={() => setShowCreateModal(true)}
+            disabled={!selectedEventId}
+            className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold px-3.5 py-1.5 rounded-lg shadow transition text-xs flex items-center gap-1"
+          >
+            <span>+</span> Story
+          </button>
+        </div>
       </div>
 
       {/* Alert Messages */}
@@ -247,9 +293,15 @@ export function ProjectStudioPage({ token }) {
 
       {/* Main Studio Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        {/* Sidebar: Projects Selector */}
+        {/* Sidebar: Event Projects Selector */}
         <div className="lg:col-span-1 bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-          <h2 className="text-sm font-black uppercase text-slate-400 tracking-wider">Your Projects ({projects.length})</h2>
+          <div>
+            <h2 className="text-xs font-black uppercase text-slate-400 tracking-wider">
+              {selectedEvent ? selectedEvent.title : "Event"} Stories ({projects.length})
+            </h2>
+            <p className="text-[11px] text-slate-500 mt-0.5">Multiple stories/videos per event supported.</p>
+          </div>
+
           <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
             {projects.map((proj) => (
               <button
@@ -257,7 +309,7 @@ export function ProjectStudioPage({ token }) {
                 onClick={() => setActiveProject(proj)}
                 className={`w-full text-left p-3.5 rounded-xl transition border text-sm ${
                   activeProject?._id === proj._id
-                    ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                    ? "bg-[#0A2D59] text-white border-[#0A2D59] shadow-sm"
                     : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
                 }`}
               >
@@ -266,7 +318,9 @@ export function ProjectStudioPage({ token }) {
               </button>
             ))}
             {projects.length === 0 && (
-              <div className="text-center py-8 text-slate-400 text-xs">No projects created yet.</div>
+              <div className="text-center py-8 text-slate-400 text-xs">
+                No stories created for this event yet. Click "+ Story" to create one.
+              </div>
             )}
           </div>
         </div>
@@ -280,7 +334,7 @@ export function ProjectStudioPage({ token }) {
                 {[
                   { id: "story", label: "1. Story Analysis", icon: "📖" },
                   { id: "lyrics", label: "2. AI Lyrics & Audio", icon: "🎵" },
-                  { id: "media", label: "3. Photos & Media", icon: "🖼️" },
+                  { id: "media", label: "3. Event Photos", icon: "🖼️" },
                   { id: "storyboard", label: "4. Storyboard", icon: "🎬" },
                   { id: "render", label: "5. Render Video", icon: "🚀" }
                 ].map((tab) => (
@@ -313,7 +367,7 @@ export function ProjectStudioPage({ token }) {
                     disabled={loading}
                     className="bg-[#0A2D59] text-white hover:bg-slate-800 font-bold px-6 py-3 rounded-xl shadow text-sm transition flex items-center gap-2"
                   >
-                    <span>✨</span> {loading ? "Analyzing with Gemini AI..." : "Analyze Narrative with Gemini AI"}
+                    <span>✨</span> {loading ? "Analyzing with Gemini AI..." : "Analyze Story Narrative"}
                   </button>
 
                   {activeProject.activeStoryAnalysisId && (
@@ -336,7 +390,7 @@ export function ProjectStudioPage({ token }) {
               {activeTab === "lyrics" && (
                 <div className="space-y-6">
                   <div className="flex items-center gap-4">
-                    <label className="text-sm font-bold text-slate-700">Select Music Genre:</label>
+                    <label className="text-sm font-bold text-slate-700">Select Music Style:</label>
                     <select
                       value={selectedGenre}
                       onChange={(e) => setSelectedGenre(e.target.value)}
@@ -352,14 +406,14 @@ export function ProjectStudioPage({ token }) {
                       disabled={loading}
                       className="bg-[#0A2D59] text-white hover:bg-slate-800 font-bold px-5 py-2 rounded-xl text-sm transition"
                     >
-                      {loading ? "Generating..." : "Generate Lyrics & Music"}
+                      {loading ? "Generating..." : "Generate Lyrics & Audio"}
                     </button>
                   </div>
 
                   {activeProject.activeSongId && (
                     <div className="space-y-4">
                       <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
-                        <h4 className="font-black text-sm text-slate-700 mb-2">Generated AI Song Lyrics</h4>
+                        <h4 className="font-black text-sm text-slate-700 mb-2">Generated AI Lyrics</h4>
                         <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
                           {activeProject.activeSongId.lyrics}
                         </pre>
@@ -380,7 +434,7 @@ export function ProjectStudioPage({ token }) {
               {activeTab === "media" && (
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-sm text-slate-800">Project Photos & Images ({mediaItems.length})</h3>
+                    <h3 className="font-bold text-sm text-slate-800">Event Photos & Images ({mediaItems.length})</h3>
                     <label className="bg-[#0A2D59] text-white hover:bg-slate-800 font-bold px-4 py-2 rounded-xl text-xs shadow cursor-pointer transition">
                       {uploadingMedia ? "Uploading..." : "Upload Photo"}
                       <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
@@ -395,7 +449,7 @@ export function ProjectStudioPage({ token }) {
                     ))}
                     {mediaItems.length === 0 && (
                       <div className="col-span-full text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-xs">
-                        No photos uploaded yet. Upload photos to include in your video storyboard!
+                        No photos uploaded for this event story yet. Upload photos to stitch into video!
                       </div>
                     )}
                   </div>
@@ -429,13 +483,13 @@ export function ProjectStudioPage({ token }) {
                 </div>
               )}
 
-              {/* Tab 5: Render & Player */}
+              {/* Tab 5: Render & Video Player */}
               {activeTab === "render" && (
                 <div className="space-y-6">
                   <div className="bg-slate-900 text-white p-6 rounded-2xl space-y-4">
-                    <h3 className="text-lg font-black flex items-center gap-2">🚀 Render Final MP4 Video</h3>
+                    <h3 className="text-lg font-black flex items-center gap-2">🚀 Render Event Video</h3>
                     <p className="text-xs text-slate-300">
-                      Stitches photos, AI audio track, and scene timing into a high-definition 1080p MP4 video using local FFmpeg.
+                      Renders event photos, AI audio track, and storyboard into an MP4 video using local FFmpeg.
                     </p>
 
                     <button
@@ -443,7 +497,7 @@ export function ProjectStudioPage({ token }) {
                       disabled={rendering}
                       className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-6 py-3 rounded-xl shadow text-sm transition"
                     >
-                      {rendering ? "Rendering Video..." : "Start FFmpeg Video Render"}
+                      {rendering ? "Rendering Video..." : "Start Video Render"}
                     </button>
 
                     {activeJob && rendering && (
@@ -466,7 +520,7 @@ export function ProjectStudioPage({ token }) {
                   {activeProject.activeVideoId?.videoUrl && (
                     <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                       <h4 className="font-black text-sm text-slate-800 flex items-center gap-2">
-                        <span>🎬</span> Rendered Final Video
+                        <span>🎬</span> Rendered Event Video
                       </h4>
                       <video
                         controls
@@ -481,24 +535,26 @@ export function ProjectStudioPage({ token }) {
           ) : (
             <div className="text-center py-20 text-slate-400 space-y-3">
               <div className="text-4xl">🎬</div>
-              <div className="font-bold text-sm">Select or create a project to get started</div>
+              <div className="font-bold text-sm">Select or create a story project for this event</div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Modal: New Project */}
+      {/* Modal: New Event Story Project */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-black text-slate-900">Create AI Story Project</h3>
+            <h3 className="text-lg font-black text-slate-900">
+              Create AI Story for "{selectedEvent?.title}"
+            </h3>
             <form onSubmit={handleCreateProject} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Project Title</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Story Title</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. My College Memories"
+                  placeholder="e.g. Highlights & Key Moments"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
                   className="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A2D59]"
@@ -506,11 +562,11 @@ export function ProjectStudioPage({ token }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Personal Story / Narrative Text</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Story Narrative / Event Memories</label>
                 <textarea
                   required
                   rows={5}
-                  placeholder="Type or paste your story, biography, or memories here..."
+                  placeholder="Type or paste the story, speech, or summary of this event..."
                   value={newStory}
                   onChange={(e) => setNewTitleStory(e.target.value)}
                   className="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A2D59]"
@@ -530,7 +586,7 @@ export function ProjectStudioPage({ token }) {
                   disabled={loading}
                   className="bg-[#0A2D59] text-white font-bold px-5 py-2 rounded-xl text-xs shadow hover:bg-slate-800 transition"
                 >
-                  {loading ? "Creating..." : "Create Project"}
+                  {loading ? "Creating..." : "Create Story Project"}
                 </button>
               </div>
             </form>

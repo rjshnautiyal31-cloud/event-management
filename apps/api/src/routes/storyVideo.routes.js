@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import path from "path";
-import { authenticate } from "../middleware/auth.js";
+import { requireAuth, requireRole, requireEventAccess } from "../middleware/auth.js";
 import { Project } from "../models/Project.js";
 import { StoryAnalysis } from "../models/StoryAnalysis.js";
 import { Song } from "../models/Song.js";
@@ -12,33 +12,44 @@ import { GenerationJob } from "../models/GenerationJob.js";
 import { analyzeStoryWithGemini, generateLyricsWithGemini } from "../services/providers/gemini.provider.js";
 import { getMusicProvider } from "../services/music/index.js";
 import { getStorageProvider } from "../services/storage/index.js";
-import { queueService } from "../services/queue/index.js";
 import { processVideoRenderJob } from "../workers/index.js";
 
 const upload = multer({ storage: multer.memoryStorage() });
 export const storyVideoRouter = Router();
 
-// 1. Get All Projects for Current User
-storyVideoRouter.get("/projects", authenticate, async (req, res, next) => {
+// Enforce ACL: Require authentication and require admin role (super_admin, admin, or event_admin)
+storyVideoRouter.use(requireAuth);
+storyVideoRouter.use(requireRole("admin"));
+
+// 1. Get Projects for an Event (an event can have multiple story/song/video projects)
+storyVideoRouter.get("/projects", async (req, res, next) => {
   try {
-    const projects = await Project.find({ userId: req.user.id })
+    const { eventId } = req.query;
+    const filter = {};
+    if (eventId) {
+      filter.eventId = eventId;
+    }
+
+    const projects = await Project.find(filter)
       .populate("activeStoryAnalysisId activeSongId activeStoryboardId activeVideoId")
       .sort({ updatedAt: -1 });
+
     res.json(projects);
   } catch (err) {
     next(err);
   }
 });
 
-// 2. Create Project
-storyVideoRouter.post("/projects", authenticate, async (req, res, next) => {
+// 2. Create a new AI Story Project for a specific Event
+storyVideoRouter.post("/projects", requireEventAccess(["event_admin"]), async (req, res, next) => {
   try {
-    const { title, storyText, description } = req.body;
-    if (!title || !storyText) {
-      return res.status(400).json({ message: "Title and story text are required" });
+    const { eventId, title, storyText, description } = req.body;
+    if (!eventId || !title || !storyText) {
+      return res.status(400).json({ message: "eventId, title, and story text are required" });
     }
 
     const project = await Project.create({
+      eventId,
       userId: req.user.id,
       title,
       description: description || "",
@@ -52,11 +63,12 @@ storyVideoRouter.post("/projects", authenticate, async (req, res, next) => {
   }
 });
 
-// 3. Get Project Details
-storyVideoRouter.get("/projects/:id", authenticate, async (req, res, next) => {
+// 3. Get Details for a Specific Project
+storyVideoRouter.get("/projects/:id", async (req, res, next) => {
   try {
-    const project = await Project.findOne({ _id: req.params.id, userId: req.user.id })
+    const project = await Project.findById(req.params.id)
       .populate("activeStoryAnalysisId activeSongId activeStoryboardId activeVideoId");
+
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
@@ -66,10 +78,10 @@ storyVideoRouter.get("/projects/:id", authenticate, async (req, res, next) => {
   }
 });
 
-// 4. Analyze Story with Gemini
-storyVideoRouter.post("/projects/:id/analyze", authenticate, async (req, res, next) => {
+// 4. Analyze Story Narrative with Gemini AI
+storyVideoRouter.post("/projects/:id/analyze", async (req, res, next) => {
   try {
-    const project = await Project.findOne({ _id: req.params.id, userId: req.user.id });
+    const project = await Project.findById(req.params.id);
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
@@ -91,11 +103,11 @@ storyVideoRouter.post("/projects/:id/analyze", authenticate, async (req, res, ne
   }
 });
 
-// 5. Generate Lyrics & Audio Track
-storyVideoRouter.post("/projects/:id/lyrics", authenticate, async (req, res, next) => {
+// 5. Generate AI Lyrics & Synth Audio Track
+storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
   try {
     const { genre } = req.body;
-    const project = await Project.findOne({ _id: req.params.id, userId: req.user.id }).populate("activeStoryAnalysisId");
+    const project = await Project.findById(req.params.id).populate("activeStoryAnalysisId");
     if (!project || !project.activeStoryAnalysisId) {
       return res.status(400).json({ message: "Project must be analyzed first" });
     }
@@ -103,7 +115,6 @@ storyVideoRouter.post("/projects/:id/lyrics", authenticate, async (req, res, nex
     const targetGenre = genre || project.activeStoryAnalysisId.suggestedGenres?.[0] || "Pop";
     const lyricsText = await generateLyricsWithGemini(project.activeStoryAnalysisId.summary, targetGenre);
 
-    // Generate synth audio using Music Engine Factory
     const musicEngine = getMusicProvider();
     const audioResult = await musicEngine.generateMusic({ genre: targetGenre, durationSeconds: 15 });
 
@@ -127,10 +138,10 @@ storyVideoRouter.post("/projects/:id/lyrics", authenticate, async (req, res, nex
   }
 });
 
-// 6. Upload Photo/Media Assets
-storyVideoRouter.post("/projects/:id/media", authenticate, upload.single("file"), async (req, res, next) => {
+// 6. Upload Photo/Media Assets for Event Story
+storyVideoRouter.post("/projects/:id/media", upload.single("file"), async (req, res, next) => {
   try {
-    const project = await Project.findOne({ _id: req.params.id, userId: req.user.id });
+    const project = await Project.findById(req.params.id);
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
@@ -156,8 +167,8 @@ storyVideoRouter.post("/projects/:id/media", authenticate, upload.single("file")
   }
 });
 
-// 7. Get All Media for Project
-storyVideoRouter.get("/projects/:id/media", authenticate, async (req, res, next) => {
+// 7. Get Media Items for a Project
+storyVideoRouter.get("/projects/:id/media", async (req, res, next) => {
   try {
     const mediaItems = await Media.find({ projectId: req.params.id }).sort({ createdAt: -1 });
     res.json(mediaItems);
@@ -166,11 +177,10 @@ storyVideoRouter.get("/projects/:id/media", authenticate, async (req, res, next)
   }
 });
 
-// 8. Generate Storyboard Mapping
-storyVideoRouter.post("/projects/:id/storyboard", authenticate, async (req, res, next) => {
+// 8. Generate Scene Storyboard Mapping
+storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
   try {
-    const project = await Project.findOne({ _id: req.params.id, userId: req.user.id })
-      .populate("activeStoryAnalysisId activeSongId");
+    const project = await Project.findById(req.params.id).populate("activeStoryAnalysisId activeSongId");
 
     if (!project || !project.activeSongId) {
       return res.status(400).json({ message: "Project must have generated lyrics and song first" });
@@ -204,11 +214,10 @@ storyVideoRouter.post("/projects/:id/storyboard", authenticate, async (req, res,
   }
 });
 
-// 9. Trigger Asynchronous Video Render Job (Non-blocking HTTP 202)
-storyVideoRouter.post("/projects/:id/render", authenticate, async (req, res, next) => {
+// 9. Trigger FFmpeg Async Video Rendering Task
+storyVideoRouter.post("/projects/:id/render", async (req, res, next) => {
   try {
-    const project = await Project.findOne({ _id: req.params.id, userId: req.user.id })
-      .populate("activeSongId");
+    const project = await Project.findById(req.params.id).populate("activeSongId");
 
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
@@ -234,7 +243,6 @@ storyVideoRouter.post("/projects/:id/render", authenticate, async (req, res, nex
     project.status = "rendering";
     await project.save();
 
-    // Trigger local background execution
     processVideoRenderJob(job._id, project._id, mediaPaths, audioPath).catch(err => {
       console.error("Background render error:", err);
     });
@@ -246,7 +254,7 @@ storyVideoRouter.post("/projects/:id/render", authenticate, async (req, res, nex
 });
 
 // 10. Poll Job Status
-storyVideoRouter.get("/jobs/:jobId", authenticate, async (req, res, next) => {
+storyVideoRouter.get("/jobs/:jobId", async (req, res, next) => {
   try {
     const job = await GenerationJob.findById(req.params.jobId).populate("resultRef");
     if (!job) {

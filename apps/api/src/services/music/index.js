@@ -1,10 +1,11 @@
 import path from "path";
-import fs from "fs/promises";
+import fs from "fs";
 import https from "https";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegInstaller from "ffmpeg-static";
 import { env } from "../../config/env.js";
 
+const fsPromises = fs.promises;
 ffmpeg.setFfmpegPath(ffmpegInstaller);
 
 // Pure Node.js Pleasant Musical Synth Generator
@@ -62,7 +63,7 @@ export function createMusicalMelodyWavBuffer(durationSeconds = 15, sampleRate = 
 // Fetch Vocal Audio Stream for Lyrics
 async function fetchVocalAudioForLyrics(lyricsText, tempVocalPath) {
   // Clean bracket headers e.g. [Verse 1], [Chorus]
-  const cleanLyrics = lyricsText
+  const cleanLyrics = (lyricsText || "")
     .replace(/\[.*?\]/g, "")
     .replace(/\s+/g, " ")
     .trim()
@@ -94,7 +95,7 @@ class LocalSynthMusicAdapter {
   async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 15 }) {
     const timestamp = Date.now();
     const uploadDir = path.join(process.cwd(), "uploads");
-    await fs.mkdir(uploadDir, { recursive: true });
+    await fsPromises.mkdir(uploadDir, { recursive: true });
 
     const bgPath = path.join(uploadDir, `bg_${timestamp}.wav`);
     const vocalPath = path.join(uploadDir, `vocal_${timestamp}.mp3`);
@@ -103,7 +104,7 @@ class LocalSynthMusicAdapter {
 
     // 1. Generate background musical chord progression
     const wavBuffer = createMusicalMelodyWavBuffer(durationSeconds, 44100);
-    await fs.writeFile(bgPath, wavBuffer);
+    await fsPromises.writeFile(bgPath, wavBuffer);
 
     // 2. Fetch vocal audio for lyrics
     const hasVocals = await fetchVocalAudioForLyrics(lyrics, vocalPath);
@@ -126,11 +127,11 @@ class LocalSynthMusicAdapter {
       });
 
       // Cleanup temporary stem files
-      await fs.unlink(bgPath).catch(() => {});
-      await fs.unlink(vocalPath).catch(() => {});
+      await fsPromises.unlink(bgPath).catch(() => {});
+      await fsPromises.unlink(vocalPath).catch(() => {});
     } else {
       // Fallback if offline / vocal fetch failed
-      await fs.rename(bgPath, outputPath);
+      await fsPromises.rename(bgPath, outputPath);
     }
 
     return {

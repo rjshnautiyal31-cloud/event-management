@@ -90,6 +90,13 @@ export function Navbar({
             </Link>
           )}
 
+          <Link
+            to="/studio"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-3.5 py-1.5 text-xs font-bold text-white shadow-sm shadow-[#0A2D59]/20"
+          >
+            <span>🎬 AI Story Studio</span>
+          </Link>
+
           {location.pathname !== "/scan" && (
             <Link
               to="/scan"
@@ -251,6 +258,22 @@ export function Navbar({
                       <span className="text-[10px] text-slate-400">↗</span>
                     </Link>
                   )}
+
+                  <Link
+                    to="/studio"
+                    onClick={() => setHamburgerMenuOpen(false)}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                      location.pathname === "/studio"
+                        ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
+                        : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span>🎬</span>
+                      <span>AI Story Studio</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">↗</span>
+                  </Link>
 
                   <Link
                     to="/scan"

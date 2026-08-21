@@ -19,6 +19,7 @@ export const env = {
   storageProvider: process.env.STORAGE_PROVIDER || "local", // "local" | "s3"
   queueProvider: process.env.QUEUE_PROVIDER || "memory",    // "memory" | "redis"
   musicProvider: process.env.MUSIC_PROVIDER || "local_synth",// "local_synth" | "suno" | "elevenlabs"
+  videoProvider: process.env.VIDEO_PROVIDER || "local_ffmpeg",// "local_ffmpeg" | "replicate" | "runway"
   llmProvider: process.env.LLM_PROVIDER || "gemini",        // "gemini" | "openai"
 
   // Service API Keys & Config
@@ -29,7 +30,8 @@ export const env = {
   s3Endpoint: process.env.S3_ENDPOINT || "",
   awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
   awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
-  musicApiKey: process.env.MUSIC_API_KEY || ""
+  musicApiKey: process.env.MUSIC_API_KEY || "",
+  videoApiKey: process.env.VIDEO_API_KEY || process.env.REPLICATE_API_KEY || ""
 };
 
 

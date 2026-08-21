@@ -459,24 +459,46 @@ export function ProjectStudioPage({ token }) {
               {/* Tab 4: Storyboard */}
               {activeTab === "storyboard" && (
                 <div className="space-y-6">
-                  <button
-                    onClick={handleGenerateStoryboard}
-                    disabled={loading}
-                    className="bg-[#0A2D59] text-white font-bold px-5 py-2.5 rounded-xl text-sm shadow hover:bg-slate-800 transition"
-                  >
-                    {loading ? "Generating..." : "Generate Scene Storyboard"}
-                  </button>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm">Scene Storyboard & Timeline</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">Maps story key moments to uploaded event photos and subtitle captions.</p>
+                    </div>
+                    <button
+                      onClick={handleGenerateStoryboard}
+                      disabled={loading}
+                      className="bg-[#0A2D59] text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow hover:bg-slate-800 transition"
+                    >
+                      {loading ? "Generating Storyboard..." : "Generate Scene Storyboard"}
+                    </button>
+                  </div>
 
                   {activeProject.activeStoryboardId && (
-                    <div className="space-y-3">
-                      <h4 className="font-black text-sm text-slate-700">Timeline Scenes</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {activeProject.activeStoryboardId.scenes?.map((scene, idx) => (
-                          <div key={idx} className="bg-slate-50 border border-slate-200 p-4 rounded-xl text-xs space-y-2">
-                            <div className="font-black text-[#0A2D59]">Scene {scene.sceneNumber} ({scene.startTimeSeconds}s - {scene.endTimeSeconds}s)</div>
-                            <p className="text-slate-600">{scene.captionText}</p>
-                          </div>
-                        ))}
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {activeProject.activeStoryboardId.scenes?.map((scene, idx) => {
+                          const media = mediaItems.find(m => m._id === scene.mediaId || m._id === scene.mediaId?._id) || mediaItems[idx % mediaItems.length];
+                          return (
+                            <div key={idx} className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between">
+                              {media ? (
+                                <div className="h-36 bg-slate-200 overflow-hidden relative">
+                                  <img src={media.fileUrl} alt="scene media" className="w-full h-full object-cover" />
+                                  <div className="absolute top-2 left-2 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
+                                    Scene {scene.sceneNumber} • {scene.startTimeSeconds}s - {scene.endTimeSeconds}s
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="h-36 bg-slate-100 flex items-center justify-center text-slate-400 text-xs font-medium">
+                                  Fallback Cover Image
+                                </div>
+                              )}
+                              <div className="p-3.5 space-y-1">
+                                <div className="font-bold text-xs text-slate-800">Visual Caption:</div>
+                                <p className="text-xs text-slate-600 line-clamp-2">{scene.captionText}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -486,19 +508,44 @@ export function ProjectStudioPage({ token }) {
               {/* Tab 5: Render & Video Player */}
               {activeTab === "render" && (
                 <div className="space-y-6">
-                  <div className="bg-slate-900 text-white p-6 rounded-2xl space-y-4">
-                    <h3 className="text-lg font-black flex items-center gap-2">🚀 Render Event Video</h3>
-                    <p className="text-xs text-slate-300">
-                      Renders event photos, AI audio track, and storyboard into an MP4 video using local FFmpeg.
-                    </p>
+                  <div className="bg-slate-900 text-white p-6 rounded-2xl space-y-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-black flex items-center gap-2">🚀 Render Professional Event Video</h3>
+                        <p className="text-xs text-slate-300 mt-1">
+                          Stitches photos, vocal audio track, and scene subtitles into a 720p HD MP4 video.
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleTriggerRender}
+                        disabled={rendering}
+                        className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-6 py-3 rounded-xl shadow text-sm transition"
+                      >
+                        {rendering ? "Rendering Video..." : "Start Video Render"}
+                      </button>
+                    </div>
 
-                    <button
-                      onClick={handleTriggerRender}
-                      disabled={rendering}
-                      className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-6 py-3 rounded-xl shadow text-sm transition"
-                    >
-                      {rendering ? "Rendering Video..." : "Start Video Render"}
-                    </button>
+                    {/* Pre-Render Specifications Summary */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 text-xs border-t border-slate-800">
+                      <div className="bg-slate-800/80 p-3 rounded-xl">
+                        <div className="text-slate-400 font-bold">Total Duration:</div>
+                        <div className="font-extrabold text-emerald-400 mt-0.5">
+                          {activeProject.activeStoryboardId?.scenes ? `${activeProject.activeStoryboardId.scenes.length * 5}s` : "30 Seconds"}
+                        </div>
+                      </div>
+                      <div className="bg-slate-800/80 p-3 rounded-xl">
+                        <div className="text-slate-400 font-bold">Scene Captions:</div>
+                        <div className="font-extrabold text-blue-400 mt-0.5">SRT Burned Subtitles</div>
+                      </div>
+                      <div className="bg-slate-800/80 p-3 rounded-xl">
+                        <div className="text-slate-400 font-bold">Audio Track:</div>
+                        <div className="font-extrabold text-amber-400 mt-0.5">Vocal Lyrics + Music</div>
+                      </div>
+                      <div className="bg-slate-800/80 p-3 rounded-xl">
+                        <div className="text-slate-400 font-bold">Resolution:</div>
+                        <div className="font-extrabold text-purple-400 mt-0.5">720p HD H.264 MP4</div>
+                      </div>
+                    </div>
 
                     {activeJob && rendering && (
                       <div className="space-y-2 pt-4 border-t border-slate-800">
@@ -520,7 +567,7 @@ export function ProjectStudioPage({ token }) {
                   {activeProject.activeVideoId?.videoUrl && (
                     <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                       <h4 className="font-black text-sm text-slate-800 flex items-center gap-2">
-                        <span>🎬</span> Rendered Event Video
+                        <span>🎬</span> Rendered Event Video Preview
                       </h4>
                       <video
                         controls

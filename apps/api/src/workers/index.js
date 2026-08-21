@@ -5,11 +5,24 @@ import fs from "fs/promises";
 import { GenerationJob } from "../models/GenerationJob.js";
 import { Video } from "../models/Video.js";
 import { Project } from "../models/Project.js";
+import { Storyboard } from "../models/Storyboard.js";
+import { Media } from "../models/Media.js";
 import { queueService } from "../services/queue/index.js";
 import { env } from "../config/env.js";
 import { createMusicalMelodyWavBuffer } from "../services/music/index.js";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller);
+
+// Helper to convert seconds into SRT timecode format (00:00:05,000)
+function formatSrtTime(secondsTotal) {
+  const hrs = Math.floor(secondsTotal / 3600);
+  const mins = Math.floor((secondsTotal % 3600) / 60);
+  const secs = Math.floor(secondsTotal % 60);
+  const millis = Math.floor((secondsTotal % 1) * 1000);
+
+  const pad = (n, z = 2) => String(n).padStart(z, "0");
+  return `${pad(hrs)}:${pad(mins)}:${pad(secs)},${pad(millis, 3)}`;
+}
 
 // Pure JS 24-bit solid color BMP image generator
 function createSolidBmpBuffer(width = 800, height = 600, colorHex = "0A2D59") {
@@ -54,7 +67,7 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
   try {
     dbJob.status = "processing";
     dbJob.progressPercent = 15;
-    dbJob.currentStepMessage = "Initializing FFmpeg slideshow engine...";
+    dbJob.currentStepMessage = "Fetching project storyboard and media timeline...";
     await dbJob.save();
 
     const timestamp = Date.now();
@@ -63,41 +76,104 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     await fs.mkdir(uploadDir, { recursive: true });
     const tempOutputPath = path.join(uploadDir, outputFilename);
 
-    let effectiveMediaPaths = [...mediaPaths];
+    // Fetch Storyboard and uploaded Media items
+    const storyboardDoc = await Storyboard.findOne({ projectId }).populate("scenes.mediaId");
+    const mediaDocs = await Media.find({ projectId }).sort({ createdAt: 1 });
 
-    // Fallback image if no media uploaded
-    if (effectiveMediaPaths.length === 0) {
-      const fallbackBmpPath = path.join(uploadDir, "fallback_cover.bmp");
-      const bmpBuffer = createSolidBmpBuffer(800, 600, "0A2D59");
-      await fs.writeFile(fallbackBmpPath, bmpBuffer);
-      effectiveMediaPaths.push(fallbackBmpPath);
+    let scenesToRender = [];
+
+    if (storyboardDoc?.scenes?.length > 0) {
+      scenesToRender = storyboardDoc.scenes.map((scene, idx) => {
+        let imgPath = null;
+        if (scene.mediaId?.fileUrl?.includes("/uploads/")) {
+          imgPath = path.join(uploadDir, path.basename(scene.mediaId.fileUrl));
+        } else if (mediaDocs[idx % mediaDocs.length]?.fileUrl?.includes("/uploads/")) {
+          imgPath = path.join(uploadDir, path.basename(mediaDocs[idx % mediaDocs.length].fileUrl));
+        }
+        return {
+          sceneNumber: scene.sceneNumber || idx + 1,
+          duration: Math.max(2, (scene.endTimeSeconds || (idx + 1) * 5) - (scene.startTimeSeconds || idx * 5)),
+          captionText: scene.captionText || `Scene ${idx + 1}`,
+          imgPath
+        };
+      });
+    } else {
+      // Build default 30s storyboard from media docs
+      const mediaList = mediaDocs.length > 0 ? mediaDocs : [];
+      const totalScenes = Math.max(4, mediaList.length);
+      const perSceneDuration = 5;
+
+      for (let i = 0; i < totalScenes; i++) {
+        let imgPath = null;
+        if (mediaList[i % mediaList.length]?.fileUrl?.includes("/uploads/")) {
+          imgPath = path.join(uploadDir, path.basename(mediaList[i % mediaList.length].fileUrl));
+        }
+        scenesToRender.push({
+          sceneNumber: i + 1,
+          duration: perSceneDuration,
+          captionText: `Event Scene ${i + 1}`,
+          imgPath
+        });
+      }
     }
+
+    // Ensure fallback cover image if no media images exist
+    const fallbackBmpPath = path.join(uploadDir, "fallback_cover.bmp");
+    let hasFallbackCreated = false;
+
+    scenesToRender.forEach(async (scene) => {
+      if (!scene.imgPath) {
+        if (!hasFallbackCreated) {
+          const bmpBuffer = createSolidBmpBuffer(800, 600, "0A2D59");
+          fs.writeFile(fallbackBmpPath, bmpBuffer);
+          hasFallbackCreated = true;
+        }
+        scene.imgPath = fallbackBmpPath;
+      }
+    });
 
     // Fallback audio if no song track generated
     let effectiveAudioPath = audioPath;
     if (!effectiveAudioPath) {
       const fallbackWavPath = path.join(uploadDir, "fallback_audio.wav");
-      const wavBuffer = createMusicalMelodyWavBuffer(16, 44100);
+      const wavBuffer = createMusicalMelodyWavBuffer(30, 44100);
       await fs.writeFile(fallbackWavPath, wavBuffer);
       effectiveAudioPath = fallbackWavPath;
     }
 
-    // Build FFmpeg Concat List File for seamless multi-image slideshow
+    // Build FFmpeg Concat List File & SRT Subtitle File
     const concatListPath = path.join(uploadDir, `concat_${timestamp}.txt`);
-    const durationPerImage = 4; // 4 seconds per image frame
+    const srtSubtitlePath = path.join(uploadDir, `subtitles_${timestamp}.srt`);
 
     let concatContent = "";
-    effectiveMediaPaths.forEach((imgPath) => {
-      const safePath = imgPath.replace(/'/g, "'\\''");
-      concatContent += `file '${safePath}'\nduration ${durationPerImage}\n`;
+    let srtContent = "";
+    let currentClockSeconds = 0;
+
+    scenesToRender.forEach((scene, index) => {
+      const safePath = scene.imgPath.replace(/'/g, "'\\''");
+      concatContent += `file '${safePath}'\nduration ${scene.duration}\n`;
+
+      const startTimeSrt = formatSrtTime(currentClockSeconds);
+      const endTimeSrt = formatSrtTime(currentClockSeconds + scene.duration);
+
+      srtContent += `${index + 1}\n${startTimeSrt} --> ${endTimeSrt}\n${scene.captionText}\n\n`;
+      currentClockSeconds += scene.duration;
     });
-    // Repeat last image entry without duration per FFmpeg concat demuxer spec
-    const lastPath = effectiveMediaPaths[effectiveMediaPaths.length - 1].replace(/'/g, "'\\''");
-    concatContent += `file '${lastPath}'\n`;
+
+    // Repeat last image entry without duration per FFmpeg concat spec
+    const lastImgPath = scenesToRender[scenesToRender.length - 1].imgPath.replace(/'/g, "'\\''");
+    concatContent += `file '${lastImgPath}'\n`;
 
     await fs.writeFile(concatListPath, concatContent);
+    await fs.writeFile(srtSubtitlePath, srtContent);
 
-    // Build FFmpeg Slideshow Video & Audio Muxing Command
+    dbJob.progressPercent = 40;
+    dbJob.currentStepMessage = "Stitching storyboard scene frames and burning captions...";
+    await dbJob.save();
+
+    // Escape SRT path for FFmpeg filter argument
+    const safeSrtPath = srtSubtitlePath.replace(/'/g, "'\\''");
+
     const command = ffmpeg()
       .input(concatListPath)
       .inputOptions(["-f", "concat", "-safe", "0"])
@@ -106,7 +182,7 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     await new Promise((resolve, reject) => {
       command
         .outputOptions([
-          "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+          "-vf", `scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p,subtitles=${safeSrtPath}:force_style='FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,MarginV=30'`,
           "-r", "25",
           "-c:v", "libx264",
           "-preset", "ultrafast",
@@ -116,8 +192,8 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
         ])
         .save(tempOutputPath)
         .on("progress", async (p) => {
-          dbJob.progressPercent = Math.min(95, Math.round(p.percent || 50));
-          dbJob.currentStepMessage = "Rendering slideshow frames and audio track...";
+          dbJob.progressPercent = Math.min(95, Math.max(50, Math.round(p.percent || 60)));
+          dbJob.currentStepMessage = "Encoding high-definition H.264 video stream...";
           await dbJob.save();
         })
         .on("end", resolve)
@@ -127,23 +203,23 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
         });
     });
 
-    // Clean up temporary concat manifest file
+    // Cleanup temporary manifest and subtitle files
     await fs.unlink(concatListPath).catch(() => {});
+    await fs.unlink(srtSubtitlePath).catch(() => {});
 
     const publicUrl = `http://localhost:${env.port}/uploads/${outputFilename}`;
-    const totalDurationSeconds = effectiveMediaPaths.length * durationPerImage;
 
     const videoDoc = await Video.create({
       projectId,
       videoUrl: publicUrl,
-      durationSeconds: totalDurationSeconds,
+      durationSeconds: currentClockSeconds,
       resolution: "720p"
     });
 
     dbJob.status = "completed";
     dbJob.progressPercent = 100;
     dbJob.resultRef = videoDoc._id;
-    dbJob.currentStepMessage = "Video rendering complete!";
+    dbJob.currentStepMessage = "Event Music Video rendering complete!";
     await dbJob.save();
 
     await Project.findByIdAndUpdate(projectId, {

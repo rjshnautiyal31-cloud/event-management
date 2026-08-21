@@ -188,15 +188,25 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
 
     const mediaItems = await Media.find({ projectId: project._id });
     const moments = project.activeStoryAnalysisId?.keyMoments || [];
+    const totalSongDuration = project.activeSongId.durationSeconds || 30;
+    const sceneCount = Math.max(moments.length, mediaItems.length, 4);
+    const perSceneDuration = Math.max(3, Math.round(totalSongDuration / sceneCount));
 
-    const scenes = moments.map((moment, index) => ({
-      sceneNumber: index + 1,
-      startTimeSeconds: index * 5,
-      endTimeSeconds: (index + 1) * 5,
-      mediaId: mediaItems[index % mediaItems.length]?._id || null,
-      captionText: moment.visualIdea || `Scene ${index + 1}`,
-      transitionEffect: "fade"
-    }));
+    const scenes = Array.from({ length: sceneCount }).map((_, index) => {
+      const moment = moments[index];
+      const media = mediaItems[index % mediaItems.length];
+      const startTime = index * perSceneDuration;
+      const endTime = (index + 1) * perSceneDuration;
+
+      return {
+        sceneNumber: index + 1,
+        startTimeSeconds: startTime,
+        endTimeSeconds: endTime,
+        mediaId: media?._id || null,
+        captionText: moment?.visualIdea || moment?.description || `Event Scene ${index + 1}`,
+        transitionEffect: "fade"
+      };
+    });
 
     const storyboardDoc = await Storyboard.create({
       projectId: project._id,

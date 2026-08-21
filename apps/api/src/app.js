@@ -11,6 +11,7 @@ export const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
+app.use("/uploads", express.static("uploads"));
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });

@@ -9,7 +9,7 @@ import { Media } from "../models/Media.js";
 import { Storyboard } from "../models/Storyboard.js";
 import { Video } from "../models/Video.js";
 import { GenerationJob } from "../models/GenerationJob.js";
-import { analyzeStoryWithGemini, generateLyricsWithGemini } from "../services/providers/gemini.provider.js";
+import { analyzeStoryWithGemini, generateLyricsWithGemini, generateSceneImageWithGemini } from "../services/providers/gemini.provider.js";
 import { getMusicProvider } from "../services/music/index.js";
 import { getStorageProvider } from "../services/storage/index.js";
 import { processVideoRenderJob } from "../workers/index.js";
@@ -116,7 +116,10 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
     const lyricsText = await generateLyricsWithGemini(project.activeStoryAnalysisId.summary, targetGenre);
 
     const musicEngine = getMusicProvider();
-    const audioResult = await musicEngine.generateMusic({ lyrics: lyricsText, genre: targetGenre, durationSeconds: 15 });
+    const wordCount = lyricsText.split(/\s+/).filter(Boolean).length;
+    const lyricsDurationSeconds = Math.max(30, Math.min(90, Math.ceil(wordCount / 2.2)));
+
+    const audioResult = await musicEngine.generateMusic({ lyrics: lyricsText, genre: targetGenre, durationSeconds: lyricsDurationSeconds });
 
     const songDoc = await Song.create({
       projectId: project._id,
@@ -150,14 +153,18 @@ storyVideoRouter.post("/projects/:id/media", upload.single("file"), async (req, 
       return res.status(400).json({ message: "No file uploaded" });
     }
 
+    const ext = path.extname(req.file.originalname).toLowerCase() || ".jpg";
+    const isVideo = req.file.mimetype.startsWith("video/") || [".mp4", ".webm", ".mov", ".mkv", ".avi"].includes(ext);
+    const mediaType = isVideo ? "video" : "image";
+
     const storage = getStorageProvider();
-    const filename = `media_${Date.now()}_${path.extname(req.file.originalname) || ".jpg"}`;
+    const filename = `media_${Date.now()}_${ext}`;
     const fileUrl = await storage.uploadFile(req.file.buffer, filename);
 
     const mediaDoc = await Media.create({
       projectId: project._id,
       fileUrl,
-      mediaType: "image",
+      mediaType,
       originalFilename: req.file.originalname
     });
 
@@ -172,6 +179,26 @@ storyVideoRouter.get("/projects/:id/media", async (req, res, next) => {
   try {
     const mediaItems = await Media.find({ projectId: req.params.id }).sort({ createdAt: -1 });
     res.json(mediaItems);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Delete specific media item
+storyVideoRouter.delete("/projects/:id/media/:mediaId", async (req, res, next) => {
+  try {
+    await Media.deleteOne({ _id: req.params.mediaId, projectId: req.params.id });
+    res.json({ message: "Media deleted successfully" });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Clear all uploaded media items for a project
+storyVideoRouter.delete("/projects/:id/media", async (req, res, next) => {
+  try {
+    await Media.deleteMany({ projectId: req.params.id });
+    res.json({ message: "All media cleared successfully" });
   } catch (err) {
     next(err);
   }
@@ -192,21 +219,41 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
     const sceneCount = Math.max(moments.length, mediaItems.length, 4);
     const perSceneDuration = Math.max(3, Math.round(totalSongDuration / sceneCount));
 
-    const scenes = Array.from({ length: sceneCount }).map((_, index) => {
+    const scenes = [];
+
+    for (let index = 0; index < sceneCount; index++) {
       const moment = moments[index];
-      const media = mediaItems[index % mediaItems.length];
+      let media = mediaItems[index];
+
+      // Auto-generate high resolution cinematic scene image using Gemini Imagen 3 if no user photo provided
+      if (!media && moment?.visualIdea) {
+        const generatedImageUrl = await generateSceneImageWithGemini(moment.visualIdea);
+        if (generatedImageUrl) {
+          media = await Media.create({
+            projectId: project._id,
+            fileUrl: generatedImageUrl,
+            fileType: "image",
+            caption: moment.visualIdea
+          });
+        }
+      }
+
+      if (!media && mediaItems.length > 0) {
+        media = mediaItems[index % mediaItems.length];
+      }
+
       const startTime = index * perSceneDuration;
       const endTime = (index + 1) * perSceneDuration;
 
-      return {
+      scenes.push({
         sceneNumber: index + 1,
         startTimeSeconds: startTime,
         endTimeSeconds: endTime,
         mediaId: media?._id || null,
         captionText: moment?.visualIdea || moment?.description || `Event Scene ${index + 1}`,
         transitionEffect: "fade"
-      };
-    });
+      });
+    }
 
     const storyboardDoc = await Storyboard.create({
       projectId: project._id,

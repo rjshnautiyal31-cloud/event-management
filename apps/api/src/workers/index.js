@@ -7,6 +7,7 @@ import { Video } from "../models/Video.js";
 import { Project } from "../models/Project.js";
 import { Storyboard } from "../models/Storyboard.js";
 import { Media } from "../models/Media.js";
+import { Song } from "../models/Song.js";
 import { queueService } from "../services/queue/index.js";
 import { env } from "../config/env.js";
 import { createMusicalMelodyWavBuffer } from "../services/music/index.js";
@@ -67,7 +68,7 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
   try {
     dbJob.status = "processing";
     dbJob.progressPercent = 15;
-    dbJob.currentStepMessage = "Fetching project storyboard and media timeline...";
+    dbJob.currentStepMessage = "Fetching project song track, storyboard, and media timeline...";
     await dbJob.save();
 
     const timestamp = Date.now();
@@ -76,103 +77,143 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     await fs.mkdir(uploadDir, { recursive: true });
     const tempOutputPath = path.join(uploadDir, outputFilename);
 
+    // Fetch Song Document for Exact Song Duration
+    const projectDoc = await Project.findById(projectId).populate("activeSongId activeStoryboardId");
+    let songDoc = projectDoc?.activeSongId;
+    if (!songDoc) {
+      songDoc = await Song.findOne({ projectId }).sort({ createdAt: -1 });
+    }
+
+    const targetSongDuration = songDoc?.durationSeconds || 30;
+
     // Fetch Storyboard and uploaded Media items
-    const storyboardDoc = await Storyboard.findOne({ projectId }).populate("scenes.mediaId");
+    let storyboardDoc = projectDoc?.activeStoryboardId;
+    if (!storyboardDoc) {
+      storyboardDoc = await Storyboard.findOne({ projectId }).sort({ createdAt: -1 });
+    }
+    if (storyboardDoc) {
+      await storyboardDoc.populate("scenes.mediaId");
+    }
+
     const mediaDocs = await Media.find({ projectId }).sort({ createdAt: 1 });
 
-    let scenesToRender = [];
-
-    if (storyboardDoc?.scenes?.length > 0) {
-      scenesToRender = storyboardDoc.scenes.map((scene, idx) => {
-        let imgPath = null;
-        if (scene.mediaId?.fileUrl?.includes("/uploads/")) {
-          imgPath = path.join(uploadDir, path.basename(scene.mediaId.fileUrl));
-        } else if (mediaDocs[idx % mediaDocs.length]?.fileUrl?.includes("/uploads/")) {
-          imgPath = path.join(uploadDir, path.basename(mediaDocs[idx % mediaDocs.length].fileUrl));
-        }
-        return {
-          sceneNumber: scene.sceneNumber || idx + 1,
-          duration: Math.max(2, (scene.endTimeSeconds || (idx + 1) * 5) - (scene.startTimeSeconds || idx * 5)),
-          captionText: scene.captionText || `Scene ${idx + 1}`,
-          imgPath
-        };
-      });
-    } else {
-      // Build default 30s storyboard from media docs
-      const mediaList = mediaDocs.length > 0 ? mediaDocs : [];
-      const totalScenes = Math.max(4, mediaList.length);
-      const perSceneDuration = 5;
-
-      for (let i = 0; i < totalScenes; i++) {
-        let imgPath = null;
-        if (mediaList[i % mediaList.length]?.fileUrl?.includes("/uploads/")) {
-          imgPath = path.join(uploadDir, path.basename(mediaList[i % mediaList.length].fileUrl));
-        }
-        scenesToRender.push({
-          sceneNumber: i + 1,
-          duration: perSceneDuration,
-          captionText: `Event Scene ${i + 1}`,
-          imgPath
-        });
-      }
+    let rawScenes = storyboardDoc?.scenes || [];
+    if (rawScenes.length === 0) {
+      const sceneCount = Math.max(4, mediaDocs.length);
+      rawScenes = Array.from({ length: sceneCount }).map((_, i) => ({
+        sceneNumber: i + 1,
+        captionText: `Event Scene ${i + 1}`,
+        mediaId: mediaDocs[i % mediaDocs.length] || null
+      }));
     }
+
+    // Distribute scene durations so that sum(scenes.duration) EXACTLY equals targetSongDuration
+    const perSceneDuration = Number((targetSongDuration / rawScenes.length).toFixed(2));
+
+    const scenesToRender = rawScenes.map((scene, idx) => {
+      let imgPath = null;
+      let mediaDoc = scene.mediaId;
+
+      if (!mediaDoc || !mediaDoc.fileUrl) {
+        mediaDoc = mediaDocs[idx % mediaDocs.length];
+      }
+
+      if (mediaDoc?.fileUrl?.includes("/uploads/")) {
+        imgPath = path.join(uploadDir, path.basename(mediaDoc.fileUrl));
+      }
+
+      // Last scene absorbs remaining rounding difference
+      const duration = (idx === rawScenes.length - 1)
+        ? Number((targetSongDuration - (perSceneDuration * (rawScenes.length - 1))).toFixed(2))
+        : perSceneDuration;
+
+      return {
+        sceneNumber: scene.sceneNumber || idx + 1,
+        duration: Math.max(1, duration),
+        captionText: scene.captionText || `Scene ${idx + 1}`,
+        imgPath
+      };
+    });
 
     // Ensure fallback cover image if no media images exist
     const fallbackBmpPath = path.join(uploadDir, "fallback_cover.bmp");
     let hasFallbackCreated = false;
 
-    scenesToRender.forEach(async (scene) => {
+    for (const scene of scenesToRender) {
       if (!scene.imgPath) {
         if (!hasFallbackCreated) {
           const bmpBuffer = createSolidBmpBuffer(800, 600, "0A2D59");
-          fs.writeFile(fallbackBmpPath, bmpBuffer);
+          await fs.writeFile(fallbackBmpPath, bmpBuffer);
           hasFallbackCreated = true;
         }
         scene.imgPath = fallbackBmpPath;
       }
-    });
+    }
 
-    // Fallback audio if no song track generated
+    // Determine audio track path
     let effectiveAudioPath = audioPath;
+    if (!effectiveAudioPath && songDoc?.audioUrl?.includes("/uploads/")) {
+      effectiveAudioPath = path.join(uploadDir, path.basename(songDoc.audioUrl));
+    }
     if (!effectiveAudioPath) {
       const fallbackWavPath = path.join(uploadDir, "fallback_audio.wav");
-      const wavBuffer = createMusicalMelodyWavBuffer(30, 44100);
+      const wavBuffer = createMusicalMelodyWavBuffer(targetSongDuration, 44100, songDoc?.genre || "Pop");
       await fs.writeFile(fallbackWavPath, wavBuffer);
       effectiveAudioPath = fallbackWavPath;
     }
 
-    // Build FFmpeg Concat List File & SRT Subtitle File
+    console.log("[Video Worker] Target song duration:", targetSongDuration);
+    console.log("[Video Worker] scenesToRender:", JSON.stringify(scenesToRender, null, 2));
+
+    // Render standardized 1280x720 scene MP4 segments for images & video clips
+    const segmentPaths = [];
+    for (let index = 0; index < scenesToRender.length; index++) {
+      const scene = scenesToRender[index];
+      const segPath = path.join(uploadDir, `seg_${timestamp}_${index}.mp4`);
+      const srcPath = scene.imgPath;
+      const isVideo = [".mp4", ".webm", ".mov", ".mkv", ".avi"].includes(path.extname(srcPath || "").toLowerCase());
+
+      console.log(`[Video Worker] Rendering segment ${index}: isVideo=${isVideo}, srcPath=${srcPath}, duration=${scene.duration}`);
+
+      await new Promise((resolve, reject) => {
+        const cmd = ffmpeg();
+        if (isVideo) {
+          cmd.input(srcPath).inputOptions(["-ss", "0", "-t", String(scene.duration)]);
+        } else {
+          cmd.input(srcPath).inputOptions(["-loop", "1", "-t", String(scene.duration)]);
+        }
+
+        cmd.outputOptions([
+          "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+          "-r", "25",
+          "-an",
+          "-c:v", "libx264",
+          "-preset", "ultrafast"
+        ])
+        .save(segPath)
+        .on("end", resolve)
+        .on("error", (err) => {
+          console.error(`Segment ${index} render error:`, err.message);
+          reject(err);
+        });
+      });
+
+      segmentPaths.push(segPath);
+    }
+
+    // Build FFmpeg Concat List File
     const concatListPath = path.join(uploadDir, `concat_${timestamp}.txt`);
-    const srtSubtitlePath = path.join(uploadDir, `subtitles_${timestamp}.srt`);
-
     let concatContent = "";
-    let srtContent = "";
-    let currentClockSeconds = 0;
-
-    scenesToRender.forEach((scene, index) => {
-      const safePath = scene.imgPath.replace(/'/g, "'\\''");
-      concatContent += `file '${safePath}'\nduration ${scene.duration}\n`;
-
-      const startTimeSrt = formatSrtTime(currentClockSeconds);
-      const endTimeSrt = formatSrtTime(currentClockSeconds + scene.duration);
-
-      srtContent += `${index + 1}\n${startTimeSrt} --> ${endTimeSrt}\n${scene.captionText}\n\n`;
-      currentClockSeconds += scene.duration;
+    segmentPaths.forEach((seg) => {
+      const safePath = seg.replace(/'/g, "'\\''");
+      concatContent += `file '${safePath}'\n`;
     });
 
-    // Repeat last image entry without duration per FFmpeg concat spec
-    const lastImgPath = scenesToRender[scenesToRender.length - 1].imgPath.replace(/'/g, "'\\''");
-    concatContent += `file '${lastImgPath}'\n`;
-
     await fs.writeFile(concatListPath, concatContent);
-    await fs.writeFile(srtSubtitlePath, srtContent);
 
-    dbJob.progressPercent = 40;
-    dbJob.currentStepMessage = "Stitching storyboard scene frames and burning captions...";
+    dbJob.progressPercent = 50;
+    dbJob.currentStepMessage = "Stitching image & video clip scene segments with song audio...";
     await dbJob.save();
-
-    // Escape SRT path for FFmpeg filter argument
-    const safeSrtPath = srtSubtitlePath.replace(/'/g, "'\\''");
 
     const command = ffmpeg()
       .input(concatListPath)
@@ -182,13 +223,11 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     await new Promise((resolve, reject) => {
       command
         .outputOptions([
-          "-vf", `scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p,subtitles=${safeSrtPath}:force_style='FontSize=20,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=3,MarginV=30'`,
-          "-r", "25",
           "-c:v", "libx264",
           "-preset", "ultrafast",
           "-c:a", "aac",
           "-b:a", "192k",
-          "-shortest"
+          "-t", String(targetSongDuration)
         ])
         .save(tempOutputPath)
         .on("progress", async (p) => {
@@ -203,16 +242,15 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
         });
     });
 
-    // Cleanup temporary manifest and subtitle files
+    // Cleanup temporary segment manifest file
     await fs.unlink(concatListPath).catch(() => {});
-    await fs.unlink(srtSubtitlePath).catch(() => {});
 
     const publicUrl = `http://localhost:${env.port}/uploads/${outputFilename}`;
 
     const videoDoc = await Video.create({
       projectId,
       videoUrl: publicUrl,
-      durationSeconds: currentClockSeconds,
+      durationSeconds: targetSongDuration,
       resolution: "720p"
     });
 

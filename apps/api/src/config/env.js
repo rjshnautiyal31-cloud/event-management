@@ -18,12 +18,13 @@ export const env = {
   // AI Story-to-Video Configurable Providers
   storageProvider: process.env.STORAGE_PROVIDER || "local", // "local" | "s3"
   queueProvider: process.env.QUEUE_PROVIDER || "memory",    // "memory" | "redis"
-  musicProvider: process.env.MUSIC_PROVIDER || "local_synth",// "local_synth" | "suno" | "elevenlabs"
-  videoProvider: process.env.VIDEO_PROVIDER || "local_ffmpeg",// "local_ffmpeg" | "replicate" | "runway"
+  musicProvider: process.env.MUSIC_PROVIDER || "google_tts", // "google_tts" | "local_synth" | "suno" | "replicate"
+  videoProvider: process.env.VIDEO_PROVIDER || "google_veo", // "google_veo" | "local_ffmpeg" | "replicate" | "runway"
   llmProvider: process.env.LLM_PROVIDER || "gemini",        // "gemini" | "openai"
 
   // Service API Keys & Config
   geminiApiKey: process.env.GEMINI_API_KEY || "",
+  googleCloudProject: process.env.GOOGLE_CLOUD_PROJECT || "",
   redisUrl: process.env.REDIS_URL || "redis://127.0.0.1:6379",
   s3Bucket: process.env.S3_BUCKET || "ai-story-media",
   s3Region: process.env.S3_REGION || "us-east-1",
@@ -31,7 +32,8 @@ export const env = {
   awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
   awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
   musicApiKey: process.env.MUSIC_API_KEY || "",
-  videoApiKey: process.env.VIDEO_API_KEY || process.env.REPLICATE_API_KEY || ""
+  sunoApiKey: process.env.SUNO_API_KEY || process.env.MUSIC_API_KEY || "",
+  elevenLabsApiKey: process.env.ELEVENLABS_API_KEY || "",
+  videoApiKey: process.env.VIDEO_API_KEY || process.env.REPLICATE_API_KEY || "",
+  replicateApiKey: process.env.REPLICATE_API_KEY || process.env.VIDEO_API_KEY || ""
 };
-
-

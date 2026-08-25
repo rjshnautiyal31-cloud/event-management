@@ -174,6 +174,35 @@ export function ProjectStudioPage({ token }) {
     }
   }
 
+  async function handleDeleteMedia(mediaId) {
+    if (!activeProject || !mediaId) return;
+    try {
+      await api(`/api/story-video/projects/${activeProject._id}/media/${mediaId}`, {
+        token,
+        method: "DELETE"
+      });
+      setSuccess("Photo deleted.");
+      await loadMediaItems(activeProject._id);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleClearAllMedia() {
+    if (!activeProject) return;
+    if (!window.confirm("Remove all uploaded photos? The model will automatically generate 16:9 AI scene visuals instead.")) return;
+    try {
+      await api(`/api/story-video/projects/${activeProject._id}/media`, {
+        token,
+        method: "DELETE"
+      });
+      setSuccess("All photos cleared! Storyboard will now generate AI scene images.");
+      await loadMediaItems(activeProject._id);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function handleGenerateStoryboard() {
     if (!activeProject) return;
     setLoading(true);
@@ -433,23 +462,54 @@ export function ProjectStudioPage({ token }) {
               {/* Tab 3: Media Gallery */}
               {activeTab === "media" && (
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-sm text-slate-800">Event Photos & Images ({mediaItems.length})</h3>
-                    <label className="bg-[#0A2D59] text-white hover:bg-slate-800 font-bold px-4 py-2 rounded-xl text-xs shadow cursor-pointer transition">
-                      {uploadingMedia ? "Uploading..." : "Upload Photo"}
-                      <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-                    </label>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-800">Event Photos & Video Clips ({mediaItems.length})</h3>
+                      <p className="text-xs text-slate-500">Upload photos or video clips (.mp4, .mov). If no media is uploaded, AI generates 16:9 scene visuals!</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {mediaItems.length > 0 && (
+                        <button
+                          onClick={handleClearAllMedia}
+                          className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-3 py-2 rounded-xl text-xs border border-rose-200 transition"
+                        >
+                          Clear All Media (Use AI Scenes)
+                        </button>
+                      )}
+                      <label className="bg-[#0A2D59] text-white hover:bg-slate-800 font-bold px-4 py-2 rounded-xl text-xs shadow cursor-pointer transition">
+                        {uploadingMedia ? "Uploading..." : "Upload Photo / Video Clip"}
+                        <input type="file" accept="image/*,video/*" onChange={handleFileUpload} className="hidden" />
+                      </label>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {mediaItems.map((item) => (
-                      <div key={item._id} className="aspect-square bg-slate-100 rounded-xl overflow-hidden border border-slate-200 shadow-sm relative group">
-                        <img src={item.fileUrl} alt="media" className="w-full h-full object-cover" />
-                      </div>
-                    ))}
+                    {mediaItems.map((item) => {
+                      const isVideo = item.mediaType === "video" || [".mp4", ".webm", ".mov"].some(ext => item.fileUrl?.toLowerCase().endsWith(ext));
+                      return (
+                        <div key={item._id} className="aspect-square bg-slate-100 rounded-xl overflow-hidden border border-slate-200 shadow-sm relative group">
+                          {isVideo ? (
+                            <video src={item.fileUrl} className="w-full h-full object-cover" muted loop autoPlay />
+                          ) : (
+                            <img src={item.fileUrl} alt="media" className="w-full h-full object-cover" />
+                          )}
+                          <div className="absolute top-2 left-2 bg-slate-900/80 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase">
+                            {isVideo ? "🎬 Video" : "📷 Photo"}
+                          </div>
+                          <button
+                            onClick={() => handleDeleteMedia(item._id)}
+                            className="absolute top-2 right-2 bg-rose-600/90 text-white p-1.5 rounded-lg shadow text-xs hover:bg-rose-700 transition opacity-0 group-hover:opacity-100"
+                            title="Delete media"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      );
+                    })}
                     {mediaItems.length === 0 && (
-                      <div className="col-span-full text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-xs">
-                        No photos uploaded for this event story yet. Upload photos to stitch into video!
+                      <div className="col-span-full text-center py-12 border-2 border-dashed border-emerald-200 bg-emerald-50/50 rounded-2xl text-emerald-800 text-xs font-medium space-y-1">
+                        <p className="font-bold text-sm">✨ Pure AI Scene Generation Mode Active</p>
+                        <p className="text-slate-600">No media uploaded. When you click <strong>"Generate Scene Storyboard"</strong>, Google Gemini AI will generate 16:9 photorealistic visual scenes for every moment!</p>
                       </div>
                     )}
                   </div>
@@ -462,7 +522,7 @@ export function ProjectStudioPage({ token }) {
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-bold text-slate-900 text-sm">Scene Storyboard & Timeline</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">Maps story key moments to uploaded event photos and subtitle captions.</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Maps story key moments to uploaded event photos, video clips, and AI scenes.</p>
                     </div>
                     <button
                       onClick={handleGenerateStoryboard}
@@ -478,13 +538,19 @@ export function ProjectStudioPage({ token }) {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {activeProject.activeStoryboardId.scenes?.map((scene, idx) => {
                           const media = mediaItems.find(m => m._id === scene.mediaId || m._id === scene.mediaId?._id) || mediaItems[idx % mediaItems.length];
+                          const isVideoMedia = media && (media.mediaType === "video" || [".mp4", ".webm", ".mov"].some(ext => media.fileUrl?.toLowerCase().endsWith(ext)));
+
                           return (
                             <div key={idx} className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between">
                               {media ? (
                                 <div className="h-36 bg-slate-200 overflow-hidden relative">
-                                  <img src={media.fileUrl} alt="scene media" className="w-full h-full object-cover" />
+                                  {isVideoMedia ? (
+                                    <video src={media.fileUrl} className="w-full h-full object-cover" muted loop autoPlay />
+                                  ) : (
+                                    <img src={media.fileUrl} alt="scene media" className="w-full h-full object-cover" />
+                                  )}
                                   <div className="absolute top-2 left-2 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
-                                    Scene {scene.sceneNumber} • {scene.startTimeSeconds}s - {scene.endTimeSeconds}s
+                                    Scene {scene.sceneNumber} • {scene.startTimeSeconds}s - {scene.endTimeSeconds}s {isVideoMedia ? "🎬 Video" : "📷 Photo"}
                                   </div>
                                 </div>
                               ) : (

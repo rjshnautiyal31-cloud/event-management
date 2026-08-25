@@ -5,4 +5,9 @@ apps/*/node_modules/
 apps/web/dist/
 coverage/
 *.log
-
+.idea/
+*.json.key
+gcp-service-account.json
+apps/api/gcp-service-account.json
+apps/api/uploads/*
+!apps/api/uploads/.gitkeep

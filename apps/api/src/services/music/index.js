@@ -3,13 +3,14 @@ import fs from "fs";
 import https from "https";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegInstaller from "ffmpeg-static";
+import textToSpeech from "@google-cloud/text-to-speech";
 import { env } from "../../config/env.js";
 
 const fsPromises = fs.promises;
 ffmpeg.setFfmpegPath(ffmpegInstaller);
 
-// Pure Node.js Pleasant Musical Synth Generator
-export function createMusicalMelodyWavBuffer(durationSeconds = 15, sampleRate = 44100) {
+// Multi-Genre Musical Chord & Rhythm Generator
+export function createMusicalMelodyWavBuffer(durationSeconds = 30, sampleRate = 44100, genre = "Pop") {
   const numSamples = Math.floor(sampleRate * durationSeconds);
   const dataSize = numSamples * 2;
   const buffer = Buffer.alloc(44 + dataSize);
@@ -31,17 +32,45 @@ export function createMusicalMelodyWavBuffer(durationSeconds = 15, sampleRate = 
   buffer.write("data", 36);
   buffer.writeUInt32LE(dataSize, 40);
 
-  // Chord progression frequencies (C maj, A min, F maj, G maj)
-  const chords = [
+  // Distinct Chord Progressions by Genre
+  let chords = [
     [261.63, 329.63, 392.00], // C major
+    [196.00, 246.94, 293.66], // G major
     [220.00, 261.63, 329.63], // A minor
-    [174.61, 220.00, 261.63], // F major
-    [196.00, 246.94, 293.66]  // G major
+    [174.61, 220.00, 261.63]  // F major
   ];
+  let tempoSpeed = 3.5;
+
+  const normalizedGenre = (genre || "Pop").toLowerCase();
+  if (normalizedGenre.includes("acoustic")) {
+    chords = [
+      [164.81, 196.00, 246.94], // E minor
+      [261.63, 329.63, 392.00], // C major
+      [196.00, 246.94, 293.66], // G major
+      [146.83, 185.00, 220.00]  // D major
+    ];
+    tempoSpeed = 4.2;
+  } else if (normalizedGenre.includes("cinematic") || normalizedGenre.includes("orchestral")) {
+    chords = [
+      [146.83, 174.61, 220.00], // D minor
+      [116.54, 146.83, 174.61], // Bb major
+      [174.61, 220.00, 261.63], // F major
+      [130.81, 164.81, 196.00]  // C major
+    ];
+    tempoSpeed = 5.0;
+  } else if (normalizedGenre.includes("rock") || normalizedGenre.includes("energy")) {
+    chords = [
+      [220.00, 261.63, 329.63], // A minor
+      [174.61, 220.00, 261.63], // F major
+      [261.63, 329.63, 392.00], // C major
+      [196.00, 246.94, 293.66]  // G major
+    ];
+    tempoSpeed = 2.5;
+  }
 
   for (let i = 0; i < numSamples; i++) {
     const t = i / sampleRate;
-    const chordIndex = Math.floor((t / 3.75)) % chords.length;
+    const chordIndex = Math.floor((t / tempoSpeed)) % chords.length;
     const currentChord = chords[chordIndex];
 
     let sample = 0;
@@ -50,7 +79,7 @@ export function createMusicalMelodyWavBuffer(durationSeconds = 15, sampleRate = 
       sample += note;
     });
 
-    const arpeggioFreq = currentChord[Math.floor((t * 4) % 3)];
+    const arpeggioFreq = currentChord[Math.floor((t * 5) % 3)];
     sample += Math.sin(2 * Math.PI * arpeggioFreq * t) * 0.08;
 
     const val = Math.max(-32768, Math.min(32767, Math.floor(sample * 16000)));
@@ -60,54 +89,119 @@ export function createMusicalMelodyWavBuffer(durationSeconds = 15, sampleRate = 
   return buffer;
 }
 
-// Fetch Vocal Audio Stream for Lyrics
-async function fetchVocalAudioForLyrics(lyricsText, tempVocalPath) {
-  // Clean bracket headers e.g. [Verse 1], [Chorus]
+// OAuth2 Authenticated Google Cloud Text-to-Speech Studio Vocal Adapter
+async function fetchGoogleCloudNeuralVocalAudio(lyricsText, tempVocalPath) {
   const cleanLyrics = (lyricsText || "")
     .replace(/\[.*?\]/g, "")
     .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 200); // Keep vocal snippet within length limit
+    .trim();
 
   if (!cleanLyrics) return false;
 
-  const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&q=${encodeURIComponent(cleanLyrics)}&tl=en`;
-  const agent = new https.Agent({ rejectUnauthorized: false });
+  const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
 
-  return new Promise((resolve) => {
-    const file = fs.createWriteStream(tempVocalPath);
-    const req = https.get(url, { agent, headers: { "User-Agent": "Mozilla/5.0" } }, (res) => {
-      if (res.statusCode === 200) {
-        res.pipe(file);
-        file.on("finish", () => {
-          file.close(() => resolve(true));
-        });
-      } else {
-        resolve(false);
+  try {
+    const clientOptions = {};
+    if (fs.existsSync(keyFilename)) {
+      clientOptions.keyFilename = keyFilename;
+    } else if (env.geminiApiKey) {
+      clientOptions.apiKey = env.geminiApiKey;
+    }
+
+    const ttsClient = new textToSpeech.TextToSpeechClient(clientOptions);
+
+    const [response] = await ttsClient.synthesizeSpeech({
+      input: { text: cleanLyrics },
+      voice: {
+        languageCode: "en-US",
+        name: "en-US-Neural2-F",
+        ssmlGender: "FEMALE"
+      },
+      audioConfig: {
+        audioEncoding: "MP3",
+        speakingRate: 0.95,
+        pitch: 1.2
       }
     });
-    req.on("error", () => resolve(false));
-  });
+
+    if (response.audioContent) {
+      await fsPromises.writeFile(tempVocalPath, response.audioContent, "binary");
+      console.log(`[Google Cloud TTS OAuth2] Successfully synthesized Google Neural2 Studio Vocal audio file (${response.audioContent.length} bytes)`);
+      return true;
+    }
+  } catch (err) {
+    console.warn("Google Cloud OAuth2 TTS call failed, falling back to local vocal synthesis:", err.message);
+  }
+
+  return false;
 }
 
-// Local Vocal & Music Song Adapter
-class LocalSynthMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 15 }) {
+// Multi-chunk Zero-Loss Vocal Audio Fetcher
+async function fetchFallbackVocalAudio(lyricsText, tempVocalPath) {
+  const cleanLyrics = (lyricsText || "")
+    .replace(/\[.*?\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleanLyrics) return false;
+
+  const sentences = cleanLyrics.match(/.{1,140}(\s+|$)/g) || [cleanLyrics];
+  const chunkBuffers = [];
+  const agent = new https.Agent({ rejectUnauthorized: false });
+
+  for (let i = 0; i < sentences.length; i++) {
+    const sentence = sentences[i].trim();
+    if (!sentence) continue;
+
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&q=${encodeURIComponent(sentence)}&tl=en`;
+
+    const chunkBuf = await new Promise((resolve) => {
+      const chunks = [];
+      const req = https.get(url, { agent, headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" } }, (res) => {
+        if (res.statusCode === 200) {
+          res.on("data", c => chunks.push(c));
+          res.on("end", () => resolve(Buffer.concat(chunks)));
+        } else {
+          resolve(null);
+        }
+      });
+      req.on("error", () => resolve(null));
+    });
+
+    if (chunkBuf && chunkBuf.length > 0) {
+      chunkBuffers.push(chunkBuf);
+    }
+  }
+
+  if (chunkBuffers.length === 0) return false;
+
+  const combinedVocalBuffer = Buffer.concat(chunkBuffers);
+  await fsPromises.writeFile(tempVocalPath, combinedVocalBuffer);
+  console.log(`[Vocal Synthesis Engine] Successfully synthesized vocal audio buffer of ${combinedVocalBuffer.length} bytes`);
+  return true;
+}
+
+// Google Cloud Vocal & Music Song Adapter
+class GoogleTtsMusicAdapter {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30 }) {
     const timestamp = Date.now();
     const uploadDir = path.join(process.cwd(), "uploads");
     await fsPromises.mkdir(uploadDir, { recursive: true });
 
     const bgPath = path.join(uploadDir, `bg_${timestamp}.wav`);
     const vocalPath = path.join(uploadDir, `vocal_${timestamp}.mp3`);
-    const outputFilename = `local_song_${timestamp}.mp3`;
+    const outputFilename = `google_song_${timestamp}.mp3`;
     const outputPath = path.join(uploadDir, outputFilename);
 
-    // 1. Generate background musical chord progression
-    const wavBuffer = createMusicalMelodyWavBuffer(durationSeconds, 44100);
+    // 1. Generate background musical chord progression matching selected genre & duration
+    const wavBuffer = createMusicalMelodyWavBuffer(durationSeconds, 44100, genre);
     await fsPromises.writeFile(bgPath, wavBuffer);
 
-    // 2. Fetch vocal audio for lyrics
-    const hasVocals = await fetchVocalAudioForLyrics(lyrics, vocalPath);
+    // 2. Fetch vocal audio via OAuth2 Google Cloud Neural2 TTS or Multi-chunk fallback
+    let hasVocals = await fetchGoogleCloudNeuralVocalAudio(lyrics, vocalPath);
+    if (!hasVocals) {
+      hasVocals = await fetchFallbackVocalAudio(lyrics, vocalPath);
+    }
 
     // 3. Mix vocal audio track with background music using FFmpeg
     if (hasVocals) {
@@ -116,21 +210,23 @@ class LocalSynthMusicAdapter {
           .input(bgPath)
           .input(vocalPath)
           .complexFilter([
-            "[0:a]volume=0.35[bg]",
-            "[1:a]volume=1.0[voc]",
+            "[0:a]volume=0.20[bg]",
+            "[1:a]volume=2.5[voc]",
             "[bg][voc]amix=inputs=2:duration=first[a]"
           ])
           .outputOptions(["-map", "[a]", "-c:a", "libmp3lame", "-b:a", "192k"])
           .save(outputPath)
           .on("end", resolve)
-          .on("error", reject);
+          .on("error", (err) => {
+            console.error("FFmpeg amix error:", err.message);
+            reject(err);
+          });
       });
 
       // Cleanup temporary stem files
       await fsPromises.unlink(bgPath).catch(() => {});
       await fsPromises.unlink(vocalPath).catch(() => {});
     } else {
-      // Fallback if offline / vocal fetch failed
       await fsPromises.rename(bgPath, outputPath);
     }
 
@@ -141,19 +237,55 @@ class LocalSynthMusicAdapter {
   }
 }
 
-// Suno/External Cloud API Music Adapter
-class SunoMusicAdapter {
-  async generateMusic({ lyrics, genre, durationSeconds = 30 }) {
-    return {
-      audioUrl: `https://mock-music-provider.com/suno_${Date.now()}.mp3`,
-      durationSeconds
-    };
+// Local Synth Music Adapter
+class LocalSynthMusicAdapter {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30 }) {
+    return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds });
   }
 }
 
+// Suno AI Production Cloud Music Adapter
+class SunoMusicAdapter {
+  async generateMusic({ lyrics, genre, durationSeconds = 30 }) {
+    const apiKey = env.musicApiKey || env.sunoApiKey;
+    if (!apiKey) {
+      return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds });
+    }
+
+    try {
+      const response = await fetch("https://api.suno.ai/v1/generate", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          prompt: lyrics,
+          tags: genre,
+          title: "Event Song",
+          make_instrumental: false,
+          wait_audio: true
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const audioUrl = data[0]?.audio_url || data.audio_url;
+        if (audioUrl) return { audioUrl, durationSeconds };
+      }
+    } catch (err) {
+      console.error("Suno AI music generation error:", err.message);
+    }
+
+    return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds });
+  }
+}
+
+const googleTtsSynth = new GoogleTtsMusicAdapter();
 const localSynth = new LocalSynthMusicAdapter();
 const sunoSynth = new SunoMusicAdapter();
 
 export function getMusicProvider() {
-  return env.musicProvider === "suno" ? sunoSynth : localSynth;
+  if (env.musicProvider === "suno") return sunoSynth;
+  return googleTtsSynth;
 }

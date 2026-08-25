@@ -45,7 +45,7 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
 
 ## Monorepo Layout
 
-- `apps/api`: Node.js Express backend (ESM), Mongoose/MongoDB, token signers, CSV parser, Resend/Nodemailer email engine, FFmpeg video worker, and AI provider adapters.
+- `apps/api`: Node.js Express backend (ESM), Mongoose/MongoDB, token signers, CSV parser, Resend/Nodemailer email engine, FFmpeg video worker, and AI provider adapters (Google Gemini, Google Cloud TTS, Google Veo).
 - `apps/web`: React 18 + Vite + Tailwind CSS frontend, HashRouter navigation, html5-qrcode scanner integration, responsive dashboard, AI Studio UI (`ProjectStudioPage.jsx`), and public registration portal.
 
 ---
@@ -63,7 +63,7 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
 - `projects`: Story projects linked to `eventId` with references to active analysis, song, storyboard, and video.
 - `storyanalyses`: Story analysis output (summary, emotional arc, themes, key moments).
 - `songs`: Generated lyrics, audio URL, duration, genre, mood.
-- `medias`: Uploaded photo/image media items per project.
+- `medias`: Uploaded photo & video clip media items per project (`fileUrl`, `mediaType`).
 - `storyboards`: Scene timeline mapping (sceneNumber, start/end timestamps, mediaId, captionText).
 - `videos`: Rendered video documents (videoUrl, durationSeconds, resolution).
 - `generationjobs`: Async background job status tracking (jobType, progressPercent, currentStepMessage).
@@ -76,10 +76,12 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
 - `POST /api/story-video/projects` (admin): Create a new AI story project linked to an event.
 - `GET /api/story-video/projects` (auth): List all story projects for an event.
 - `GET /api/story-video/projects/:id` (auth): Fetch details for a specific project.
-- `POST /api/story-video/projects/:id/analyze` (admin): Analyze story narrative using Gemini AI.
-- `POST /api/story-video/projects/:id/lyrics` (admin): Generate AI lyrics and synthesize vocal audio track.
-- `POST /api/story-video/projects/:id/media` (admin): Upload photo/image assets for video stitching.
+- `POST /api/story-video/projects/:id/analyze` (admin): Analyze story narrative using Gemini 3.6 Flash.
+- `POST /api/story-video/projects/:id/lyrics` (admin): Generate AI lyrics and synthesize vocal audio track via Google Cloud TTS.
+- `POST /api/story-video/projects/:id/media` (admin): Upload photo or video clip assets for video stitching.
 - `GET /api/story-video/projects/:id/media` (auth): Get media gallery items for a project.
+- `DELETE /api/story-video/projects/:id/media/:mediaId` (admin): Delete a specific uploaded photo or video clip.
+- `DELETE /api/story-video/projects/:id/media` (admin): Clear all uploaded media (activates Pure AI Scene Generation Mode).
 - `POST /api/story-video/projects/:id/storyboard` (admin): Generate scene timeline storyboard.
 - `POST /api/story-video/projects/:id/render` (admin): Trigger FFmpeg background video rendering task.
 - `GET /api/story-video/jobs/:jobId` (auth): Poll video rendering job progress.

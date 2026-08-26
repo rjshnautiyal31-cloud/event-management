@@ -281,11 +281,143 @@ class SunoMusicAdapter {
   }
 }
 
+// ElevenLabs Production Text-to-Music Adapter
+class ElevenLabsMusicAdapter {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30 }) {
+    const apiKey = env.elevenLabsApiKey || env.musicApiKey;
+    if (!apiKey) {
+      console.warn("[ElevenLabs] ELEVENLABS_API_KEY missing, falling back to Google Cloud TTS adapter");
+      return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds });
+    }
+
+    const timestamp = Date.now();
+    const uploadDir = path.join(process.cwd(), "uploads");
+    await fsPromises.mkdir(uploadDir, { recursive: true });
+
+    const outputFilename = `eleven_song_${timestamp}.mp3`;
+    const outputPath = path.join(uploadDir, outputFilename);
+
+    const cleanLyrics = (lyrics || "").replace(/\[.*?\]/g, "").replace(/\s+/g, " ").trim();
+    const promptText = `A ${genre} style song with full vocals and melody. Lyrics: ${cleanLyrics}`;
+
+    // 1. Try ElevenLabs Official Text-to-Music Endpoint (POST /v1/music)
+    try {
+      console.log(`[ElevenLabs Music API] Requesting AI song generation from https://api.elevenlabs.io/v1/music...`);
+      const musicResponse = await fetch("https://api.elevenlabs.io/v1/music", {
+        method: "POST",
+        headers: {
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          prompt: promptText,
+          music_length_ms: Math.min(600000, Math.max(3000, durationSeconds * 1000)),
+          model_id: "music_v1",
+          force_instrumental: false,
+          output_format: "mp3_44100_128"
+        })
+      });
+
+      if (musicResponse.ok) {
+        const audioBuffer = Buffer.from(await musicResponse.arrayBuffer());
+        await fsPromises.writeFile(outputPath, audioBuffer);
+        console.log(`[ElevenLabs Music API] Successfully generated full ElevenLabs AI song (${audioBuffer.length} bytes)`);
+        return {
+          audioUrl: `http://localhost:${env.port}/uploads/${outputFilename}`,
+          durationSeconds
+        };
+      } else {
+        const errText = await musicResponse.text();
+        console.warn(`[ElevenLabs Music API] v1/music endpoint returned ${musicResponse.status}: ${errText}. Falling back to Speech + Music Mix.`);
+      }
+    } catch (err) {
+      console.error("[ElevenLabs Music API] Error calling v1/music:", err.message);
+    }
+
+    // 2. Fallback: ElevenLabs Speech TTS (/v1/text-to-speech) mixed with backing track
+    const bgPath = path.join(uploadDir, `bg_${timestamp}.wav`);
+    const vocalPath = path.join(uploadDir, `vocal_eleven_${timestamp}.mp3`);
+
+    const wavBuffer = createMusicalMelodyWavBuffer(durationSeconds, 44100, genre);
+    await fsPromises.writeFile(bgPath, wavBuffer);
+
+    let hasVocals = false;
+    try {
+      const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // Rachel voice
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: "POST",
+        headers: {
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json",
+          "Accept": "audio/mpeg"
+        },
+        body: JSON.stringify({
+          text: cleanLyrics,
+          model_id: "eleven_monolingual_v1",
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75
+          }
+        })
+      });
+
+      if (response.ok) {
+        const audioBuffer = Buffer.from(await response.arrayBuffer());
+        await fsPromises.writeFile(vocalPath, audioBuffer);
+        hasVocals = true;
+        console.log(`[ElevenLabs Speech API] Successfully synthesized ElevenLabs vocal track (${audioBuffer.length} bytes)`);
+      } else {
+        const errText = await response.text();
+        console.warn(`[ElevenLabs Speech API] Returned status ${response.status}: ${errText}`);
+      }
+    } catch (err) {
+      console.error("[ElevenLabs Speech API] Error fetching audio:", err.message);
+    }
+
+    if (!hasVocals) {
+      hasVocals = await fetchGoogleCloudNeuralVocalAudio(lyrics, vocalPath) || await fetchFallbackVocalAudio(lyrics, vocalPath);
+    }
+
+    // 3. Mix vocal audio track with background music using FFmpeg
+    if (hasVocals) {
+      await new Promise((resolve, reject) => {
+        ffmpeg()
+          .input(bgPath)
+          .input(vocalPath)
+          .complexFilter([
+            "[0:a]volume=0.20[bg]",
+            "[1:a]volume=2.5[voc]",
+            "[bg][voc]amix=inputs=2:duration=first[a]"
+          ])
+          .outputOptions(["-map", "[a]", "-c:a", "libmp3lame", "-b:a", "192k"])
+          .save(outputPath)
+          .on("end", resolve)
+          .on("error", (err) => {
+            console.error("FFmpeg amix error:", err.message);
+            reject(err);
+          });
+      });
+
+      await fsPromises.unlink(bgPath).catch(() => {});
+      await fsPromises.unlink(vocalPath).catch(() => {});
+    } else {
+      await fsPromises.rename(bgPath, outputPath);
+    }
+
+    return {
+      audioUrl: `http://localhost:${env.port}/uploads/${outputFilename}`,
+      durationSeconds
+    };
+  }
+}
+
 const googleTtsSynth = new GoogleTtsMusicAdapter();
 const localSynth = new LocalSynthMusicAdapter();
 const sunoSynth = new SunoMusicAdapter();
+const elevenLabsSynth = new ElevenLabsMusicAdapter();
 
 export function getMusicProvider() {
+  if (env.musicProvider === "elevenlabs") return elevenLabsSynth;
   if (env.musicProvider === "suno") return sunoSynth;
   return googleTtsSynth;
 }

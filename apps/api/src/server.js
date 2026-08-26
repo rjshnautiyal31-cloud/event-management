@@ -1,15 +1,8 @@
 import { app } from "./app.js";
 import { connectDb } from "./config/db.js";
 import { env } from "./config/env.js";
-import { runAclBackfill } from "./scripts/migrate-acl.js";
-
 async function bootstrap() {
   await connectDb();
-  try {
-    await runAclBackfill();
-  } catch (err) {
-    console.error("[Startup] ACL Migration warning:", err?.message || err);
-  }
   app.listen(env.port, () => {
     console.log(`API listening on port ${env.port}`);
   });

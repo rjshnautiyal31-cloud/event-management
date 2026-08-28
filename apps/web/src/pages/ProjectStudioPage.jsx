@@ -277,11 +277,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans pb-16">
       {/* Shared Navbar Header & Hamburger Menu */}
-      <Navbar
-        auth={auth}
-        onOpenSwitcher={() => setSwitcherModalOpen(true)}
-        selectedEventTitle={selectedEvent?.title}
-      />
+      <Navbar auth={auth} />
 
       {/* Quick Event Switcher Modal (Cmd+K) */}
       <EventSwitcherModal

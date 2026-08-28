@@ -482,8 +482,6 @@ export function DashboardPage({ auth }) {
         onOpenCreateEvent={() => setCreateEventModalOpen(true)}
         onOpenWalkIn={() => setWalkInSheetOpen(true)}
         onOpenBulkImport={() => setBulkImportSheetOpen(true)}
-        onOpenSwitcher={() => setSwitcherModalOpen(true)}
-        selectedEventTitle={selectedEvent?.title}
       />
 
       {/* 2. Top Event Switcher & Tab Selector Header */}

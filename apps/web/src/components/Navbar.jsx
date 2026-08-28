@@ -30,61 +30,46 @@ export function Navbar({
   return (
     <>
       {/* Sticky Top Header Bar */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 py-2.5 flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-2.5">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between shadow-xs">
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
           {/* Hamburger Menu Toggle Button */}
           <button
             onClick={() => setHamburgerMenuOpen(true)}
-            className="h-9 w-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-[#0A2D59] flex items-center justify-center font-black text-lg transition-all border border-slate-200/80 shadow-2xs active:scale-95 cursor-pointer"
+            className="h-9 w-9 shrink-0 rounded-xl bg-slate-100 hover:bg-slate-200 text-[#0A2D59] flex items-center justify-center font-black text-lg transition-all border border-slate-200/80 shadow-2xs active:scale-95 cursor-pointer"
             title="Open Main Navigation Menu"
             aria-label="Open Main Navigation Menu"
           >
             ☰
           </button>
 
-          <Link to="/dashboard" className="flex items-center gap-2 group">
-            <div className="h-8 w-8 rounded-xl bg-[#0A2D59] flex items-center justify-center font-black text-white text-base shadow-sm shadow-[#0A2D59]/20 group-hover:scale-105 transition-transform">
+          <Link to="/dashboard" className="flex items-center gap-2 group min-w-0">
+            <div className="h-8 w-8 shrink-0 rounded-xl bg-[#0A2D59] flex items-center justify-center font-black text-white text-base shadow-sm shadow-[#0A2D59]/20 group-hover:scale-105 transition-transform">
               Q
             </div>
-            <div>
-              <h1 className="text-xs font-black text-[#0A2D59] tracking-tight leading-none">EventQR Hub</h1>
-              <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
+            <div className="min-w-0">
+              <h1 className="text-xs font-black text-[#0A2D59] tracking-tight leading-none truncate">EventQR Hub</h1>
+              <p className="text-[10px] text-slate-500 font-semibold mt-0.5 truncate">
                 {auth.user?.name} · <span className="text-[#0A2D59] font-extrabold capitalize">{auth.user?.role?.replace("_", " ")}</span>
               </p>
             </div>
           </Link>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Header Command Switcher Pill Trigger */}
-          {onOpenSwitcher && (
-            <button
-              onClick={onOpenSwitcher}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-[#0A2D59] border border-slate-200 px-3 py-1.5 text-xs font-bold transition-all shadow-2xs active:scale-98 cursor-pointer"
-              title="Search and switch events (⌘K)"
-            >
-              <span className="text-xs">⚡</span>
-              <span className="max-w-[120px] sm:max-w-[200px] truncate font-extrabold">
-                {selectedEventTitle || "Switch Event"}
-              </span>
-              <span className="hidden md:inline-block text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-500">
-                ⌘K
-              </span>
-            </button>
-          )}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {location.pathname !== "/dashboard" && (
             <Link
               to="/dashboard"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/80"
+              className="inline-flex items-center gap-1 sm:gap-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors px-2.5 sm:px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/80"
             >
-              <span>📊 Dashboard</span>
+              <span>📊</span>
+              <span className="hidden sm:inline">Dashboard</span>
             </Link>
           )}
 
           {isSuperAdmin && location.pathname !== "/generator" && (
             <Link
               to="/generator"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/80"
+              className="hidden md:inline-flex items-center gap-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/80"
             >
               <span>🎨 Studio</span>
             </Link>
@@ -92,21 +77,23 @@ export function Navbar({
 
           <Link
             to="/studio"
-            className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+            className={`inline-flex items-center gap-1 sm:gap-1.5 rounded-xl px-2.5 sm:px-3.5 py-1.5 text-xs font-bold transition-all ${
               location.pathname === "/studio"
                 ? "bg-[#0A2D59] text-white shadow-sm shadow-[#0A2D59]/20 ring-2 ring-[#0A2D59]/20"
                 : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80"
             }`}
           >
-            <span>🎬 AI Story Studio</span>
+            <span>🎬</span>
+            <span className="hidden sm:inline">AI Story Studio</span>
           </Link>
 
           {location.pathname !== "/scan" && (
             <Link
               to="/scan"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-3.5 py-1.5 text-xs font-bold text-white shadow-sm shadow-[#0A2D59]/20"
+              className="inline-flex items-center gap-1 sm:gap-1.5 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-2.5 sm:px-3.5 py-1.5 text-xs font-bold text-white shadow-sm shadow-[#0A2D59]/20"
             >
-              <span>📷 Scanner</span>
+              <span>📷</span>
+              <span className="hidden sm:inline">Scanner</span>
             </Link>
           )}
 

@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
 import { api } from "../api.js";
+import { Navbar } from "../components/Navbar.jsx";
+import { EventSwitcherModal } from "../components/EventSwitcherModal.jsx";
 
-export function ProjectStudioPage({ token }) {
+export function ProjectStudioPage({ auth, token: propToken }) {
+  const token = auth?.token || propToken;
   const [events, setEvents] = useState([]);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [projects, setProjects] = useState([]);
@@ -10,6 +13,9 @@ export function ProjectStudioPage({ token }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // Event Switcher Modal State (Cmd+K)
+  const [switcherModalOpen, setSwitcherModalOpen] = useState(false);
 
   // Create Project Form State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -269,9 +275,30 @@ export function ProjectStudioPage({ token }) {
   const selectedEvent = events.find(ev => ev._id === selectedEventId);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 text-slate-800">
-      {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#0A2D59] text-white p-6 rounded-2xl shadow-xl mb-8">
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans pb-16">
+      {/* Shared Navbar Header & Hamburger Menu */}
+      <Navbar
+        auth={auth}
+        onOpenSwitcher={() => setSwitcherModalOpen(true)}
+        selectedEventTitle={selectedEvent?.title}
+      />
+
+      {/* Quick Event Switcher Modal (Cmd+K) */}
+      <EventSwitcherModal
+        isOpen={switcherModalOpen}
+        onClose={() => setSwitcherModalOpen(false)}
+        events={events}
+        selectedEventId={selectedEventId}
+        onSelectEvent={(eventId) => {
+          setSelectedEventId(eventId);
+          setSwitcherModalOpen(false);
+        }}
+      />
+
+      {/* Main Studio Content Area */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-slate-800 w-full flex-1">
+        {/* Header Banner */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#0A2D59] text-white p-6 rounded-2xl shadow-xl mb-8">
         <div>
           <h1 className="text-2xl font-black flex items-center gap-2">
             <span>🎬</span> Event AI Story-to-Video Studio
@@ -706,6 +733,7 @@ export function ProjectStudioPage({ token }) {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -85,7 +85,7 @@ export function App() {
         path="/studio"
         element={
           <ProtectedRoute token={auth.token} user={auth.user}>
-            <ProjectStudioPage token={auth.token} />
+            <ProjectStudioPage auth={auth} />
           </ProtectedRoute>
         }
       />

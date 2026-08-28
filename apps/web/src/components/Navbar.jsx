@@ -92,7 +92,11 @@ export function Navbar({
 
           <Link
             to="/studio"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-3.5 py-1.5 text-xs font-bold text-white shadow-sm shadow-[#0A2D59]/20"
+            className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
+              location.pathname === "/studio"
+                ? "bg-[#0A2D59] text-white shadow-sm shadow-[#0A2D59]/20 ring-2 ring-[#0A2D59]/20"
+                : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80"
+            }`}
           >
             <span>🎬 AI Story Studio</span>
           </Link>

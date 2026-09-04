@@ -22,8 +22,11 @@ export function ProjectStudioPage({ auth, token: propToken }) {
   const [newTitle, setNewTitle] = useState("");
   const [newStory, setNewTitleStory] = useState("");
 
-  // Genre Selection State
+  // Genre & AI Provider State
   const [selectedGenre, setSelectedGenre] = useState("Pop");
+  const [selectedMusicProvider, setSelectedMusicProvider] = useState("google_lyria");
+  const [generatingVeoSceneIdx, setGeneratingVeoSceneIdx] = useState(null);
+  const [generatingAllVeo, setGeneratingAllVeo] = useState(false);
 
   // Media State
   const [mediaItems, setMediaItems] = useState([]);
@@ -140,12 +143,15 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     setError("");
     setSuccess("");
     try {
+      const providerLabel = selectedMusicProvider === "google_lyria" ? "Google Lyria" : selectedMusicProvider === "elevenlabs" ? "ElevenLabs" : selectedMusicProvider === "suno" ? "Suno AI" : "Google Cloud TTS";
+      setSuccess(`🎵 Synthesizing song with ${providerLabel}... Please wait.`);
+
       await api(`/api/story-video/projects/${activeProject._id}/lyrics`, {
         token,
         method: "POST",
-        body: { genre: selectedGenre }
+        body: { genre: selectedGenre, musicProvider: selectedMusicProvider }
       });
-      setSuccess("AI Lyrics & synth audio track generated!");
+      setSuccess(`🎉 AI Lyrics & ${providerLabel} song track generated successfully!`);
       const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
       setActiveProject(updated);
       setActiveTab("media");
@@ -153,6 +159,49 @@ export function ProjectStudioPage({ auth, token: propToken }) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleGenerateVeoScene(sceneIndex, customPrompt) {
+    if (!activeProject) return;
+    setGeneratingVeoSceneIdx(sceneIndex);
+    setError("");
+    setSuccess(`🎬 Generating Google Veo 3.1 motion video for Scene ${sceneIndex + 1}... Rendering takes ~20-35s.`);
+    try {
+      await api(`/api/story-video/projects/${activeProject._id}/scenes/${sceneIndex}/veo`, {
+        token,
+        method: "POST",
+        body: { prompt: customPrompt }
+      });
+      setSuccess(`🎉 Google Veo motion video clip ready for Scene ${sceneIndex + 1}!`);
+      const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
+      setActiveProject(updated);
+      await loadMediaItems(activeProject._id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGeneratingVeoSceneIdx(null);
+    }
+  }
+
+  async function handleGenerateAllVeo() {
+    if (!activeProject) return;
+    setGeneratingAllVeo(true);
+    setError("");
+    setSuccess("🎬 Generating Google Veo 3.1 motion clips for storyboard scenes in background...");
+    try {
+      const res = await api(`/api/story-video/projects/${activeProject._id}/scenes/generate-all-veo`, {
+        token,
+        method: "POST"
+      });
+      setSuccess(`🎉 Google Veo video generation completed for storyboard scenes!`);
+      const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
+      setActiveProject(updated);
+      await loadMediaItems(activeProject._id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGeneratingAllVeo(false);
     }
   }
 
@@ -441,39 +490,80 @@ export function ProjectStudioPage({ auth, token: propToken }) {
               {/* Tab 2: Lyrics & Music */}
               {activeTab === "lyrics" && (
                 <div className="space-y-6">
-                  <div className="flex items-center gap-4">
-                    <label className="text-sm font-bold text-slate-700">Select Music Style:</label>
-                    <select
-                      value={selectedGenre}
-                      onChange={(e) => setSelectedGenre(e.target.value)}
-                      className="border border-slate-300 rounded-xl px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-[#0A2D59]"
-                    >
-                      <option value="Pop">Pop</option>
-                      <option value="Acoustic">Acoustic</option>
-                      <option value="Cinematic">Cinematic</option>
-                      <option value="Rock">Rock</option>
-                    </select>
-                    <button
-                      onClick={handleGenerateLyrics}
-                      disabled={loading}
-                      className="bg-[#0A2D59] text-white hover:bg-slate-800 font-bold px-5 py-2 rounded-xl text-sm transition"
-                    >
-                      {loading ? "Generating..." : "Generate Lyrics & Audio"}
-                    </button>
+                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1.5">Music Model Engine:</label>
+                        <select
+                          value={selectedMusicProvider}
+                          onChange={(e) => setSelectedMusicProvider(e.target.value)}
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold bg-white focus:ring-2 focus:ring-[#0A2D59]"
+                        >
+                          <option value="google_lyria">🌟 Google DeepMind Lyria 2 (Vertex AI - 48kHz Studio Quality)</option>
+                          <option value="elevenlabs">🎵 ElevenLabs Music Synthesis</option>
+                          <option value="suno">🎸 Suno AI Music</option>
+                          <option value="google_tts">🔊 Google Cloud Neural2 TTS + Rhythm Synth</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1.5">Musical Style / Genre:</label>
+                        <select
+                          value={selectedGenre}
+                          onChange={(e) => setSelectedGenre(e.target.value)}
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold bg-white focus:ring-2 focus:ring-[#0A2D59]"
+                        >
+                          <option value="Pop">Pop (Vibrant & Catchy)</option>
+                          <option value="Acoustic">Acoustic (Warm & Organic)</option>
+                          <option value="Cinematic">Cinematic (Epic & Orchestral)</option>
+                          <option value="Rock">Rock (Energetic & Dynamic)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex justify-end">
+                      <button
+                        onClick={handleGenerateLyrics}
+                        disabled={loading}
+                        className="bg-[#0A2D59] hover:bg-slate-800 text-white font-bold px-6 py-2.5 rounded-xl text-sm shadow transition flex items-center gap-2"
+                      >
+                        {loading ? (
+                          <>
+                            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                            Synthesizing Song...
+                          </>
+                        ) : (
+                          <>
+                            <span>✨</span>
+                            Generate AI Lyrics & Song
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   {activeProject.activeSongId && (
                     <div className="space-y-4">
                       <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
-                        <h4 className="font-black text-sm text-slate-700 mb-2">Generated AI Lyrics</h4>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-black text-sm text-slate-800">Generated AI Lyrics</h4>
+                          <span className="text-xs bg-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full font-bold">
+                            {activeProject.activeSongId.genre} • {activeProject.activeSongId.mood}
+                          </span>
+                        </div>
                         <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
                           {activeProject.activeSongId.lyrics}
                         </pre>
                       </div>
 
                       {activeProject.activeSongId.audioUrl && (
-                        <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex items-center justify-between">
-                          <span className="text-xs font-bold text-emerald-900">🎵 Audio Track Ready:</span>
+                        <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-emerald-950">🎵 Soundtrack Ready:</span>
+                            <span className="text-[11px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-md font-semibold">
+                              {activeProject.activeSongId.provider?.includes("lyria") ? "🌟 Google DeepMind Lyria" : activeProject.activeSongId.provider || "Studio Audio"}
+                            </span>
+                          </div>
                           <audio controls src={activeProject.activeSongId.audioUrl} className="h-9" />
                         </div>
                       )}
@@ -542,18 +632,37 @@ export function ProjectStudioPage({ auth, token: propToken }) {
               {/* Tab 4: Storyboard */}
               {activeTab === "storyboard" && (
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h3 className="font-bold text-slate-900 text-sm">Scene Storyboard & Timeline</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">Maps story key moments to uploaded event photos, video clips, and AI scenes.</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Maps story key moments to uploaded event photos, video clips, and Google Veo motion clips.</p>
                     </div>
-                    <button
-                      onClick={handleGenerateStoryboard}
-                      disabled={loading}
-                      className="bg-[#0A2D59] text-white font-bold px-5 py-2.5 rounded-xl text-xs shadow hover:bg-slate-800 transition"
-                    >
-                      {loading ? "Generating Storyboard..." : "Generate Scene Storyboard"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleGenerateAllVeo}
+                        disabled={generatingAllVeo || loading || !activeProject.activeStoryboardId}
+                        className="bg-indigo-700 hover:bg-indigo-800 text-white font-bold px-4 py-2 rounded-xl text-xs shadow flex items-center gap-1.5 transition disabled:opacity-50"
+                      >
+                        {generatingAllVeo ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                            Generating Veo Motion Clips...
+                          </>
+                        ) : (
+                          <>
+                            <span>✨</span>
+                            Generate Google Veo Clips (All Scenes)
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={handleGenerateStoryboard}
+                        disabled={loading}
+                        className="bg-[#0A2D59] text-white font-bold px-4 py-2 rounded-xl text-xs shadow hover:bg-slate-800 transition"
+                      >
+                        {loading ? "Generating Storyboard..." : "Generate Scene Storyboard"}
+                      </button>
+                    </div>
                   </div>
 
                   {activeProject.activeStoryboardId && (
@@ -566,24 +675,58 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                           return (
                             <div key={idx} className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between">
                               {media ? (
-                                <div className="h-36 bg-slate-200 overflow-hidden relative">
+                                <div className="h-40 bg-slate-200 overflow-hidden relative">
                                   {isVideoMedia ? (
-                                    <video src={media.fileUrl} className="w-full h-full object-cover" muted loop autoPlay />
+                                    <video src={media.fileUrl} className="w-full h-full object-cover" muted loop autoPlay controls />
                                   ) : (
                                     <img src={media.fileUrl} alt="scene media" className="w-full h-full object-cover" />
                                   )}
                                   <div className="absolute top-2 left-2 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
-                                    Scene {scene.sceneNumber} • {scene.startTimeSeconds}s - {scene.endTimeSeconds}s {isVideoMedia ? "🎬 Video" : "📷 Photo"}
+                                    Scene {scene.sceneNumber} • {scene.startTimeSeconds}s - {scene.endTimeSeconds}s {isVideoMedia ? "🎬 Google Veo Video" : "📷 Photo"}
                                   </div>
                                 </div>
                               ) : (
-                                <div className="h-36 bg-slate-100 flex items-center justify-center text-slate-400 text-xs font-medium">
+                                <div className="h-40 bg-slate-100 flex items-center justify-center text-slate-400 text-xs font-medium">
                                   Fallback Cover Image
                                 </div>
                               )}
-                              <div className="p-3.5 space-y-1">
-                                <div className="font-bold text-xs text-slate-800">Visual Caption:</div>
-                                <p className="text-xs text-slate-600 line-clamp-2">{scene.captionText}</p>
+                              <div className="p-3.5 space-y-2">
+                                <div>
+                                  <div className="font-bold text-xs text-slate-800">Visual Caption:</div>
+                                  <p className="text-xs text-slate-600 line-clamp-2">{scene.captionText}</p>
+                                </div>
+
+                                {isVideoMedia ? (
+                                  <div className="py-1 px-2.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between text-xs text-blue-800 font-semibold">
+                                    <span className="flex items-center gap-1">
+                                      <span>✨</span> Google Veo Motion Active
+                                    </span>
+                                    <button
+                                      onClick={() => handleGenerateVeoScene(idx, scene.captionText)}
+                                      disabled={generatingVeoSceneIdx === idx}
+                                      className="text-[11px] text-blue-600 hover:text-blue-900 underline font-bold"
+                                    >
+                                      {generatingVeoSceneIdx === idx ? "Rendering..." : "Regenerate"}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleGenerateVeoScene(idx, scene.captionText)}
+                                    disabled={generatingVeoSceneIdx === idx || generatingAllVeo}
+                                    className="w-full bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                                  >
+                                    {generatingVeoSceneIdx === idx ? (
+                                      <>
+                                        <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                        Generating Veo Clip...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>✨</span> Convert to Google Veo Motion Clip
+                                      </>
+                                    )}
+                                  </button>
+                                )}
                               </div>
                             </div>
                           );

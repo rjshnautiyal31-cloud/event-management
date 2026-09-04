@@ -4,6 +4,7 @@ import https from "https";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegInstaller from "ffmpeg-static";
 import textToSpeech from "@google-cloud/text-to-speech";
+import { GoogleAuth } from "google-auth-library";
 import { env } from "../../config/env.js";
 
 const fsPromises = fs.promises;
@@ -411,13 +412,166 @@ class ElevenLabsMusicAdapter {
   }
 }
 
+// Google DeepMind Lyria AI Music Adapter (Vertex AI Lyria 2 Foundation Model)
+export class GoogleLyriaMusicAdapter {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, mood = "Upbeat" }) {
+    const timestamp = Date.now();
+    const uploadDir = path.join(process.cwd(), "uploads");
+    await fsPromises.mkdir(uploadDir, { recursive: true });
+
+    try {
+      console.log(`[Google Lyria AI Music] Authenticating with Vertex AI Service Account...`);
+      const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
+      const auth = new GoogleAuth({
+        keyFilename,
+        scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+      });
+      const client = await auth.getClient();
+      const token = await client.getAccessToken();
+      const projectId = await auth.getProjectId() || env.googleCloudProject || "project-2a1614a0-3389-4a26-8d4";
+      const location = process.env.GOOGLE_CLOUD_LOCATION || env.googleCloudLocation || "us-central1";
+
+      const genreDescriptions = {
+        pop: "vibrant acoustic guitars, upbeat rhythm percussion, catchy melodic synth chords",
+        acoustic: "warm fingerstyle acoustic guitar, gentle piano harmonies, rhythmic cajon percussion",
+        cinematic: "soaring orchestral strings, uplifting piano melodies, cinematic festival percussion",
+        rock: "energetic rhythm guitars, driving drums, melodic basslines, dynamic celebration vibe"
+      };
+
+      const genreKey = (genre || "pop").toLowerCase();
+      const styleDesc = genreDescriptions[genreKey] || "rich instrumentation, expressive chord progressions, rhythmic celebration beat";
+      const promptText = `High fidelity modern ${mood.toLowerCase()} instrumental soundtrack, ${styleDesc}, lush stereo mix, celebratory event atmosphere`;
+
+      console.log(`[Google Lyria AI Music] Requesting prediction from lyria-002: "${promptText.slice(0, 90)}..."`);
+
+      let response = await fetch(`https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/lyria-002:predict`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token.token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          instances: [
+            {
+              prompt: promptText
+            }
+          ],
+          parameters: {}
+        })
+      });
+
+      // If recitation checks trigger, retry with pure clean celebratory instrumental prompt
+      if (!response.ok) {
+        const errBody = await response.text();
+        console.warn(`[Google Lyria AI Music] First prompt attempt (${response.status}): ${errBody.slice(0, 100)}. Retrying with clean celebratory score...`);
+
+        const cleanFallbackPrompt = "Vibrant modern instrumental soundtrack, energetic rhythm, uplifting harmony, cinematic synth pads, celebrations and tech innovation";
+        response = await fetch(`https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/lyria-002:predict`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token.token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            instances: [{ prompt: cleanFallbackPrompt }],
+            parameters: {}
+          })
+        });
+
+        if (!response.ok) {
+          const secondErr = await response.text();
+          throw new Error(`Lyria endpoint HTTP ${response.status}: ${secondErr}`);
+        }
+      }
+
+      const data = await response.json();
+      const audioBase64 = data.predictions?.[0]?.bytesBase64Encoded || data.predictions?.[0]?.audioContent;
+      if (!audioBase64) {
+        throw new Error("No audio bytes returned in Lyria prediction response");
+      }
+
+      const rawWavBuffer = Buffer.from(audioBase64, "base64");
+      const bgWavPath = path.join(uploadDir, `lyria_bg_${timestamp}.wav`);
+      await fsPromises.writeFile(bgWavPath, rawWavBuffer);
+
+      // Extract duration from WAV header
+      let trackDuration = 65;
+      try {
+        const byteRate = rawWavBuffer.readUInt32LE(28) || 192000;
+        const dataSize = rawWavBuffer.readUInt32LE(40) || rawWavBuffer.length - 44;
+        trackDuration = Math.round(dataSize / byteRate) || 65;
+      } catch (e) {
+        trackDuration = 65;
+      }
+
+      const outputFilename = `lyria_song_${timestamp}.mp3`;
+      const outputPath = path.join(uploadDir, outputFilename);
+
+      // Synthesize singing/spoken vocals if lyrics exist
+      const vocalPath = path.join(uploadDir, `lyria_vocal_${timestamp}.mp3`);
+      let hasVocals = false;
+      if (lyrics && lyrics.trim().length > 10) {
+        hasVocals = await fetchGoogleCloudNeuralVocalAudio(lyrics, vocalPath);
+      }
+
+      if (hasVocals) {
+        console.log(`[Google Lyria AI Music] Blending vocal track with Lyria audio track...`);
+        await new Promise((resolve, reject) => {
+          ffmpeg()
+            .input(bgWavPath)
+            .input(vocalPath)
+            .complexFilter([
+              "[0:a]volume=0.35[bg]",
+              "[1:a]volume=2.0[voc]",
+              "[bg][voc]amix=inputs=2:duration=first[a]"
+            ])
+            .outputOptions(["-map", "[a]", "-c:a", "libmp3lame", "-b:a", "192k"])
+            .save(outputPath)
+            .on("end", resolve)
+            .on("error", (err) => {
+              console.error("[Google Lyria AI Music] FFmpeg blend error:", err.message);
+              reject(err);
+            });
+        });
+
+        await fsPromises.unlink(bgWavPath).catch(() => {});
+        await fsPromises.unlink(vocalPath).catch(() => {});
+      } else {
+        // Transcode Lyria WAV to 192kbps MP3
+        await new Promise((resolve, reject) => {
+          ffmpeg(bgWavPath)
+            .audioCodec("libmp3lame")
+            .audioBitrate("192k")
+            .save(outputPath)
+            .on("end", resolve)
+            .on("error", reject);
+        });
+        await fsPromises.unlink(bgWavPath).catch(() => {});
+      }
+
+      console.log(`[Google Lyria AI Music] Successfully produced song: ${outputFilename} (${trackDuration}s)`);
+      return {
+        audioUrl: `http://localhost:${env.port}/uploads/${outputFilename}`,
+        durationSeconds: trackDuration
+      };
+    } catch (err) {
+      console.warn(`[Google Lyria AI Music] Lyria generation error, falling back to Google Cloud TTS synth:`, err.message);
+      return googleTtsSynth.generateMusic({ lyrics, genre, durationSeconds });
+    }
+  }
+}
+
+const googleLyriaSynth = new GoogleLyriaMusicAdapter();
 const googleTtsSynth = new GoogleTtsMusicAdapter();
 const localSynth = new LocalSynthMusicAdapter();
 const sunoSynth = new SunoMusicAdapter();
 const elevenLabsSynth = new ElevenLabsMusicAdapter();
 
-export function getMusicProvider() {
-  if (env.musicProvider === "elevenlabs") return elevenLabsSynth;
-  if (env.musicProvider === "suno") return sunoSynth;
-  return googleTtsSynth;
+export function getMusicProvider(providerOverride) {
+  const chosen = (providerOverride || env.musicProvider || "google_lyria").toLowerCase();
+  if (chosen.includes("lyria") || chosen.includes("google_lyria")) return googleLyriaSynth;
+  if (chosen.includes("elevenlabs") || chosen.includes("eleven")) return elevenLabsSynth;
+  if (chosen.includes("suno")) return sunoSynth;
+  if (chosen.includes("tts")) return googleTtsSynth;
+  return googleLyriaSynth;
 }

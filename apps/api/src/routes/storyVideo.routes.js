@@ -11,6 +11,7 @@ import { Video } from "../models/Video.js";
 import { GenerationJob } from "../models/GenerationJob.js";
 import { analyzeStoryWithGemini, generateLyricsWithGemini, generateSceneImageWithGemini } from "../services/providers/gemini.provider.js";
 import { getMusicProvider } from "../services/music/index.js";
+import { getVideoProvider } from "../services/video/index.js";
 import { getStorageProvider } from "../services/storage/index.js";
 import { processVideoRenderJob } from "../workers/index.js";
 
@@ -106,7 +107,7 @@ storyVideoRouter.post("/projects/:id/analyze", async (req, res, next) => {
 // 5. Generate AI Lyrics & Synth Audio Track
 storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
   try {
-    const { genre } = req.body;
+    const { genre, musicProvider } = req.body;
     const project = await Project.findById(req.params.id).populate("activeStoryAnalysisId");
     if (!project || !project.activeStoryAnalysisId) {
       return res.status(400).json({ message: "Project must be analyzed first" });
@@ -115,11 +116,17 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
     const targetGenre = genre || project.activeStoryAnalysisId.suggestedGenres?.[0] || "Pop";
     const lyricsText = await generateLyricsWithGemini(project.activeStoryAnalysisId.summary, targetGenre);
 
-    const musicEngine = getMusicProvider();
+    const providerToUse = musicProvider || "google_lyria";
+    const musicEngine = getMusicProvider(providerToUse);
     const wordCount = lyricsText.split(/\s+/).filter(Boolean).length;
     const lyricsDurationSeconds = Math.max(30, Math.min(90, Math.ceil(wordCount / 2.2)));
 
-    const audioResult = await musicEngine.generateMusic({ lyrics: lyricsText, genre: targetGenre, durationSeconds: lyricsDurationSeconds });
+    const audioResult = await musicEngine.generateMusic({
+      lyrics: lyricsText,
+      genre: targetGenre,
+      durationSeconds: lyricsDurationSeconds,
+      mood: project.activeStoryAnalysisId.mood || "Upbeat"
+    });
 
     const songDoc = await Song.create({
       projectId: project._id,
@@ -128,6 +135,7 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
       mood: project.activeStoryAnalysisId.mood || "Upbeat",
       audioUrl: audioResult.audioUrl,
       durationSeconds: audioResult.durationSeconds,
+      provider: providerToUse,
       status: "ready"
     });
 
@@ -266,6 +274,124 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
     await project.save();
 
     res.json(storyboardDoc);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 8b. Generate Google Veo AI Motion Video Clip for an Individual Scene
+storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/veo", async (req, res, next) => {
+  try {
+    const { id, sceneIndex } = req.params;
+    const project = await Project.findById(id).populate({
+      path: "activeStoryboardId",
+      populate: { path: "scenes.mediaId" }
+    });
+
+    if (!project || !project.activeStoryboardId) {
+      return res.status(400).json({ message: "Project must have a storyboard generated first" });
+    }
+
+    const storyboard = project.activeStoryboardId;
+    const idx = parseInt(sceneIndex, 10);
+    const scene = storyboard.scenes[idx];
+    if (!scene) {
+      return res.status(404).json({ message: `Scene at index ${sceneIndex} not found` });
+    }
+
+    const promptText = req.body.prompt || scene.captionText || "Cinematic celebratory scene with lively motion and atmospheric lighting";
+    const sourceImageUrl = scene.mediaId?.fileUrl || null;
+
+    console.log(`[API Story Video] Generating Google Veo video clip for Scene ${scene.sceneNumber}: "${promptText.slice(0, 60)}..."`);
+
+    const videoEngine = getVideoProvider("google_veo");
+    const videoUrl = await videoEngine.generateSceneVideoClip({
+      imageUrl: sourceImageUrl,
+      promptText,
+      durationSeconds: 4
+    });
+
+    if (!videoUrl || !videoUrl.endsWith(".mp4")) {
+      return res.status(500).json({ message: "Google Veo was unable to generate a video clip for this scene" });
+    }
+
+    const mediaDoc = await Media.create({
+      projectId: project._id,
+      fileUrl: videoUrl,
+      mediaType: "video",
+      originalFilename: `veo_scene_${scene.sceneNumber}.mp4`,
+      durationSeconds: 4
+    });
+
+    scene.mediaId = mediaDoc._id;
+    await storyboard.save();
+
+    res.json({
+      message: "Google Veo motion video clip generated successfully",
+      sceneNumber: scene.sceneNumber,
+      media: mediaDoc,
+      videoUrl
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 8c. Generate Google Veo AI Motion Video Clips for All Scenes
+storyVideoRouter.post("/projects/:id/scenes/generate-all-veo", async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const project = await Project.findById(id).populate({
+      path: "activeStoryboardId",
+      populate: { path: "scenes.mediaId" }
+    });
+
+    if (!project || !project.activeStoryboardId) {
+      return res.status(400).json({ message: "Project must have a storyboard generated first" });
+    }
+
+    const storyboard = project.activeStoryboardId;
+    const videoEngine = getVideoProvider("google_veo");
+    const results = [];
+
+    for (let i = 0; i < storyboard.scenes.length; i++) {
+      const scene = storyboard.scenes[i];
+      if (scene.mediaId?.mediaType === "video") {
+        results.push({ sceneNumber: scene.sceneNumber, status: "already_video", videoUrl: scene.mediaId.fileUrl });
+        continue;
+      }
+
+      const promptText = scene.captionText || "Cinematic celebration moment";
+      const sourceImageUrl = scene.mediaId?.fileUrl || null;
+
+      try {
+        const videoUrl = await videoEngine.generateSceneVideoClip({
+          imageUrl: sourceImageUrl,
+          promptText,
+          durationSeconds: 4
+        });
+
+        if (videoUrl && videoUrl.endsWith(".mp4")) {
+          const mediaDoc = await Media.create({
+            projectId: project._id,
+            fileUrl: videoUrl,
+            mediaType: "video",
+            originalFilename: `veo_scene_${scene.sceneNumber}.mp4`,
+            durationSeconds: 4
+          });
+          scene.mediaId = mediaDoc._id;
+          results.push({ sceneNumber: scene.sceneNumber, status: "generated", videoUrl });
+        } else {
+          results.push({ sceneNumber: scene.sceneNumber, status: "fallback_image" });
+        }
+      } catch (clipErr) {
+        console.error(`Veo generation failed for scene ${scene.sceneNumber}:`, clipErr.message);
+        results.push({ sceneNumber: scene.sceneNumber, status: "error", error: clipErr.message });
+      }
+    }
+
+    await storyboard.save();
+    res.json({ message: "Veo generation completed for scenes", results });
   } catch (err) {
     next(err);
   }

@@ -18,13 +18,14 @@ export const env = {
   // AI Story-to-Video Configurable Providers
   storageProvider: process.env.STORAGE_PROVIDER || "local", // "local" | "s3"
   queueProvider: process.env.QUEUE_PROVIDER || "memory",    // "memory" | "redis"
-  musicProvider: process.env.MUSIC_PROVIDER || "google_tts", // "google_tts" | "local_synth" | "suno" | "replicate"
+  musicProvider: process.env.MUSIC_PROVIDER || "google_lyria", // "google_lyria" | "elevenlabs" | "suno" | "google_tts"
   videoProvider: process.env.VIDEO_PROVIDER || "google_veo", // "google_veo" | "local_ffmpeg" | "replicate" | "runway"
   llmProvider: process.env.LLM_PROVIDER || "gemini",        // "gemini" | "openai"
 
   // Service API Keys & Config
   geminiApiKey: process.env.GEMINI_API_KEY || "",
-  googleCloudProject: process.env.GOOGLE_CLOUD_PROJECT || "",
+  googleCloudProject: process.env.GOOGLE_CLOUD_PROJECT || "project-2a1614a0-3389-4a26-8d4",
+  googleCloudLocation: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
   redisUrl: process.env.REDIS_URL || "redis://127.0.0.1:6379",
   s3Bucket: process.env.S3_BUCKET || "ai-story-media",
   s3Region: process.env.S3_REGION || "us-east-1",

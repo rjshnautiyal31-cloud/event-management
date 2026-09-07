@@ -3,16 +3,33 @@ import path from "path";
 import fs from "fs/promises";
 import { env } from "../../config/env.js";
 
+import fsSync from "fs";
+
 function getGeminiClient() {
-  if (!env.geminiApiKey || env.geminiApiKey.includes("your_gemini_api_key_here")) {
-    return null;
+  const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
+  if (fsSync.existsSync(keyFilename)) {
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
+    return {
+      ai: new GoogleGenAI({
+        vertexai: true,
+        project: env.googleCloudProject || "project-2a1614a0-3389-4a26-8d4",
+        location: "us-central1"
+      }),
+      modelName: "gemini-2.5-flash"
+    };
   }
-  return new GoogleGenAI({ apiKey: env.geminiApiKey });
+  if (env.geminiApiKey && !env.geminiApiKey.includes("your_gemini_api_key_here")) {
+    return {
+      ai: new GoogleGenAI({ apiKey: env.geminiApiKey }),
+      modelName: "gemini-3.6-flash"
+    };
+  }
+  return null;
 }
 
-// 1. Analyze Story Narrative with Gemini 2.5 Flash
+// 1. Analyze Story Narrative with Gemini Flash
 export async function analyzeStoryWithGemini(storyText) {
-  const ai = getGeminiClient();
+  const clientInfo = getGeminiClient();
 
   const mockAnalysis = {
     summary: storyText.slice(0, 200) + "...",
@@ -27,13 +44,16 @@ export async function analyzeStoryWithGemini(storyText) {
     ]
   };
 
-  if (!ai) return mockAnalysis;
+  if (!clientInfo) return mockAnalysis;
 
   try {
-    const prompt = `Analyze the following event story for an AI music video project. Provide a concise summary, emotional arc, key themes, mood, and a list of detailed visual prompts for scene image generation (photorealistic 16:9 cinematic descriptions) with duration estimates:\n\n${storyText}`;
+    const prompt = `Analyze the following event story for an AI music video project.
+Provide a concise summary (max 3 sentences), emotional arc (3 stages), 3 key themes, mood, and exactly 4 to 6 key visual moments for scene image generation (photorealistic 16:9 cinematic descriptions) with duration estimates (5-8 seconds each):
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
+${storyText.slice(0, 5000)}`;
+
+    const response = await clientInfo.ai.models.generateContent({
+      model: clientInfo.modelName,
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -70,19 +90,19 @@ export async function analyzeStoryWithGemini(storyText) {
   }
 }
 
-// 2. Generate Structured Song Lyrics with Gemini 2.5 Flash
+// 2. Generate Structured Song Lyrics with Gemini Flash
 export async function generateLyricsWithGemini(storySummary, targetGenre) {
-  const ai = getGeminiClient();
+  const clientInfo = getGeminiClient();
 
   const mockLyrics = `[Verse 1]\nGathered here today in light\nMemories so clear and bright\n\n[Chorus]\nThis is our event, our time to shine\nShared moments forever divine\n\n[Outro]\nTogether as one.`;
 
-  if (!ai) return mockLyrics;
+  if (!clientInfo) return mockLyrics;
 
   try {
     const prompt = `Write structured song lyrics (Verse 1, Chorus, Verse 2, Chorus, Outro) based on this story summary: "${storySummary}". Genre style: ${targetGenre}. Keep lines rhythmically balanced for singing.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
+    const response = await clientInfo.ai.models.generateContent({
+      model: clientInfo.modelName,
       contents: prompt
     });
 
@@ -93,7 +113,80 @@ export async function generateLyricsWithGemini(storySummary, targetGenre) {
   }
 }
 
-// 3. Generate Cinematic Visual Scene Images using Gemini Imagen 3 with Free AI Fallback
+// 3. Generate Synchronized Chronological Storyboard from Song Lyrics & Duration
+export async function generateStoryboardFromLyrics({ storyContext = "", lyrics = "", totalDurationSeconds = 30, targetSceneDuration = 6 }) {
+  const clientInfo = getGeminiClient();
+
+  const fallbackSceneCount = Math.max(3, Math.round(totalDurationSeconds / targetSceneDuration));
+  const fallbackSceneDuration = Math.round(totalDurationSeconds / fallbackSceneCount);
+  const fallbackScenes = Array.from({ length: fallbackSceneCount }, (_, i) => ({
+    sceneNumber: i + 1,
+    startTimeSeconds: i * fallbackSceneDuration,
+    endTimeSeconds: i === fallbackSceneCount - 1 ? totalDurationSeconds : (i + 1) * fallbackSceneDuration,
+    durationSeconds: i === fallbackSceneCount - 1 ? totalDurationSeconds - (i * fallbackSceneDuration) : fallbackSceneDuration,
+    lyricSnippet: `Part ${i + 1}`,
+    visualIdea: `Cinematic wide angle shot illustrating scene ${i + 1}, photorealistic 16:9, dramatic lighting`
+  }));
+
+  if (!clientInfo || !lyrics) return fallbackScenes;
+
+  try {
+    const prompt = `You are an expert music video director.
+Total Audio Song Duration: ${totalDurationSeconds} seconds.
+Story context: "${storyContext.slice(0, 500)}"
+Song lyrics:
+"""
+${lyrics}
+"""
+
+Create a chronological sequence of distinct visual scenes synchronized with the song:
+1. Divide the entire song timeline (${totalDurationSeconds} seconds) into sequential, non-overlapping scenes.
+2. Each scene should be between 5 and 7 seconds long (matching standard AI video clips of ~5-6s duration, so video clips never need to repeat!).
+3. Assign the exact matching lyric lines sung during that time window to each scene.
+4. For every scene, write a rich, unique, non-repetitive visual prompt for AI video generation (16:9 widescreen, photorealistic cinematic camera movement, specific lighting and environment reflecting the emotion of those lyrics).
+5. Absolutely avoid repeating actions or visual settings across scenes. Each scene must advance the visual story.
+6. The first scene must start at startTimeSeconds = 0, and the last scene must end at endTimeSeconds = ${totalDurationSeconds}.
+
+Return a JSON array of scenes.`;
+
+    const response = await clientInfo.ai.models.generateContent({
+      model: clientInfo.modelName,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              sceneNumber: { type: Type.INTEGER },
+              startTimeSeconds: { type: Type.NUMBER },
+              endTimeSeconds: { type: Type.NUMBER },
+              durationSeconds: { type: Type.NUMBER },
+              lyricSnippet: { type: Type.STRING },
+              visualIdea: { type: Type.STRING }
+            },
+            required: ["sceneNumber", "startTimeSeconds", "endTimeSeconds", "durationSeconds", "lyricSnippet", "visualIdea"]
+          }
+        }
+      }
+    });
+
+    const cleanJson = (response.text || "").replace(/```json/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleanJson);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      parsed[0].startTimeSeconds = 0;
+      parsed[parsed.length - 1].endTimeSeconds = totalDurationSeconds;
+      return parsed;
+    }
+    return fallbackScenes;
+  } catch (err) {
+    console.warn("Gemini storyboard generation failed, using fallback:", err.message);
+    return fallbackScenes;
+  }
+}
+
+// 4. Generate Cinematic Visual Scene Images using Gemini Imagen 3 with Free AI Fallback
 export async function generateSceneImageWithGemini(visualPrompt) {
   const ai = getGeminiClient();
 

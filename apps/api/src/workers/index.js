@@ -61,18 +61,79 @@ function createSolidBmpBuffer(width = 800, height = 600, colorHex = "0A2D59") {
   return buffer;
 }
 
-export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], audioPath = null) {
+export const VIDEO_PRESETS = {
+  "1080p": {
+    id: "1080p",
+    name: "Desktop Full HD (1080p)",
+    shortLabel: "1080p Full HD",
+    device: "desktop",
+    width: 1920,
+    height: 1080,
+    aspectRatio: "16:9",
+    bitrate: "6000k",
+    description: "Crisp 1080p Full HD for monitors, projectors & presentations"
+  },
+  "720p": {
+    id: "720p",
+    name: "Desktop HD (720p)",
+    shortLabel: "720p HD",
+    device: "desktop",
+    width: 1280,
+    height: 720,
+    aspectRatio: "16:9",
+    bitrate: "3500k",
+    description: "Fast-rendering standard 720p HD"
+  },
+  "mobile": {
+    id: "mobile",
+    name: "Mobile Portrait (9:16)",
+    shortLabel: "Mobile (9:16)",
+    device: "mobile",
+    width: 1080,
+    height: 1920,
+    aspectRatio: "9:16",
+    bitrate: "4500k",
+    description: "Vertical 9:16 for smartphones, Instagram Reels & TikTok"
+  },
+  "tablet": {
+    id: "tablet",
+    name: "Tablet Display (4:3)",
+    shortLabel: "Tablet (4:3)",
+    device: "tablet",
+    width: 1440,
+    height: 1080,
+    aspectRatio: "4:3",
+    bitrate: "4500k",
+    description: "4:3 aspect ratio tailored for iPad & tablet screens"
+  },
+  "square": {
+    id: "square",
+    name: "Social Square (1:1)",
+    shortLabel: "Square (1:1)",
+    device: "square",
+    width: 1080,
+    height: 1080,
+    aspectRatio: "1:1",
+    bitrate: "4000k",
+    description: "Square 1:1 format for social media feeds"
+  }
+};
+
+export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], audioPath = null, options = {}) {
   const dbJob = await GenerationJob.findById(jobId);
   if (!dbJob) return;
+
+  const presetKey = options.preset || options.resolution || "1080p";
+  const preset = VIDEO_PRESETS[presetKey] || VIDEO_PRESETS["1080p"];
 
   try {
     dbJob.status = "processing";
     dbJob.progressPercent = 15;
-    dbJob.currentStepMessage = "Fetching project song track, storyboard, and media timeline...";
+    dbJob.currentStepMessage = `Preparing ${preset.name} (${preset.width}x${preset.height}) render pipeline...`;
     await dbJob.save();
 
     const timestamp = Date.now();
-    const outputFilename = `rendered_video_${timestamp}.mp4`;
+    const outputFilename = `rendered_video_${presetKey}_${timestamp}.mp4`;
     const uploadDir = path.join(process.cwd(), "uploads");
     await fs.mkdir(uploadDir, { recursive: true });
     const tempOutputPath = path.join(uploadDir, outputFilename);
@@ -107,8 +168,24 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       }));
     }
 
-    // Distribute scene durations so that sum(scenes.duration) EXACTLY equals targetSongDuration
-    const perSceneDuration = Number((targetSongDuration / rawScenes.length).toFixed(2));
+    // Calculate durations from storyboard scene timestamps if available, or divide equally
+    const hasExplicitDurations = rawScenes.every(s => typeof s.startTimeSeconds === "number" && typeof s.endTimeSeconds === "number" && s.endTimeSeconds > s.startTimeSeconds);
+
+    let rawDurations = [];
+    if (hasExplicitDurations && rawScenes.length > 0) {
+      rawDurations = rawScenes.map(s => Math.max(1, s.endTimeSeconds - s.startTimeSeconds));
+      const totalRaw = rawDurations.reduce((a, b) => a + b, 0);
+      const ratio = targetSongDuration / totalRaw;
+      rawDurations = rawDurations.map(d => Number((d * ratio).toFixed(2)));
+    } else {
+      const perSceneDuration = Number((targetSongDuration / Math.max(1, rawScenes.length)).toFixed(2));
+      rawDurations = Array.from({ length: rawScenes.length }, () => perSceneDuration);
+    }
+
+    if (rawDurations.length > 0) {
+      const sumExceptLast = rawDurations.slice(0, -1).reduce((a, b) => a + b, 0);
+      rawDurations[rawDurations.length - 1] = Math.max(1, Number((targetSongDuration - sumExceptLast).toFixed(2)));
+    }
 
     const scenesToRender = rawScenes.map((scene, idx) => {
       let imgPath = null;
@@ -122,15 +199,10 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
         imgPath = path.join(uploadDir, path.basename(mediaDoc.fileUrl));
       }
 
-      // Last scene absorbs remaining rounding difference
-      const duration = (idx === rawScenes.length - 1)
-        ? Number((targetSongDuration - (perSceneDuration * (rawScenes.length - 1))).toFixed(2))
-        : perSceneDuration;
-
       return {
         sceneNumber: scene.sceneNumber || idx + 1,
-        duration: Math.max(1, duration),
-        captionText: scene.captionText || `Scene ${idx + 1}`,
+        duration: Math.max(1, rawDurations[idx] || 5),
+        captionText: scene.captionText || scene.lyricSnippet || `Scene ${idx + 1}`,
         imgPath
       };
     });
@@ -165,7 +237,7 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     console.log("[Video Worker] Target song duration:", targetSongDuration);
     console.log("[Video Worker] scenesToRender:", JSON.stringify(scenesToRender, null, 2));
 
-    // Render standardized 1280x720 scene MP4 segments for images & video clips
+    // Render standardized scene MP4 segments matching the selected resolution preset
     const segmentPaths = [];
     for (let index = 0; index < scenesToRender.length; index++) {
       const scene = scenesToRender[index];
@@ -173,18 +245,18 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       const srcPath = scene.imgPath;
       const isVideo = [".mp4", ".webm", ".mov", ".mkv", ".avi"].includes(path.extname(srcPath || "").toLowerCase());
 
-      console.log(`[Video Worker] Rendering segment ${index}: isVideo=${isVideo}, srcPath=${srcPath}, duration=${scene.duration}`);
+      console.log(`[Video Worker] Rendering segment ${index} (${preset.width}x${preset.height}): isVideo=${isVideo}, srcPath=${srcPath}, duration=${scene.duration}`);
 
       await new Promise((resolve, reject) => {
         const cmd = ffmpeg();
         if (isVideo) {
-          cmd.input(srcPath).inputOptions(["-ss", "0", "-t", String(scene.duration)]);
+          cmd.input(srcPath).inputOptions(["-stream_loop", "-1", "-t", String(scene.duration)]);
         } else {
           cmd.input(srcPath).inputOptions(["-loop", "1", "-t", String(scene.duration)]);
         }
 
         cmd.outputOptions([
-          "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+          "-vf", `scale=${preset.width}:${preset.height}:force_original_aspect_ratio=decrease,pad=${preset.width}:${preset.height}:(ow-iw)/2:(oh-ih)/2:black,format=yuv420p`,
           "-r", "25",
           "-an",
           "-c:v", "libx264",
@@ -212,7 +284,7 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     await fs.writeFile(concatListPath, concatContent);
 
     dbJob.progressPercent = 50;
-    dbJob.currentStepMessage = "Stitching image & video clip scene segments with song audio...";
+    dbJob.currentStepMessage = `Stitching scene segments with song audio into ${preset.name}...`;
     await dbJob.save();
 
     const command = ffmpeg()
@@ -224,7 +296,8 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       command
         .outputOptions([
           "-c:v", "libx264",
-          "-preset", "ultrafast",
+          "-preset", "veryfast",
+          "-b:v", preset.bitrate,
           "-c:a", "aac",
           "-b:a", "192k",
           "-t", String(targetSongDuration)
@@ -232,7 +305,7 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
         .save(tempOutputPath)
         .on("progress", async (p) => {
           dbJob.progressPercent = Math.min(95, Math.max(50, Math.round(p.percent || 60)));
-          dbJob.currentStepMessage = "Encoding high-definition H.264 video stream...";
+          dbJob.currentStepMessage = `Encoding ${preset.name} H.264 video stream...`;
           await dbJob.save();
         })
         .on("end", resolve)
@@ -251,7 +324,9 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       projectId,
       videoUrl: publicUrl,
       durationSeconds: targetSongDuration,
-      resolution: "720p"
+      resolution: `${preset.width}x${preset.height} (${preset.shortLabel})`,
+      aspectRatio: preset.aspectRatio,
+      preset: presetKey
     });
 
     dbJob.status = "completed";

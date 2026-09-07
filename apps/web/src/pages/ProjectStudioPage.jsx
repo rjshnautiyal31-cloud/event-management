@@ -36,9 +36,32 @@ export function ProjectStudioPage({ auth, token: propToken }) {
   const [activeJob, setActiveJob] = useState(null);
   const [rendering, setRendering] = useState(false);
 
+  // Video Resolution Presets State
+  const [selectedPreset, setSelectedPreset] = useState("1080p");
+  const [videoPresets, setVideoPresets] = useState({
+    "1080p": { id: "1080p", name: "Desktop Full HD (1080p)", shortLabel: "1080p Full HD", width: 1920, height: 1080, aspectRatio: "16:9", bitrate: "6000k", description: "Crisp 1080p Full HD for monitors, projectors & presentations", icon: "🖥️" },
+    "720p": { id: "720p", name: "Desktop HD (720p)", shortLabel: "720p HD", width: 1280, height: 720, aspectRatio: "16:9", bitrate: "3500k", description: "Fast-rendering standard 720p HD", icon: "💻" },
+    "mobile": { id: "mobile", name: "Mobile Vertical (9:16)", shortLabel: "Mobile (9:16)", width: 1080, height: 1920, aspectRatio: "9:16", bitrate: "4500k", description: "Vertical 9:16 for smartphones, Reels & TikTok", icon: "📱" },
+    "tablet": { id: "tablet", name: "Tablet Display (4:3)", shortLabel: "Tablet (4:3)", width: 1440, height: 1080, aspectRatio: "4:3", bitrate: "4500k", description: "4:3 aspect ratio tailored for iPad & tablet screens", icon: "📲" },
+    "square": { id: "square", name: "Social Square (1:1)", shortLabel: "Square (1:1)", width: 1080, height: 1080, aspectRatio: "1:1", bitrate: "4000k", description: "Square 1:1 format for social media feeds", icon: "🔲" }
+  });
+
   useEffect(() => {
     loadEvents();
+    loadVideoPresets();
   }, []);
+
+  async function loadVideoPresets() {
+    try {
+      const data = await api("/api/story-video/video-presets", { token });
+      if (data?.presets) {
+        setVideoPresets(prev => ({
+          ...prev,
+          ...data.presets
+        }));
+      }
+    } catch (_) {}
+  }
 
   useEffect(() => {
     if (selectedEventId) {
@@ -119,7 +142,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     if (!activeProject) return;
     setLoading(true);
     setError("");
-    setSuccess("");
+    setSuccess("Analyzing story narrative and key scenes with Gemini AI (~10-15s)...");
     try {
       const analysis = await api(`/api/story-video/projects/${activeProject._id}/analyze`, {
         token,
@@ -143,8 +166,8 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     setError("");
     setSuccess("");
     try {
-      const providerLabel = selectedMusicProvider === "google_lyria" ? "Google Lyria" : selectedMusicProvider === "elevenlabs" ? "ElevenLabs" : selectedMusicProvider === "suno" ? "Suno AI" : "Google Cloud TTS";
-      setSuccess(`🎵 Synthesizing song with ${providerLabel}... Please wait.`);
+      const providerLabel = selectedMusicProvider === "google_lyria" ? "Google Lyria 3 Pro" : selectedMusicProvider === "elevenlabs" ? "ElevenLabs" : selectedMusicProvider === "suno" ? "Suno AI" : "Google Cloud TTS";
+      setSuccess(`🎵 Composing full studio song with ${providerLabel} (~60-90s)... Generating singing vocals, acoustics & melody.`);
 
       await api(`/api/story-video/projects/${activeProject._id}/lyrics`, {
         token,
@@ -166,14 +189,14 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     if (!activeProject) return;
     setGeneratingVeoSceneIdx(sceneIndex);
     setError("");
-    setSuccess(`🎬 Generating Google Veo 3.1 motion video for Scene ${sceneIndex + 1}... Rendering takes ~20-35s.`);
+    setSuccess(`🎬 Generating Gemini Omni 1.1 Flash motion video for Scene ${sceneIndex + 1}... (~30-35s)`);
     try {
       await api(`/api/story-video/projects/${activeProject._id}/scenes/${sceneIndex}/veo`, {
         token,
         method: "POST",
         body: { prompt: customPrompt }
       });
-      setSuccess(`🎉 Google Veo motion video clip ready for Scene ${sceneIndex + 1}!`);
+      setSuccess(`🎉 Gemini Omni 1.1 motion video clip ready for Scene ${sceneIndex + 1}!`);
       const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
       setActiveProject(updated);
       await loadMediaItems(activeProject._id);
@@ -188,13 +211,13 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     if (!activeProject) return;
     setGeneratingAllVeo(true);
     setError("");
-    setSuccess("🎬 Generating Google Veo 3.1 motion clips for storyboard scenes in background...");
+    setSuccess("🎬 Generating Gemini Omni 1.1 Flash motion video clips for all scenes (~30-40s per scene)...");
     try {
       const res = await api(`/api/story-video/projects/${activeProject._id}/scenes/generate-all-veo`, {
         token,
         method: "POST"
       });
-      setSuccess(`🎉 Google Veo video generation completed for storyboard scenes!`);
+      setSuccess(`🎉 Gemini Omni 1.1 motion video clips generated for all storyboard scenes!`);
       const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
       setActiveProject(updated);
       await loadMediaItems(activeProject._id);
@@ -263,14 +286,15 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     setLoading(true);
     setError("");
     try {
-      await api(`/api/story-video/projects/${activeProject._id}/storyboard`, {
+      const res = await api(`/api/story-video/projects/${activeProject._id}/storyboard`, {
         token,
-        method: "POST"
+        method: "POST",
+        body: { targetSceneDuration: 6 }
       });
-      setSuccess("Storyboard timeline generated!");
+      setSuccess(`🎉 Storyboard synchronized! Created ${res.scenes?.length || 0} lyric-aligned scenes (~5-6s each) matching your song's duration.`);
       const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
       setActiveProject(updated);
-      setActiveTab("render");
+      setActiveTab("storyboard");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -286,10 +310,11 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     try {
       const { jobId } = await api(`/api/story-video/projects/${activeProject._id}/render`, {
         token,
-        method: "POST"
+        method: "POST",
+        body: { resolutionPreset: selectedPreset }
       });
 
-      setSuccess("Video rendering task queued...");
+      setSuccess(`Video rendering queued for ${videoPresets[selectedPreset]?.shortLabel || selectedPreset}...`);
       pollJobStatus(jobId);
     } catch (err) {
       setError(err.message);
@@ -499,7 +524,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                           onChange={(e) => setSelectedMusicProvider(e.target.value)}
                           className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold bg-white focus:ring-2 focus:ring-[#0A2D59]"
                         >
-                          <option value="google_lyria">🌟 Google DeepMind Lyria 2 (Vertex AI - 48kHz Studio Quality)</option>
+                          <option value="google_lyria">🌟 Google DeepMind Lyria 3 Pro (Full Vocals & Song - Studio Quality)</option>
                           <option value="elevenlabs">🎵 ElevenLabs Music Synthesis</option>
                           <option value="suno">🎸 Suno AI Music</option>
                           <option value="google_tts">🔊 Google Cloud Neural2 TTS + Rhythm Synth</option>
@@ -634,8 +659,17 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                 <div className="space-y-6">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <h3 className="font-bold text-slate-900 text-sm">Scene Storyboard & Timeline</h3>
-                      <p className="text-xs text-slate-500 mt-0.5">Maps story key moments to uploaded event photos, video clips, and Google Veo motion clips.</p>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-slate-900 text-sm">Scene Storyboard & Lyric Timeline</h3>
+                        {activeProject.activeSongId && (
+                          <span className="bg-indigo-100 text-indigo-800 text-[11px] font-bold px-2 py-0.5 rounded-full border border-indigo-200">
+                            🎵 {activeProject.activeSongId.durationSeconds || 30}s Audio • {activeProject.activeStoryboardId?.scenes?.length || 0} Scenes (~5-6s each)
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Each scene is synchronized to the song lyrics with natural 5-6s cuts matching AI motion video duration so clips never repeat.
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -646,12 +680,12 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                         {generatingAllVeo ? (
                           <>
                             <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                            Generating Veo Motion Clips...
+                            Generating Omni Video Clips...
                           </>
                         ) : (
                           <>
                             <span>✨</span>
-                            Generate Google Veo Clips (All Scenes)
+                            Generate Gemini Omni Video Clips (All Scenes)
                           </>
                         )}
                       </button>
@@ -660,49 +694,77 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                         disabled={loading}
                         className="bg-[#0A2D59] text-white font-bold px-4 py-2 rounded-xl text-xs shadow hover:bg-slate-800 transition"
                       >
-                        {loading ? "Generating Storyboard..." : "Generate Scene Storyboard"}
+                        {loading ? "Synchronizing Storyboard..." : "🎵 Sync Storyboard with Song Lyrics"}
                       </button>
                     </div>
                   </div>
 
                   {activeProject.activeStoryboardId && (
                     <div className="space-y-4">
+                      {activeProject.activeStoryboardId.scenes?.some(s => {
+                        const m = mediaItems.find(item => item._id === s.mediaId || item._id === s.mediaId?._id);
+                        return !m || (m.mediaType !== "video" && ![".mp4", ".webm", ".mov"].some(ext => m.fileUrl?.toLowerCase().endsWith(ext)));
+                      }) && (
+                        <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-xl text-xs flex items-center justify-between gap-3 shadow-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">💡</span>
+                            <span>
+                              <strong>Pro Tip:</strong> Your scenes currently use static image frames. Click <strong className="text-indigo-800 font-bold">"Generate Gemini Omni Video Clips (All Scenes)"</strong> to render real motion video for each lyric-aligned scene without any looping!
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {activeProject.activeStoryboardId.scenes?.map((scene, idx) => {
                           const media = mediaItems.find(m => m._id === scene.mediaId || m._id === scene.mediaId?._id) || mediaItems[idx % mediaItems.length];
                           const isVideoMedia = media && (media.mediaType === "video" || [".mp4", ".webm", ".mov"].some(ext => media.fileUrl?.toLowerCase().endsWith(ext)));
+                          const sceneDuration = Math.max(1, Math.round((scene.endTimeSeconds || 5) - (scene.startTimeSeconds || 0)));
 
                           return (
                             <div key={idx} className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between">
                               {media ? (
-                                <div className="h-40 bg-slate-200 overflow-hidden relative">
+                                <div className="h-44 bg-slate-200 overflow-hidden relative">
                                   {isVideoMedia ? (
                                     <video src={media.fileUrl} className="w-full h-full object-cover" muted loop autoPlay controls />
                                   ) : (
                                     <img src={media.fileUrl} alt="scene media" className="w-full h-full object-cover" />
                                   )}
-                                  <div className="absolute top-2 left-2 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">
-                                    Scene {scene.sceneNumber} • {scene.startTimeSeconds}s - {scene.endTimeSeconds}s {isVideoMedia ? "🎬 Google Veo Video" : "📷 Photo"}
+                                  <div className="absolute top-2 left-2 bg-slate-900/85 text-white text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1.5 shadow">
+                                    <span>Scene {scene.sceneNumber}</span>
+                                    <span>•</span>
+                                    <span>{scene.startTimeSeconds}s - {scene.endTimeSeconds}s ({sceneDuration}s)</span>
+                                    <span>•</span>
+                                    <span>{isVideoMedia ? "🎬 Video" : "📷 Photo"}</span>
                                   </div>
                                 </div>
                               ) : (
-                                <div className="h-40 bg-slate-100 flex items-center justify-center text-slate-400 text-xs font-medium">
-                                  Fallback Cover Image
+                                <div className="h-44 bg-slate-100 flex items-center justify-center text-slate-400 text-xs font-medium">
+                                  Scene {scene.sceneNumber} Frame
                                 </div>
                               )}
-                              <div className="p-3.5 space-y-2">
+                              <div className="p-3.5 space-y-2.5">
+                                {scene.lyricSnippet && (
+                                  <div className="bg-indigo-50/80 border border-indigo-200/70 p-2.5 rounded-xl">
+                                    <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider block flex items-center gap-1">
+                                      <span>🎵</span> Song Lyrics
+                                    </span>
+                                    <p className="text-xs font-semibold text-indigo-950 italic mt-0.5">"{scene.lyricSnippet}"</p>
+                                  </div>
+                                )}
+
                                 <div>
-                                  <div className="font-bold text-xs text-slate-800">Visual Caption:</div>
-                                  <p className="text-xs text-slate-600 line-clamp-2">{scene.captionText}</p>
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">🎬 Visual Action</span>
+                                  <p className="text-xs text-slate-700 line-clamp-2 mt-0.5">{scene.visualPrompt || scene.captionText}</p>
                                 </div>
 
                                 {isVideoMedia ? (
                                   <div className="py-1 px-2.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between text-xs text-blue-800 font-semibold">
                                     <span className="flex items-center gap-1">
-                                      <span>✨</span> Google Veo Motion Active
+                                      <span>✨</span> Gemini Omni Video Active
                                     </span>
                                     <button
-                                      onClick={() => handleGenerateVeoScene(idx, scene.captionText)}
+                                      onClick={() => handleGenerateVeoScene(idx, scene.visualPrompt || scene.captionText)}
                                       disabled={generatingVeoSceneIdx === idx}
                                       className="text-[11px] text-blue-600 hover:text-blue-900 underline font-bold"
                                     >
@@ -711,18 +773,18 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                                   </div>
                                 ) : (
                                   <button
-                                    onClick={() => handleGenerateVeoScene(idx, scene.captionText)}
+                                    onClick={() => handleGenerateVeoScene(idx, scene.visualPrompt || scene.captionText)}
                                     disabled={generatingVeoSceneIdx === idx || generatingAllVeo}
                                     className="w-full bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm flex items-center justify-center gap-1.5 transition disabled:opacity-50"
                                   >
                                     {generatingVeoSceneIdx === idx ? (
                                       <>
                                         <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                        Generating Veo Clip...
+                                        Generating Omni Video...
                                       </>
                                     ) : (
                                       <>
-                                        <span>✨</span> Convert to Google Veo Motion Clip
+                                        <span>✨</span> Convert to Gemini Omni Video
                                       </>
                                     )}
                                   </button>
@@ -740,44 +802,131 @@ export function ProjectStudioPage({ auth, token: propToken }) {
               {/* Tab 5: Render & Video Player */}
               {activeTab === "render" && (
                 <div className="space-y-6">
-                  <div className="bg-slate-900 text-white p-6 rounded-2xl space-y-5">
-                    <div className="flex items-center justify-between">
+                  <div className="bg-slate-900 text-white p-6 rounded-2xl space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div>
                         <h3 className="text-lg font-black flex items-center gap-2">🚀 Render Professional Event Video</h3>
                         <p className="text-xs text-slate-300 mt-1">
-                          Stitches photos, vocal audio track, and scene subtitles into a 720p HD MP4 video.
+                          Synthesize AI motion clips, vocal song audio, and synchronized scene captions into your chosen display format.
                         </p>
                       </div>
                       <button
                         onClick={handleTriggerRender}
                         disabled={rendering}
-                        className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-6 py-3 rounded-xl shadow text-sm transition"
+                        className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black px-6 py-3 rounded-xl shadow-lg text-sm transition shrink-0"
                       >
-                        {rendering ? "Rendering Video..." : "Start Video Render"}
+                        {rendering ? "Rendering Video..." : `Start Render (${videoPresets[selectedPreset]?.shortLabel || "Video"})`}
                       </button>
                     </div>
 
-                    {/* Pre-Render Specifications Summary */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 text-xs border-t border-slate-800">
-                      <div className="bg-slate-800/80 p-3 rounded-xl">
-                        <div className="text-slate-400 font-bold">Total Duration:</div>
-                        <div className="font-extrabold text-emerald-400 mt-0.5">
-                          {activeProject.activeStoryboardId?.scenes ? `${activeProject.activeStoryboardId.scenes.length * 5}s` : "30 Seconds"}
-                        </div>
+                    {/* Target Display Resolution Selector */}
+                    <div className="space-y-2.5 pt-2 border-t border-slate-800">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <span>📐</span> Choose Target Display & Resolution:
+                        </span>
+                        <span className="text-xs font-bold text-emerald-400">
+                          {videoPresets[selectedPreset]?.name} • {videoPresets[selectedPreset]?.aspectRatio}
+                        </span>
                       </div>
-                      <div className="bg-slate-800/80 p-3 rounded-xl">
-                        <div className="text-slate-400 font-bold">Scene Captions:</div>
-                        <div className="font-extrabold text-blue-400 mt-0.5">SRT Burned Subtitles</div>
-                      </div>
-                      <div className="bg-slate-800/80 p-3 rounded-xl">
-                        <div className="text-slate-400 font-bold">Audio Track:</div>
-                        <div className="font-extrabold text-amber-400 mt-0.5">Vocal Lyrics + Music</div>
-                      </div>
-                      <div className="bg-slate-800/80 p-3 rounded-xl">
-                        <div className="text-slate-400 font-bold">Resolution:</div>
-                        <div className="font-extrabold text-purple-400 mt-0.5">720p HD H.264 MP4</div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                        {Object.values(videoPresets).map((preset) => {
+                          const isSelected = selectedPreset === preset.id;
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => setSelectedPreset(preset.id)}
+                              className={`flex flex-col text-left p-3.5 rounded-xl border transition-all ${
+                                isSelected
+                                  ? "bg-emerald-950/70 border-emerald-400 ring-2 ring-emerald-500/50 shadow-md shadow-emerald-950/50"
+                                  : "bg-slate-800/80 border-slate-700 hover:border-slate-500 hover:bg-slate-800"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between w-full mb-2">
+                                <span className="text-xl">
+                                  {preset.icon || (preset.id === "1080p" ? "🖥️" : preset.id === "720p" ? "💻" : preset.id === "mobile" ? "📱" : preset.id === "tablet" ? "📲" : "🔲")}
+                                </span>
+                                <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md ${isSelected ? "bg-emerald-400 text-slate-950" : "bg-slate-700 text-slate-300"}`}>
+                                  {preset.aspectRatio}
+                                </span>
+                              </div>
+                              <div className={`font-black text-xs ${isSelected ? "text-emerald-300" : "text-white"}`}>
+                                {preset.shortLabel || preset.name}
+                              </div>
+                              <div className="text-[11px] font-mono text-slate-400 mt-0.5">
+                                {preset.width} × {preset.height}
+                              </div>
+                              <div className="text-[10px] text-slate-400 mt-1.5 line-clamp-2 leading-relaxed">
+                                {preset.description}
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
+
+                    {/* Motion Video vs Static Photo Notice */}
+                    {(() => {
+                      const totalScenes = activeProject.activeStoryboardId?.scenes?.length || 0;
+                      const videoSceneCount = activeProject.activeStoryboardId?.scenes?.filter(s => {
+                        const m = mediaItems.find(item => item._id === s.mediaId || item._id === s.mediaId?._id);
+                        return m && (m.mediaType === "video" || [".mp4", ".webm", ".mov"].some(ext => m.fileUrl?.toLowerCase().endsWith(ext)));
+                      }).length || 0;
+
+                      return (
+                        <>
+                          {totalScenes > 0 && videoSceneCount < totalScenes && (
+                            <div className="bg-amber-950/60 border border-amber-500/50 text-amber-200 px-4 py-3 rounded-xl text-xs flex flex-wrap items-center justify-between gap-3 shadow-inner">
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">⚠️</span>
+                                <span>
+                                  Currently <strong>{totalScenes - videoSceneCount} of {totalScenes}</strong> scenes are still photos.
+                                  To render full cinematic motion video, switch to the <strong>Storyboard</strong> tab and click <strong>"Generate Gemini Omni Video Clips"</strong>!
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => setActiveTab("storyboard")}
+                                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3 py-1.5 rounded-lg text-xs shrink-0 transition"
+                              >
+                                Go to Storyboard
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Pre-Render Specifications Summary */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 text-xs border-t border-slate-800">
+                            <div className="bg-slate-800/80 p-3 rounded-xl">
+                              <div className="text-slate-400 font-bold">Total Duration:</div>
+                              <div className="font-extrabold text-emerald-400 mt-0.5">
+                                {activeProject.activeSongId?.durationSeconds
+                                  ? `${activeProject.activeSongId.durationSeconds}s`
+                                  : activeProject.activeStoryboardId?.scenes
+                                    ? `${activeProject.activeStoryboardId.scenes.length * 5}s`
+                                    : "30 Seconds"}
+                              </div>
+                            </div>
+                            <div className="bg-slate-800/80 p-3 rounded-xl">
+                              <div className="text-slate-400 font-bold">Visual Format:</div>
+                              <div className="font-extrabold text-blue-400 mt-0.5">
+                                {videoSceneCount > 0 ? `${videoSceneCount}/${totalScenes} Omni Videos` : "Static Photos"}
+                              </div>
+                            </div>
+                            <div className="bg-slate-800/80 p-3 rounded-xl">
+                              <div className="text-slate-400 font-bold">Audio Track:</div>
+                              <div className="font-extrabold text-amber-400 mt-0.5">Lyria 3 Pro Studio Song</div>
+                            </div>
+                            <div className="bg-slate-800/80 p-3 rounded-xl">
+                              <div className="text-slate-400 font-bold">Target Resolution:</div>
+                              <div className="font-extrabold text-purple-400 mt-0.5">
+                                {videoPresets[selectedPreset]?.shortLabel || "1080p"} ({videoPresets[selectedPreset]?.width}x{videoPresets[selectedPreset]?.height})
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
 
                     {activeJob && rendering && (
                       <div className="space-y-2 pt-4 border-t border-slate-800">
@@ -798,14 +947,39 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                   {/* Final Video Preview Player */}
                   {activeProject.activeVideoId?.videoUrl && (
                     <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
-                      <h4 className="font-black text-sm text-slate-800 flex items-center gap-2">
-                        <span>🎬</span> Rendered Event Video Preview
-                      </h4>
-                      <video
-                        controls
-                        src={activeProject.activeVideoId.videoUrl}
-                        className="w-full max-w-2xl mx-auto rounded-xl shadow-lg border border-slate-300"
-                      />
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <h4 className="font-black text-sm text-slate-800 flex items-center gap-2">
+                          <span>🎬</span> Rendered Event Video Preview
+                        </h4>
+                        <div className="flex items-center gap-2">
+                          <span className="bg-emerald-100 text-emerald-800 font-black text-xs px-2.5 py-1 rounded-full border border-emerald-300">
+                            {activeProject.activeVideoId.resolution || "1080p"}
+                          </span>
+                          {activeProject.activeVideoId.aspectRatio && (
+                            <span className="bg-blue-100 text-blue-800 font-black text-xs px-2.5 py-1 rounded-full border border-blue-300">
+                              {activeProject.activeVideoId.aspectRatio}
+                            </span>
+                          )}
+                          <a
+                            href={activeProject.activeVideoId.videoUrl}
+                            download={`event_video_${activeProject.activeVideoId.preset || "final"}.mp4`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow inline-flex items-center gap-1.5 transition"
+                          >
+                            <span>⬇️</span> Download Video
+                          </a>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-center bg-black/5 rounded-2xl p-4">
+                        <video
+                          key={activeProject.activeVideoId.videoUrl}
+                          controls
+                          src={activeProject.activeVideoId.videoUrl}
+                          className="max-h-[500px] w-auto max-w-full rounded-xl shadow-xl border border-slate-300"
+                        />
+                      </div>
                     </div>
                   )}
                 </div>

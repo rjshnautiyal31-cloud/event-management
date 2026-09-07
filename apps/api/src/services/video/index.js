@@ -1,151 +1,115 @@
 import path from "path";
 import fs from "fs/promises";
-import { GoogleAuth } from "google-auth-library";
+import fsSync from "fs";
+import { GoogleGenAI } from "@google/genai";
 import { env } from "../../config/env.js";
 
-// Google Cloud DeepMind Veo AI Video Adapter (Vertex AI veo-3.1-generate-001)
-export class GoogleVeoVideoAdapter {
-  async generateSceneVideoClip({ imageUrl, promptText, durationSeconds = 4 }) {
-    // Valid durations on Vertex AI Veo are 4, 6, 8 seconds
-    const validDuration = [4, 6, 8].includes(Number(durationSeconds)) ? Number(durationSeconds) : 4;
-    const cleanPrompt = (promptText || "Cinematic wide shot of celebratory event scene with vibrant atmospheric lighting").trim();
+// Google Cloud Gemini Omni 1.1 Flash AI Video Adapter (Vertex AI Next-Gen Interactions)
+export class GoogleOmniVideoAdapter {
+  async generateSceneVideoClip({ imageUrl, promptText, durationSeconds = 5 }) {
+    const cleanPrompt = (promptText || "Cinematic 5-second motion video clip, photorealistic 16:9 widescreen, cinematic camera motion").trim();
 
     try {
-      console.log(`[Google Veo AI Video] Authenticating with Vertex AI Service Account...`);
+      console.log(`[Google Gemini Omni Video] Authenticating with Vertex AI Service Account...`);
       const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
-      const auth = new GoogleAuth({
-        keyFilename,
-        scopes: ["https://www.googleapis.com/auth/cloud-platform"]
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
+
+      const projectId = env.googleCloudProject || "project-2a1614a0-3389-4a26-8d4";
+      const ai = new GoogleGenAI({
+        vertexai: true,
+        project: projectId,
+        location: "global"
       });
-      const client = await auth.getClient();
-      const token = await client.getAccessToken();
-      const projectId = await auth.getProjectId() || env.googleCloudProject || "project-2a1614a0-3389-4a26-8d4";
-      const location = process.env.GOOGLE_CLOUD_LOCATION || env.googleCloudLocation || "us-central1";
-      const model = "veo-3.1-generate-001";
 
-      const instanceObj = {
-        prompt: cleanPrompt
-      };
+      console.log(`[Google Gemini Omni Video] Generating motion video with gemini-omni-1.1-flash-preview: "${cleanPrompt.slice(0, 80)}..."`);
 
-      // If source imageUrl is provided, attach base64 image bytes for Image-to-Video conditioning
+      let inputPayload = cleanPrompt;
+
+      // Attach source image if provided for Image-to-Video animation
       if (imageUrl) {
         try {
           let imgBuffer = null;
+          let mimeType = "image/jpeg";
           if (imageUrl.startsWith("data:")) {
             const matches = imageUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
             if (matches && matches[2]) {
+              mimeType = matches[1];
               imgBuffer = Buffer.from(matches[2], "base64");
             }
           } else if (imageUrl.includes("/uploads/")) {
             const localFile = path.join(process.cwd(), "uploads", path.basename(imageUrl));
-            imgBuffer = await fs.readFile(localFile);
+            if (fsSync.existsSync(localFile)) {
+              imgBuffer = await fs.readFile(localFile);
+              if (localFile.endsWith(".png")) mimeType = "image/png";
+              else if (localFile.endsWith(".webp")) mimeType = "image/webp";
+            }
           } else if (imageUrl.startsWith("http")) {
             const res = await fetch(imageUrl);
             if (res.ok) {
               imgBuffer = Buffer.from(await res.arrayBuffer());
+              const ct = res.headers.get("content-type");
+              if (ct) mimeType = ct;
             }
           }
 
           if (imgBuffer && imgBuffer.length > 0) {
-            instanceObj.image = {
-              bytesBase64Encoded: imgBuffer.toString("base64"),
-              mimeType: "image/jpeg"
-            };
-            console.log(`[Google Veo AI Video] Attached source frame (${imgBuffer.length} bytes) for Image-to-Video generation`);
+            inputPayload = [
+              {
+                type: "image",
+                data: imgBuffer.toString("base64"),
+                mime_type: mimeType
+              },
+              {
+                type: "text",
+                text: `Animate this scene into a cinematic 5-second motion video clip: ${cleanPrompt}. Smooth cinematic camera movement, 16:9 widescreen.`
+              }
+            ];
+            console.log(`[Google Gemini Omni Video] Attached source frame (${imgBuffer.length} bytes) for Image-to-Video animation`);
           }
         } catch (imgErr) {
-          console.warn("[Google Veo AI Video] Could not load image for Image-to-Video, proceeding with Text-to-Video:", imgErr.message);
+          console.warn("[Google Gemini Omni Video] Could not load image for Image-to-Video, proceeding with text prompt:", imgErr.message);
         }
       }
 
-      console.log(`[Google Veo AI Video] Submitting predictLongRunning (${validDuration}s) for prompt: "${cleanPrompt.slice(0, 80)}..."`);
-      const predictUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:predictLongRunning`;
-
-      const createRes = await fetch(predictUrl, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token.token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          instances: [instanceObj],
-          parameters: {
-            aspectRatio: "16:9",
-            durationSeconds: validDuration
-          }
-        })
-      });
-
-      if (!createRes.ok) {
-        const errText = await createRes.text();
-        throw new Error(`Veo predictLongRunning failed (${createRes.status}): ${errText}`);
-      }
-
-      const createData = await createRes.json();
-      const operationName = createData.name;
-      if (!operationName) {
-        throw new Error("No operation name returned from Veo");
-      }
-
-      console.log(`[Google Veo AI Video] Operation created: ${operationName}. Polling operation...`);
-
-      // 2. Poll operation status via fetchPredictOperation
-      const fetchUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:fetchPredictOperation`;
-      let attempts = 0;
-      const maxAttempts = 25; // 25 * 3s = 75s timeout
-      let videoBase64 = null;
-
-      while (attempts < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, 3500));
-        attempts++;
-
-        const pollRes = await fetch(fetchUrl, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token.token}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ operationName })
+      let inter;
+      try {
+        inter = await ai.interactions.create({
+          model: "gemini-omni-1.1-flash-preview",
+          input: inputPayload
         });
-
-        if (!pollRes.ok) {
-          console.warn(`[Google Veo AI Video] Polling check attempt ${attempts} returned status ${pollRes.status}`);
-          continue;
+      } catch (callErr) {
+        if (Array.isArray(inputPayload) && inputPayload.length > 1) {
+          console.warn("[Google Gemini Omni Video] Multimodal call failed, falling back to cinematic text prompt:", callErr.message);
+          inter = await ai.interactions.create({
+            model: "gemini-omni-1.1-flash-preview",
+            input: `Cinematic 5-second 16:9 motion video clip: ${cleanPrompt}. Highly detailed, realistic motion, smooth camera pan, 720p.`
+          });
+        } else {
+          throw callErr;
         }
-
-        const pollData = await pollRes.json();
-        if (pollData.error) {
-          throw new Error(`Veo generation failed: ${JSON.stringify(pollData.error)}`);
-        }
-
-        if (pollData.done) {
-          videoBase64 = pollData.response?.videos?.[0]?.bytesBase64Encoded;
-          break;
-        }
-
-        console.log(`[Google Veo AI Video] Video rendering in progress... (attempt ${attempts}/${maxAttempts})`);
       }
 
-      if (videoBase64) {
+      if (inter?.output_video?.data) {
         const uploadDir = path.join(process.cwd(), "uploads");
         await fs.mkdir(uploadDir, { recursive: true });
-        const videoFilename = `veo_scene_${Date.now()}_${Math.floor(Math.random() * 1000)}.mp4`;
+        const videoFilename = `omni_scene_${Date.now()}_${Math.floor(Math.random() * 1000)}.mp4`;
         const videoFilePath = path.join(uploadDir, videoFilename);
-        await fs.writeFile(videoFilePath, Buffer.from(videoBase64, "base64"));
+        await fs.writeFile(videoFilePath, Buffer.from(inter.output_video.data, "base64"));
 
         const publicUrl = `http://localhost:${env.port}/uploads/${videoFilename}`;
-        console.log(`[Google Veo AI Video] Successfully generated and stored Veo MP4 video clip: ${publicUrl}`);
+        console.log(`[Google Gemini Omni Video] Successfully generated and stored MP4 video clip: ${publicUrl} (${inter.output_video.data.length} bytes)`);
         return publicUrl;
-      } else {
-        console.warn("[Google Veo AI Video] Veo operation timed out or returned no video bytes. Falling back to scene frame.");
       }
-    } catch (err) {
-      console.error("[Google Veo AI Video] Error generating video clip:", err.message);
-    }
 
-    return imageUrl;
+      throw new Error("No output_video returned from gemini-omni-1.1-flash-preview");
+    } catch (err) {
+      console.error("[Google Gemini Omni Video] Error generating video clip:", err.message);
+      return imageUrl;
+    }
   }
 }
+
+export const GoogleVeoVideoAdapter = GoogleOmniVideoAdapter;
 
 // Replicate Cloud AI Video Adapter
 class ReplicateVideoAdapter {
@@ -220,16 +184,17 @@ class LocalFfmpegVideoAdapter {
   }
 }
 
-const googleVeoAdapter = new GoogleVeoVideoAdapter();
+const googleOmniAdapter = new GoogleOmniVideoAdapter();
+const googleVeoAdapter = googleOmniAdapter;
 const replicateVideoAdapter = new ReplicateVideoAdapter();
 const localVideoAdapter = new LocalFfmpegVideoAdapter();
 
 export function getVideoProvider(providerOverride) {
-  const chosen = (providerOverride || env.videoProvider || "google_veo").toLowerCase();
+  const chosen = (providerOverride || env.videoProvider || "google_omni").toLowerCase();
   if (chosen.includes("replicate") || chosen.includes("runway")) {
     return replicateVideoAdapter;
   }
-  if (chosen.includes("veo") || chosen.includes("google")) {
+  if (chosen.includes("omni") || chosen.includes("veo") || chosen.includes("google")) {
     return googleVeoAdapter;
   }
   return localVideoAdapter;

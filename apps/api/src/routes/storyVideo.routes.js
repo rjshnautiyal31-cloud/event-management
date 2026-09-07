@@ -9,11 +9,11 @@ import { Media } from "../models/Media.js";
 import { Storyboard } from "../models/Storyboard.js";
 import { Video } from "../models/Video.js";
 import { GenerationJob } from "../models/GenerationJob.js";
-import { analyzeStoryWithGemini, generateLyricsWithGemini, generateSceneImageWithGemini } from "../services/providers/gemini.provider.js";
+import { analyzeStoryWithGemini, generateLyricsWithGemini, generateSceneImageWithGemini, generateStoryboardFromLyrics } from "../services/providers/gemini.provider.js";
 import { getMusicProvider } from "../services/music/index.js";
 import { getVideoProvider } from "../services/video/index.js";
 import { getStorageProvider } from "../services/storage/index.js";
-import { processVideoRenderJob } from "../workers/index.js";
+import { processVideoRenderJob, VIDEO_PRESETS } from "../workers/index.js";
 
 const upload = multer({ storage: multer.memoryStorage() });
 export const storyVideoRouter = Router();
@@ -125,12 +125,16 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
       lyrics: lyricsText,
       genre: targetGenre,
       durationSeconds: lyricsDurationSeconds,
-      mood: project.activeStoryAnalysisId.mood || "Upbeat"
+      mood: project.activeStoryAnalysisId.mood || "Upbeat",
+      storyContext: project.storyText || project.activeStoryAnalysisId.summary || "",
+      title: project.title || ""
     });
+
+    const finalLyrics = audioResult.lyrics || lyricsText;
 
     const songDoc = await Song.create({
       projectId: project._id,
-      lyrics: lyricsText,
+      lyrics: finalLyrics,
       genre: targetGenre,
       mood: project.activeStoryAnalysisId.mood || "Upbeat",
       audioUrl: audioResult.audioUrl,
@@ -221,44 +225,52 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
       return res.status(400).json({ message: "Project must have generated lyrics and song first" });
     }
 
-    const mediaItems = await Media.find({ projectId: project._id });
-    const moments = project.activeStoryAnalysisId?.keyMoments || [];
+    const { targetSceneDuration = 6 } = req.body;
+    const mediaItems = await Media.find({ projectId: project._id }).sort({ createdAt: 1 });
     const totalSongDuration = project.activeSongId.durationSeconds || 30;
-    const sceneCount = Math.max(moments.length, mediaItems.length, 4);
-    const perSceneDuration = Math.max(3, Math.round(totalSongDuration / sceneCount));
+    const lyrics = project.activeSongId.lyrics || "";
+    const storyContext = project.summary || project.title || "";
+
+    console.log(`[API Storyboard] Generating synchronized storyboard from lyrics (${totalSongDuration}s, ~${targetSceneDuration}s/scene)...`);
+    const generatedScenes = await generateStoryboardFromLyrics({
+      storyContext,
+      lyrics,
+      totalDurationSeconds: totalSongDuration,
+      targetSceneDuration: Number(targetSceneDuration) || 6
+    });
+
+    console.log(`[API Storyboard] Generated ${generatedScenes.length} synchronized scenes matching song lyrics.`);
 
     const scenes = [];
 
-    for (let index = 0; index < sceneCount; index++) {
-      const moment = moments[index];
-      let media = mediaItems[index];
+    // Map each generated scene to a media item or assign from project media
+    for (let index = 0; index < generatedScenes.length; index++) {
+      const sceneItem = generatedScenes[index];
+      let media = mediaItems.length > 0 ? mediaItems[index % mediaItems.length] : null;
 
-      // Auto-generate high resolution cinematic scene image using Gemini Imagen 3 if no user photo provided
-      if (!media && moment?.visualIdea) {
-        const generatedImageUrl = await generateSceneImageWithGemini(moment.visualIdea);
+      // If project has no media at all, generate an initial frame for the first scene
+      if (!media && index === 0 && sceneItem.visualIdea) {
+        const generatedImageUrl = await generateSceneImageWithGemini(sceneItem.visualIdea);
         if (generatedImageUrl) {
           media = await Media.create({
             projectId: project._id,
             fileUrl: generatedImageUrl,
-            fileType: "image",
-            caption: moment.visualIdea
+            mediaType: "image",
+            originalFilename: `scene_frame_${sceneItem.sceneNumber}.jpg`,
+            caption: sceneItem.visualIdea
           });
+          mediaItems.push(media);
         }
       }
 
-      if (!media && mediaItems.length > 0) {
-        media = mediaItems[index % mediaItems.length];
-      }
-
-      const startTime = index * perSceneDuration;
-      const endTime = (index + 1) * perSceneDuration;
-
       scenes.push({
-        sceneNumber: index + 1,
-        startTimeSeconds: startTime,
-        endTimeSeconds: endTime,
+        sceneNumber: sceneItem.sceneNumber || index + 1,
+        startTimeSeconds: sceneItem.startTimeSeconds,
+        endTimeSeconds: sceneItem.endTimeSeconds,
         mediaId: media?._id || null,
-        captionText: moment?.visualIdea || moment?.description || `Event Scene ${index + 1}`,
+        captionText: sceneItem.lyricSnippet || sceneItem.visualIdea || `Scene ${index + 1}`,
+        lyricSnippet: sceneItem.lyricSnippet || "",
+        visualPrompt: sceneItem.visualIdea || "",
         transitionEffect: "fade"
       });
     }
@@ -269,9 +281,10 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
       scenes
     });
 
-    project.status = "storyboarded";
-    project.activeStoryboardId = storyboardDoc._id;
-    await project.save();
+    await Project.findByIdAndUpdate(project._id, {
+      status: "storyboarded",
+      activeStoryboardId: storyboardDoc._id
+    });
 
     res.json(storyboardDoc);
   } catch (err) {
@@ -299,35 +312,38 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/veo", async (req, res, n
       return res.status(404).json({ message: `Scene at index ${sceneIndex} not found` });
     }
 
-    const promptText = req.body.prompt || scene.captionText || "Cinematic celebratory scene with lively motion and atmospheric lighting";
+    const promptText = req.body.prompt || scene.visualPrompt || scene.captionText || "Cinematic celebratory scene with lively motion and atmospheric lighting";
     const sourceImageUrl = scene.mediaId?.fileUrl || null;
 
-    console.log(`[API Story Video] Generating Google Veo video clip for Scene ${scene.sceneNumber}: "${promptText.slice(0, 60)}..."`);
+    console.log(`[API Story Video] Generating Gemini Omni 1.1 Flash video clip for Scene ${scene.sceneNumber}: "${promptText.slice(0, 60)}..."`);
 
-    const videoEngine = getVideoProvider("google_veo");
+    const videoEngine = getVideoProvider("google_omni");
     const videoUrl = await videoEngine.generateSceneVideoClip({
       imageUrl: sourceImageUrl,
       promptText,
-      durationSeconds: 4
+      durationSeconds: 5
     });
 
     if (!videoUrl || !videoUrl.endsWith(".mp4")) {
-      return res.status(500).json({ message: "Google Veo was unable to generate a video clip for this scene" });
+      return res.status(500).json({ message: "Google Gemini Omni 1.1 Flash was unable to generate a video clip for this scene" });
     }
 
     const mediaDoc = await Media.create({
       projectId: project._id,
       fileUrl: videoUrl,
       mediaType: "video",
-      originalFilename: `veo_scene_${scene.sceneNumber}.mp4`,
-      durationSeconds: 4
+      originalFilename: `omni_scene_${scene.sceneNumber}.mp4`,
+      durationSeconds: 5
     });
 
     scene.mediaId = mediaDoc._id;
-    await storyboard.save();
+    await Storyboard.updateOne(
+      { _id: storyboard._id, "scenes.sceneNumber": scene.sceneNumber },
+      { $set: { "scenes.$.mediaId": mediaDoc._id } }
+    );
 
     res.json({
-      message: "Google Veo motion video clip generated successfully",
+      message: "Google Gemini Omni 1.1 motion video clip generated successfully",
       sceneNumber: scene.sceneNumber,
       media: mediaDoc,
       videoUrl
@@ -337,7 +353,7 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/veo", async (req, res, n
   }
 });
 
-// 8c. Generate Google Veo AI Motion Video Clips for All Scenes
+// 8c. Generate Google Gemini Omni 1.1 AI Motion Video Clips for All Scenes
 storyVideoRouter.post("/projects/:id/scenes/generate-all-veo", async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -351,55 +367,76 @@ storyVideoRouter.post("/projects/:id/scenes/generate-all-veo", async (req, res, 
     }
 
     const storyboard = project.activeStoryboardId;
-    const videoEngine = getVideoProvider("google_veo");
+    const videoEngine = getVideoProvider("google_omni");
     const results = [];
 
+    const scenesToProcess = [];
     for (let i = 0; i < storyboard.scenes.length; i++) {
       const scene = storyboard.scenes[i];
-      if (scene.mediaId?.mediaType === "video") {
+      if (scene.mediaId?.mediaType === "video" && scene.mediaId?.fileUrl?.endsWith(".mp4")) {
         results.push({ sceneNumber: scene.sceneNumber, status: "already_video", videoUrl: scene.mediaId.fileUrl });
-        continue;
-      }
-
-      const promptText = scene.captionText || "Cinematic celebration moment";
-      const sourceImageUrl = scene.mediaId?.fileUrl || null;
-
-      try {
-        const videoUrl = await videoEngine.generateSceneVideoClip({
-          imageUrl: sourceImageUrl,
-          promptText,
-          durationSeconds: 4
-        });
-
-        if (videoUrl && videoUrl.endsWith(".mp4")) {
-          const mediaDoc = await Media.create({
-            projectId: project._id,
-            fileUrl: videoUrl,
-            mediaType: "video",
-            originalFilename: `veo_scene_${scene.sceneNumber}.mp4`,
-            durationSeconds: 4
-          });
-          scene.mediaId = mediaDoc._id;
-          results.push({ sceneNumber: scene.sceneNumber, status: "generated", videoUrl });
-        } else {
-          results.push({ sceneNumber: scene.sceneNumber, status: "fallback_image" });
-        }
-      } catch (clipErr) {
-        console.error(`Veo generation failed for scene ${scene.sceneNumber}:`, clipErr.message);
-        results.push({ sceneNumber: scene.sceneNumber, status: "error", error: clipErr.message });
+      } else {
+        scenesToProcess.push(scene);
       }
     }
 
-    await storyboard.save();
-    res.json({ message: "Veo generation completed for scenes", results });
+    // Process scenes concurrently in batches of 2
+    const batchSize = 2;
+    for (let b = 0; b < scenesToProcess.length; b += batchSize) {
+      const batch = scenesToProcess.slice(b, b + batchSize);
+      await Promise.all(
+        batch.map(async (scene) => {
+          const promptText = scene.visualPrompt || scene.captionText || "Cinematic celebration moment";
+          const sourceImageUrl = scene.mediaId?.fileUrl || null;
+
+          try {
+            console.log(`[API Story Video] Generating scene ${scene.sceneNumber}/${storyboard.scenes.length} with Gemini Omni 1.1 Flash: "${promptText.slice(0, 50)}..."`);
+            const videoUrl = await videoEngine.generateSceneVideoClip({
+              imageUrl: sourceImageUrl,
+              promptText,
+              durationSeconds: 5
+            });
+
+            if (videoUrl && videoUrl.endsWith(".mp4")) {
+              const mediaDoc = await Media.create({
+                projectId: project._id,
+                fileUrl: videoUrl,
+                mediaType: "video",
+                originalFilename: `omni_scene_${scene.sceneNumber}.mp4`,
+                durationSeconds: 5
+              });
+              scene.mediaId = mediaDoc._id;
+              await Storyboard.updateOne(
+                { _id: storyboard._id, "scenes.sceneNumber": scene.sceneNumber },
+                { $set: { "scenes.$.mediaId": mediaDoc._id } }
+              );
+              results.push({ sceneNumber: scene.sceneNumber, status: "generated", videoUrl });
+            } else {
+              results.push({ sceneNumber: scene.sceneNumber, status: "fallback_image" });
+            }
+          } catch (clipErr) {
+            console.error(`Gemini Omni generation failed for scene ${scene.sceneNumber}:`, clipErr.message);
+            results.push({ sceneNumber: scene.sceneNumber, status: "error", error: clipErr.message });
+          }
+        })
+      );
+    }
+
+    res.json({ message: "Gemini Omni 1.1 motion video clips generated for all scenes", results });
   } catch (err) {
     next(err);
   }
 });
 
-// 9. Trigger FFmpeg Async Video Rendering Task
+// 9a. List Configurable Video Resolution & Aspect Ratio Presets
+storyVideoRouter.get("/video-presets", (req, res) => {
+  res.json({ presets: VIDEO_PRESETS });
+});
+
+// 9b. Trigger FFmpeg Async Video Rendering Task
 storyVideoRouter.post("/projects/:id/render", async (req, res, next) => {
   try {
+    const { resolutionPreset = "1080p" } = req.body || {};
     const project = await Project.findById(req.params.id).populate("activeSongId");
 
     if (!project) {
@@ -431,11 +468,15 @@ storyVideoRouter.post("/projects/:id/render", async (req, res, next) => {
     project.status = "rendering";
     await project.save();
 
-    processVideoRenderJob(job._id, project._id, mediaPaths, audioPath).catch(err => {
+    processVideoRenderJob(job._id, project._id, mediaPaths, audioPath, { preset: resolutionPreset }).catch(err => {
       console.error("Background render error:", err);
     });
 
-    res.status(202).json({ jobId: job._id, message: "Video rendering task queued successfully" });
+    res.status(202).json({
+      jobId: job._id,
+      message: "Video rendering task queued successfully",
+      resolutionPreset
+    });
   } catch (err) {
     next(err);
   }

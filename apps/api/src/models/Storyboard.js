@@ -11,6 +11,8 @@ const storyboardSchema = new mongoose.Schema(
         endTimeSeconds: { type: Number, default: 5 },
         mediaId: { type: mongoose.Schema.Types.ObjectId, ref: "Media" },
         captionText: { type: String, default: "" },
+        lyricSnippet: { type: String, default: "" },
+        visualPrompt: { type: String, default: "" },
         transitionEffect: { type: String, default: "fade" }
       }
     ]

@@ -6,6 +6,8 @@ const videoSchema = new mongoose.Schema(
     videoUrl: { type: String, required: true },
     durationSeconds: { type: Number },
     resolution: { type: String, default: "1080p" },
+    aspectRatio: { type: String, default: "16:9" },
+    preset: { type: String, default: "1080p" },
     fileSizeBytes: { type: Number }
   },
   { timestamps: true }

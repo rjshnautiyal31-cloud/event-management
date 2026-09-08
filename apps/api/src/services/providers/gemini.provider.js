@@ -2,6 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import path from "path";
 import fs from "fs/promises";
 import { env } from "../../config/env.js";
+import { uploadAssetBuffer } from "../storage/index.js";
 
 import fsSync from "fs";
 
@@ -206,13 +207,9 @@ export async function generateSceneImageWithGemini(visualPrompt) {
 
       const imageBytesBase64 = response.generatedImages?.[0]?.image?.imageBytes;
       if (imageBytesBase64) {
-        const uploadDir = path.join(process.cwd(), "uploads");
-        await fs.mkdir(uploadDir, { recursive: true });
         const filename = `gemini_scene_${Date.now()}_${Math.floor(Math.random() * 1000)}.jpg`;
-        const filePath = path.join(uploadDir, filename);
-
-        await fs.writeFile(filePath, Buffer.from(imageBytesBase64, "base64"));
-        return `http://localhost:${env.port}/uploads/${filename}`;
+        const buffer = Buffer.from(imageBytesBase64, "base64");
+        return await uploadAssetBuffer(buffer, filename, "image/jpeg");
       }
     } catch (err) {
       console.warn("Gemini Imagen 3 direct generation unconfigured/failed, utilizing high-res AI generator:", err.message);
@@ -230,13 +227,9 @@ export async function generateSceneImageWithGemini(visualPrompt) {
 
     if (res.ok) {
       const arrayBuffer = await res.arrayBuffer();
-      const uploadDir = path.join(process.cwd(), "uploads");
-      await fs.mkdir(uploadDir, { recursive: true });
       const filename = `ai_scene_${Date.now()}_${seed}.jpg`;
-      const filePath = path.join(uploadDir, filename);
-
-      await fs.writeFile(filePath, Buffer.from(arrayBuffer));
-      return `http://localhost:${env.port}/uploads/${filename}`;
+      const buffer = Buffer.from(arrayBuffer);
+      return await uploadAssetBuffer(buffer, filename, "image/jpeg");
     }
   } catch (err) {
     console.error("AI Scene Image fetch failed:", err.message);

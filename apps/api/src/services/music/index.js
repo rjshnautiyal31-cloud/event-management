@@ -8,6 +8,7 @@ import textToSpeech from "@google-cloud/text-to-speech";
 import { GoogleAuth } from "google-auth-library";
 import { GoogleGenAI } from "@google/genai";
 import { env } from "../../config/env.js";
+import { uploadAssetBuffer } from "../storage/index.js";
 
 const fsPromises = fs.promises;
 ffmpeg.setFfmpegPath(ffmpegInstaller);
@@ -264,8 +265,11 @@ class GoogleTtsMusicAdapter {
       await fsPromises.rename(bgPath, outputPath);
     }
 
+    const audioBuffer = await fsPromises.readFile(outputPath);
+    const audioUrl = await uploadAssetBuffer(audioBuffer, outputFilename, "audio/mpeg");
+
     return {
-      audioUrl: `http://localhost:${env.port}/uploads/${outputFilename}`,
+      audioUrl,
       durationSeconds
     };
   }
@@ -355,9 +359,10 @@ class ElevenLabsMusicAdapter {
       if (musicResponse.ok) {
         const audioBuffer = Buffer.from(await musicResponse.arrayBuffer());
         await fsPromises.writeFile(outputPath, audioBuffer);
+        const audioUrl = await uploadAssetBuffer(audioBuffer, outputFilename, "audio/mpeg");
         console.log(`[ElevenLabs Music API] Successfully generated full ElevenLabs AI song (${audioBuffer.length} bytes)`);
         return {
-          audioUrl: `http://localhost:${env.port}/uploads/${outputFilename}`,
+          audioUrl,
           durationSeconds
         };
       } else {
@@ -438,8 +443,11 @@ class ElevenLabsMusicAdapter {
       await fsPromises.rename(bgPath, outputPath);
     }
 
+    const audioBuffer = await fsPromises.readFile(outputPath);
+    const audioUrl = await uploadAssetBuffer(audioBuffer, outputFilename, "audio/mpeg");
+
     return {
-      audioUrl: `http://localhost:${env.port}/uploads/${outputFilename}`,
+      audioUrl,
       durationSeconds
     };
   }
@@ -486,13 +494,14 @@ export class GoogleLyriaMusicAdapter {
         const outputPath = path.join(uploadDir, outputFilename);
         const audioBuffer = Buffer.from(interaction.output_audio.data, "base64");
         await fsPromises.writeFile(outputPath, audioBuffer);
+        const audioUrl = await uploadAssetBuffer(audioBuffer, outputFilename, "audio/mpeg");
 
         const realDuration = await getAudioDurationFromFile(outputPath);
         const extractedLyrics = extractLyricsFromLyriaOutput(interaction.output_text);
 
         console.log(`[Google Lyria AI Music] Lyria 3 Pro created full song: ${outputFilename} (${realDuration}s, ${audioBuffer.length} bytes)`);
         return {
-          audioUrl: `http://localhost:${env.port}/uploads/${outputFilename}`,
+          audioUrl,
           durationSeconds: realDuration,
           lyrics: extractedLyrics || lyrics
         };
@@ -550,9 +559,12 @@ export class GoogleLyriaMusicAdapter {
         });
         await fsPromises.unlink(bgWavPath).catch(() => {});
 
+        const audioBuffer = await fsPromises.readFile(outputPath);
+        const audioUrl = await uploadAssetBuffer(audioBuffer, outputFilename, "audio/mpeg");
+
         const realDuration = await getAudioDurationFromFile(outputPath);
         return {
-          audioUrl: `http://localhost:${env.port}/uploads/${outputFilename}`,
+          audioUrl,
           durationSeconds: realDuration,
           lyrics
         };

@@ -2,6 +2,7 @@ import ffmpeg from "fluent-ffmpeg";
 import ffmpegInstaller from "ffmpeg-static";
 import path from "path";
 import fs from "fs/promises";
+import fsSync from "fs";
 import { GenerationJob } from "../models/GenerationJob.js";
 import { Video } from "../models/Video.js";
 import { Project } from "../models/Project.js";
@@ -11,6 +12,7 @@ import { Song } from "../models/Song.js";
 import { queueService } from "../services/queue/index.js";
 import { env } from "../config/env.js";
 import { createMusicalMelodyWavBuffer } from "../services/music/index.js";
+import { uploadAssetBuffer } from "../services/storage/index.js";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller);
 
@@ -59,6 +61,44 @@ function createSolidBmpBuffer(width = 800, height = 600, colorHex = "0A2D59") {
   }
 
   return buffer;
+}
+
+// Download remote media (Cloudflare R2, Google Cloud Storage, AWS S3) or locate local file
+async function ensureLocalFile(fileUrlOrPath, tempDir, prefix = "asset", cleanupList = []) {
+  if (!fileUrlOrPath) return null;
+
+  // Already a local path
+  if (!fileUrlOrPath.startsWith("http://") && !fileUrlOrPath.startsWith("https://")) {
+    return fileUrlOrPath;
+  }
+
+  // If it references /uploads/ on local server
+  if (fileUrlOrPath.includes("/uploads/")) {
+    const filename = path.basename(fileUrlOrPath);
+    const localPath = path.join(process.cwd(), "uploads", filename);
+    if (fsSync.existsSync(localPath)) {
+      return localPath;
+    }
+  }
+
+  // Cloud URL (R2, GCS, S3, or external) -> download to local scratch path
+  try {
+    const res = await fetch(fileUrlOrPath);
+    if (!res.ok) {
+      console.warn(`[Video Worker] Could not fetch remote media at ${fileUrlOrPath}: ${res.statusText}`);
+      return null;
+    }
+    const urlObj = new URL(fileUrlOrPath);
+    const ext = path.extname(urlObj.pathname) || ".mp4";
+    const tempFile = path.join(tempDir, `tmp_${prefix}_${Date.now()}_${Math.floor(Math.random() * 1000)}${ext}`);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    await fs.writeFile(tempFile, buffer);
+    cleanupList.push(tempFile);
+    return tempFile;
+  } catch (err) {
+    console.error(`[Video Worker] Error fetching remote media (${fileUrlOrPath}):`, err.message);
+    return null;
+  }
 }
 
 export const VIDEO_PRESETS = {
@@ -187,25 +227,29 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       rawDurations[rawDurations.length - 1] = Math.max(1, Number((targetSongDuration - sumExceptLast).toFixed(2)));
     }
 
-    const scenesToRender = rawScenes.map((scene, idx) => {
-      let imgPath = null;
+    const tempFilesToClean = [];
+
+    const scenesToRender = [];
+    for (let idx = 0; idx < rawScenes.length; idx++) {
+      const scene = rawScenes[idx];
       let mediaDoc = scene.mediaId;
 
       if (!mediaDoc || !mediaDoc.fileUrl) {
         mediaDoc = mediaDocs[idx % mediaDocs.length];
       }
 
-      if (mediaDoc?.fileUrl?.includes("/uploads/")) {
-        imgPath = path.join(uploadDir, path.basename(mediaDoc.fileUrl));
+      let imgPath = null;
+      if (mediaDoc?.fileUrl) {
+        imgPath = await ensureLocalFile(mediaDoc.fileUrl, uploadDir, `scene_${idx}`, tempFilesToClean);
       }
 
-      return {
+      scenesToRender.push({
         sceneNumber: scene.sceneNumber || idx + 1,
         duration: Math.max(1, rawDurations[idx] || 5),
         captionText: scene.captionText || scene.lyricSnippet || `Scene ${idx + 1}`,
         imgPath
-      };
-    });
+      });
+    }
 
     // Ensure fallback cover image if no media images exist
     const fallbackBmpPath = path.join(uploadDir, "fallback_cover.bmp");
@@ -217,6 +261,7 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
           const bmpBuffer = createSolidBmpBuffer(800, 600, "0A2D59");
           await fs.writeFile(fallbackBmpPath, bmpBuffer);
           hasFallbackCreated = true;
+          tempFilesToClean.push(fallbackBmpPath);
         }
         scene.imgPath = fallbackBmpPath;
       }
@@ -224,18 +269,22 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
 
     // Determine audio track path
     let effectiveAudioPath = audioPath;
-    if (!effectiveAudioPath && songDoc?.audioUrl?.includes("/uploads/")) {
-      effectiveAudioPath = path.join(uploadDir, path.basename(songDoc.audioUrl));
+    if (!effectiveAudioPath && songDoc?.audioUrl) {
+      effectiveAudioPath = await ensureLocalFile(songDoc.audioUrl, uploadDir, "song_audio", tempFilesToClean);
     }
     if (!effectiveAudioPath) {
-      const fallbackWavPath = path.join(uploadDir, "fallback_audio.wav");
+      const fallbackWavPath = path.join(uploadDir, `fallback_audio_${timestamp}.wav`);
       const wavBuffer = createMusicalMelodyWavBuffer(targetSongDuration, 44100, songDoc?.genre || "Pop");
       await fs.writeFile(fallbackWavPath, wavBuffer);
       effectiveAudioPath = fallbackWavPath;
+      tempFilesToClean.push(fallbackWavPath);
     }
 
     console.log("[Video Worker] Target song duration:", targetSongDuration);
-    console.log("[Video Worker] scenesToRender:", JSON.stringify(scenesToRender, null, 2));
+    console.log("[Video Worker] scenesToRender count:", scenesToRender.length);
+
+    // Detect if running on Render Free Tier or resource-constrained environment
+    const isConstrained = Boolean(process.env.RENDER || env.nodeEnv === "production");
 
     // Render standardized scene MP4 segments matching the selected resolution preset
     const segmentPaths = [];
@@ -245,7 +294,7 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       const srcPath = scene.imgPath;
       const isVideo = [".mp4", ".webm", ".mov", ".mkv", ".avi"].includes(path.extname(srcPath || "").toLowerCase());
 
-      console.log(`[Video Worker] Rendering segment ${index} (${preset.width}x${preset.height}): isVideo=${isVideo}, srcPath=${srcPath}, duration=${scene.duration}`);
+      console.log(`[Video Worker] Rendering segment ${index} (${preset.width}x${preset.height}): isVideo=${isVideo}, duration=${scene.duration}`);
 
       await new Promise((resolve, reject) => {
         const cmd = ffmpeg();
@@ -255,19 +304,26 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
           cmd.input(srcPath).inputOptions(["-loop", "1", "-t", String(scene.duration)]);
         }
 
-        cmd.outputOptions([
+        const segOutputOpts = [
           "-vf", `scale=${preset.width}:${preset.height}:force_original_aspect_ratio=decrease,pad=${preset.width}:${preset.height}:(ow-iw)/2:(oh-ih)/2:black,format=yuv420p`,
           "-r", "25",
           "-an",
           "-c:v", "libx264",
           "-preset", "ultrafast"
-        ])
-        .save(segPath)
-        .on("end", resolve)
-        .on("error", (err) => {
-          console.error(`Segment ${index} render error:`, err.message);
-          reject(err);
-        });
+        ];
+
+        // Low-memory guard: limit to 1 thread on Render Free Tier to avoid 512MB OOM crash
+        if (isConstrained) {
+          segOutputOpts.push("-threads", "1");
+        }
+
+        cmd.outputOptions(segOutputOpts)
+          .save(segPath)
+          .on("end", resolve)
+          .on("error", (err) => {
+            console.error(`Segment ${index} render error:`, err.message);
+            reject(err);
+          });
       });
 
       segmentPaths.push(segPath);
@@ -292,16 +348,24 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       .inputOptions(["-f", "concat", "-safe", "0"])
       .input(effectiveAudioPath);
 
+    const finalOutputOpts = [
+      "-c:v", "libx264",
+      "-preset", "veryfast",
+      "-b:v", preset.bitrate,
+      "-maxrate", preset.bitrate,
+      "-bufsize", "512k",
+      "-c:a", "aac",
+      "-b:a", "192k",
+      "-t", String(targetSongDuration)
+    ];
+
+    if (isConstrained) {
+      finalOutputOpts.push("-threads", "1");
+    }
+
     await new Promise((resolve, reject) => {
       command
-        .outputOptions([
-          "-c:v", "libx264",
-          "-preset", "veryfast",
-          "-b:v", preset.bitrate,
-          "-c:a", "aac",
-          "-b:a", "192k",
-          "-t", String(targetSongDuration)
-        ])
+        .outputOptions(finalOutputOpts)
         .save(tempOutputPath)
         .on("progress", async (p) => {
           dbJob.progressPercent = Math.min(95, Math.max(50, Math.round(p.percent || 60)));
@@ -315,10 +379,14 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
         });
     });
 
-    // Cleanup temporary segment manifest file
-    await fs.unlink(concatListPath).catch(() => {});
+    // Read rendered video and upload via universal storage adapter
+    const finalVideoBuffer = await fs.readFile(tempOutputPath);
+    const publicUrl = await uploadAssetBuffer(finalVideoBuffer, outputFilename, "video/mp4");
 
-    const publicUrl = `http://localhost:${env.port}/uploads/${outputFilename}`;
+    // Cleanup temporary segment files & downloaded cloud assets
+    await fs.unlink(concatListPath).catch(() => {});
+    await Promise.all(segmentPaths.map((sp) => fs.unlink(sp).catch(() => {})));
+    await Promise.all(tempFilesToClean.map((tf) => fs.unlink(tf).catch(() => {})));
 
     const videoDoc = await Video.create({
       projectId,

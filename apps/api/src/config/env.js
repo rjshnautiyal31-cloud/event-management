@@ -4,6 +4,7 @@ dotenv.config();
 
 export const env = {
   port: Number(process.env.PORT || 4000),
+  publicUrl: process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 4000}`,
   mongoUri: process.env.MONGO_URI || "mongodb://127.0.0.1:27017/event_qr_system",
   jwtSecret: process.env.JWT_SECRET || "dev-secret-change-me",
   adminSetupKey: process.env.ADMIN_SETUP_KEY || "setup-admin",
@@ -16,7 +17,7 @@ export const env = {
   resendApiKey: process.env.RESEND_API_KEY,
 
   // AI Story-to-Video Configurable Providers
-  storageProvider: process.env.STORAGE_PROVIDER || "local", // "local" | "s3"
+  storageProvider: process.env.STORAGE_PROVIDER || "local", // "local" | "s3" | "gcs" | "r2"
   queueProvider: process.env.QUEUE_PROVIDER || "memory",    // "memory" | "redis"
   musicProvider: process.env.MUSIC_PROVIDER || "google_lyria", // "google_lyria" | "elevenlabs" | "suno" | "google_tts"
   videoProvider: process.env.VIDEO_PROVIDER || "google_veo", // "google_veo" | "local_ffmpeg" | "replicate" | "runway"
@@ -27,11 +28,20 @@ export const env = {
   googleCloudProject: process.env.GOOGLE_CLOUD_PROJECT || "project-2a1614a0-3389-4a26-8d4",
   googleCloudLocation: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
   redisUrl: process.env.REDIS_URL || "redis://127.0.0.1:6379",
+  
+  // Storage Configurations
   s3Bucket: process.env.S3_BUCKET || "ai-story-media",
   s3Region: process.env.S3_REGION || "us-east-1",
   s3Endpoint: process.env.S3_ENDPOINT || "",
+  s3PublicDomain: process.env.S3_PUBLIC_DOMAIN || "",
   awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
   awsSecretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
+  gcsBucket: process.env.GCS_BUCKET || "",
+
+  // External Worker & Environment
+  workerUrl: process.env.WORKER_URL || "",
+  nodeEnv: process.env.NODE_ENV || "development",
+
   musicApiKey: process.env.MUSIC_API_KEY || "",
   sunoApiKey: process.env.SUNO_API_KEY || process.env.MUSIC_API_KEY || "",
   elevenLabsApiKey: process.env.ELEVENLABS_API_KEY || "",

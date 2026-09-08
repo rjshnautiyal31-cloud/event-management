@@ -8,7 +8,12 @@ const definition = {
     description:
       "Full-stack event management and QR check-in system. Admins create events, register attendees, generate QR tickets, and validate them at the venue."
   },
-  servers: [{ url: "http://localhost:4000", description: "Local development" }],
+  servers: [
+    {
+      url: process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "http://localhost:4000",
+      description: "API Server"
+    }
+  ],
   components: {
     securitySchemes: {
       bearerAuth: {

@@ -171,7 +171,7 @@ storyVideoRouter.post("/projects/:id/media", upload.single("file"), async (req, 
 
     const storage = getStorageProvider();
     const filename = `media_${Date.now()}_${ext}`;
-    const fileUrl = await storage.uploadFile(req.file.buffer, filename);
+    const fileUrl = await storage.uploadFile(req.file.buffer, filename, req.file.mimetype);
 
     const mediaDoc = await Media.create({
       projectId: project._id,
@@ -444,20 +444,14 @@ storyVideoRouter.post("/projects/:id/render", async (req, res, next) => {
     }
 
     const mediaItems = await Media.find({ projectId: project._id });
-    const mediaPaths = mediaItems
-      .map(item => item.fileUrl)
-      .filter(url => url.includes("/uploads/"))
-      .map(url => path.join(process.cwd(), "uploads", path.basename(url)));
+    const mediaUrls = mediaItems.map(item => item.fileUrl).filter(Boolean);
 
     let songDoc = project.activeSongId;
     if (!songDoc) {
       songDoc = await Song.findOne({ projectId: project._id }).sort({ createdAt: -1 });
     }
 
-    let audioPath = null;
-    if (songDoc?.audioUrl && songDoc.audioUrl.includes("/uploads/")) {
-      audioPath = path.join(process.cwd(), "uploads", path.basename(songDoc.audioUrl));
-    }
+    const audioUrl = songDoc?.audioUrl || null;
 
     const job = await GenerationJob.create({
       projectId: project._id,
@@ -468,7 +462,7 @@ storyVideoRouter.post("/projects/:id/render", async (req, res, next) => {
     project.status = "rendering";
     await project.save();
 
-    processVideoRenderJob(job._id, project._id, mediaPaths, audioPath, { preset: resolutionPreset }).catch(err => {
+    processVideoRenderJob(job._id, project._id, mediaUrls, audioUrl, { preset: resolutionPreset }).catch(err => {
       console.error("Background render error:", err);
     });
 

@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import fsSync from "fs";
 import { GoogleGenAI } from "@google/genai";
 import { env } from "../../config/env.js";
+import { uploadAssetBuffer } from "../storage/index.js";
 
 // Google Cloud Gemini Omni 1.1 Flash AI Video Adapter (Vertex AI Next-Gen Interactions)
 export class GoogleOmniVideoAdapter {
@@ -90,13 +91,10 @@ export class GoogleOmniVideoAdapter {
       }
 
       if (inter?.output_video?.data) {
-        const uploadDir = path.join(process.cwd(), "uploads");
-        await fs.mkdir(uploadDir, { recursive: true });
         const videoFilename = `omni_scene_${Date.now()}_${Math.floor(Math.random() * 1000)}.mp4`;
-        const videoFilePath = path.join(uploadDir, videoFilename);
-        await fs.writeFile(videoFilePath, Buffer.from(inter.output_video.data, "base64"));
+        const buffer = Buffer.from(inter.output_video.data, "base64");
+        const publicUrl = await uploadAssetBuffer(buffer, videoFilename, "video/mp4");
 
-        const publicUrl = `http://localhost:${env.port}/uploads/${videoFilename}`;
         console.log(`[Google Gemini Omni Video] Successfully generated and stored MP4 video clip: ${publicUrl} (${inter.output_video.data.length} bytes)`);
         return publicUrl;
       }

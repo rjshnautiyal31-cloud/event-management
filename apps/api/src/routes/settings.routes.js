@@ -7,8 +7,8 @@ import { getStorageProvider, resetStorageAdapters, uploadAssetBuffer } from "../
 
 export const settingsRouter = Router();
 
-// Protect all settings endpoints to super_admin and admin roles
-settingsRouter.use(requireAuth, requireRole("super_admin", "admin"));
+// Protect all settings endpoints strictly to super_admin role
+settingsRouter.use(requireAuth, requireRole("super_admin"));
 
 /**
  * GET /api/settings

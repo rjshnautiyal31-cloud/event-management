@@ -8,9 +8,12 @@ import { QRGeneratorPage } from "./pages/QRGeneratorPage.jsx";
 import { ProjectStudioPage } from "./pages/ProjectStudioPage.jsx";
 import { SettingsPage } from "./pages/SettingsPage.jsx";
 
-function ProtectedRoute({ token, user, adminOnly = false, children }) {
+function ProtectedRoute({ token, user, adminOnly = false, superAdminOnly = false, children }) {
   if (!token) {
     return <Navigate to="/login" replace />;
+  }
+  if (superAdminOnly && user?.role !== "super_admin") {
+    return <Navigate to="/dashboard" replace />;
   }
   const isAdminRole = user?.role === "admin" || user?.role === "super_admin" || user?.role === "event_admin";
   if (adminOnly && !isAdminRole) {
@@ -93,7 +96,7 @@ export function App() {
       <Route
         path="/settings"
         element={
-          <ProtectedRoute token={auth.token} user={auth.user} adminOnly>
+          <ProtectedRoute token={auth.token} user={auth.user} superAdminOnly>
             <SettingsPage auth={auth} />
           </ProtectedRoute>
         }

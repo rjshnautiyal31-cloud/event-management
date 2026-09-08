@@ -15,7 +15,7 @@ export function Navbar({
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isSuperAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin";
+  const isSuperAdmin = auth.user?.role === "super_admin";
   const isAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin" || auth.user?.role === "event_admin";
 
   const handleNavTab = (tab) => {
@@ -97,7 +97,7 @@ export function Navbar({
             </Link>
           )}
 
-          {isAdmin && (
+          {isSuperAdmin && (
             <Link
               to="/settings"
               className={`inline-flex items-center gap-1 sm:gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 text-xs font-bold transition-all ${
@@ -281,7 +281,7 @@ export function Navbar({
                     <span className="text-[10px] text-slate-400">↗</span>
                   </Link>
 
-                  {isAdmin && (
+                  {isSuperAdmin && (
                     <Link
                       to="/settings"
                       onClick={() => setHamburgerMenuOpen(false)}

@@ -1,8 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
+import { Navigate } from "react-router-dom";
 import { Navbar } from "../components/Navbar.jsx";
 import { api } from "../api.js";
 
 export function SettingsPage({ auth }) {
+  // Strict security guard: only super_admin can view or configure settings
+  if (auth.user?.role !== "super_admin") {
+    return <Navigate to="/dashboard" replace />;
+  }
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingStorage, setTestingStorage] = useState(false);

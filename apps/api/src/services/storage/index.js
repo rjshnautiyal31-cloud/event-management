@@ -138,6 +138,11 @@ const localAdapter = new LocalStorageProvider();
 let s3Adapter = null;
 let gcsAdapter = null;
 
+export function resetStorageAdapters() {
+  s3Adapter = null;
+  gcsAdapter = null;
+}
+
 export function getStorageProvider() {
   const provider = (env.storageProvider || "").toLowerCase();
 

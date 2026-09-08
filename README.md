@@ -48,6 +48,23 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
 - **Decoupled Check-in Logs**:
   - Denormalizes attendee name and email into `entrylogs` at check-in so historical records are preserved even if an attendee profile is subsequently deleted.
 
+### 3. Back Office Settings & Dynamic Configuration (`/#/settings`)
+- **Dual-Tier Precedence Hierarchy**:
+  - **1st Priority (Highest): Database Overrides** configured via the Back Office Settings Dashboard in MongoDB (`SystemSetting` collection).
+  - **2nd Priority (Fallback): Local `.env` Variables** loaded into `process.env`.
+  - **3rd Priority: Built-in Defaults**.
+- **Categorized Configuration Dashboard**:
+  - `☁️ Cloud Storage`: Switch between Local, AWS S3, Cloudflare R2, and Google Cloud Storage (GCS) with custom endpoints and CDN public domains.
+  - `🤖 AI & Vertex LLM`: Configure Google Gemini API keys, Google Cloud Project ID, Vertex AI regions, and primary LLM engine.
+  - `🎵 Music & Audio`: Toggle between Google DeepMind Lyria 3 Pro, ElevenLabs Music API, Suno, and Google TTS synthesizer.
+  - `🎬 Motion Video`: Configure Gemini Omni 1.1 Flash, Google Veo, or Replicate video generation keys.
+  - `📬 Email & Tickets`: Setup Resend API key (recommended on Render) or custom SMTP credentials.
+  - `🌐 Network & Queue`: Configure Public API URL, Frontend URL, Redis BullMQ connection, and Cloud Run external rendering worker URL.
+- **Live Diagnostics & Security**:
+  - Built-in **"Test Storage"** and **"Test AI Keys"** actions verify live cloud bucket connectivity and API keys.
+  - Sensitive secrets are masked with show/hide toggles.
+  - 1-tap **"Reset to .env"** button removes DB overrides and seamlessly reverts to environment defaults.
+
 ---
 
 ## Monorepo Layout

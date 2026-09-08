@@ -1,8 +1,10 @@
 import { app } from "./app.js";
 import { connectDb } from "./config/db.js";
-import { env } from "./config/env.js";
+import { env, loadDbSettings } from "./config/env.js";
 async function bootstrap() {
   await connectDb();
+  await loadDbSettings();
+  console.log(`[Config] Loaded environment and database settings.`);
   app.listen(env.port, () => {
     console.log(`API listening on port ${env.port}`);
   });

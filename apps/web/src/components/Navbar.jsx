@@ -97,6 +97,21 @@ export function Navbar({
             </Link>
           )}
 
+          {isAdmin && (
+            <Link
+              to="/settings"
+              className={`inline-flex items-center gap-1 sm:gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 text-xs font-bold transition-all ${
+                location.pathname === "/settings"
+                  ? "bg-[#0A2D59] text-white shadow-sm shadow-[#0A2D59]/20 ring-2 ring-[#0A2D59]/20"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80"
+              }`}
+              title="System & Environment Settings"
+            >
+              <span>⚙️</span>
+              <span className="hidden lg:inline">Settings</span>
+            </Link>
+          )}
+
           <button
             onClick={() => auth.logout()}
             className="hidden sm:inline-block rounded-xl bg-slate-100 hover:bg-red-50 hover:text-red-600 transition-colors px-2.5 py-1.5 text-xs text-slate-500 font-semibold border border-slate-200 cursor-pointer"
@@ -265,6 +280,24 @@ export function Navbar({
                     </span>
                     <span className="text-[10px] text-slate-400">↗</span>
                   </Link>
+
+                  {isAdmin && (
+                    <Link
+                      to="/settings"
+                      onClick={() => setHamburgerMenuOpen(false)}
+                      className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                        location.pathname === "/settings"
+                          ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
+                          : "text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <span>⚙️</span>
+                        <span>System Settings</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400">↗</span>
+                    </Link>
+                  )}
 
                   <Link
                     to="/scan"

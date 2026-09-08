@@ -6,6 +6,7 @@ import { PublicRegistrationPage } from "./pages/PublicRegistrationPage.jsx";
 import { ScannerPage } from "./pages/ScannerPage.jsx";
 import { QRGeneratorPage } from "./pages/QRGeneratorPage.jsx";
 import { ProjectStudioPage } from "./pages/ProjectStudioPage.jsx";
+import { SettingsPage } from "./pages/SettingsPage.jsx";
 
 function ProtectedRoute({ token, user, adminOnly = false, children }) {
   if (!token) {
@@ -86,6 +87,14 @@ export function App() {
         element={
           <ProtectedRoute token={auth.token} user={auth.user}>
             <ProjectStudioPage auth={auth} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute token={auth.token} user={auth.user} adminOnly>
+            <SettingsPage auth={auth} />
           </ProtectedRoute>
         }
       />

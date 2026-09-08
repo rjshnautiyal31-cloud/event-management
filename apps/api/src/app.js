@@ -6,6 +6,7 @@ import { eventRouter } from "./routes/event.routes.js";
 import { publicRouter } from "./routes/public.routes.js";
 import { scanRouter } from "./routes/scan.routes.js";
 import { storyVideoRouter } from "./routes/storyVideo.routes.js";
+import { settingsRouter } from "./routes/settings.routes.js";
 import { swaggerSpec } from "./config/swagger.js";
 
 export const app = express();
@@ -26,6 +27,7 @@ app.use("/api/events", eventRouter);
 app.use("/api/public", publicRouter);
 app.use("/api/scan", scanRouter);
 app.use("/api/story-video", storyVideoRouter);
+app.use("/api/settings", settingsRouter);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

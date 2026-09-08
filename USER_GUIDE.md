@@ -254,3 +254,35 @@ Render free services spin down after 15 minutes of no HTTP requests. To prevent 
 3. Set the interval to **every 10 minutes**.
 4. The endpoint responds with `{"status":"ok","timestamp":"..."}` in under 5ms with zero database overhead, keeping the instance warm.
 
+---
+
+## 11. Back Office Settings & Environment Variables Management (`/#/settings`)
+
+The platform includes a dedicated **System & Environment Settings** dashboard accessible by administrators and super administrators directly from the top navigation bar or the drawer menu (`⚙️ Settings`).
+
+### Dual-Tier Precedence Hierarchy
+All system parameters and cloud credentials operate on a strict 2-tier resolution order:
+1. **Tier 1 (Highest Priority): Back Office Database Settings**
+   - Values saved through the Settings UI are stored directly in MongoDB in the `systemsettings` collection.
+   - Any value defined here overrides `.env` variables immediately without requiring a server reboot or restart.
+   - Indicated in the UI by a 🟢 **`Database (BO)`** badge.
+2. **Tier 2 (Fallback Priority): Environment Variables (`.env`)**
+   - If a setting has no override saved in the Database, the application automatically reads the value from `process.env` (loaded from `.env` or Render environment settings).
+   - Indicated in the UI by a 🟡 **`.env Fallback`** badge.
+3. **Tier 3: Built-in Defaults**
+   - If neither the Database nor `.env` specifies a value, a safe default is applied (e.g., `local` for storage, `memory` for queue, `google_lyria` for music).
+
+### Configurable Categories
+- **☁️ Cloud Storage**: Switch between `local`, `s3`, `r2`, and `gcs`. Set custom S3 endpoints, public CDN domains, bucket names, and AWS/R2 credentials.
+- **🤖 AI & Vertex LLM**: Set `GEMINI_API_KEY`, Google Cloud Project ID (`GOOGLE_CLOUD_PROJECT`), Vertex AI region, and default LLM provider.
+- **🎵 Music & Audio**: Set `MUSIC_PROVIDER` (`google_lyria`, `elevenlabs`, `suno`, `google_tts`, `local_synth`) and respective API keys.
+- **🎬 Motion Video**: Set `VIDEO_PROVIDER` (`google_omni`, `google_veo`, `replicate`, `local_ffmpeg`) and Replicate API keys.
+- **📬 Email & Tickets**: Set `RESEND_API_KEY` (recommended for Render free tier), `SENDER_EMAIL`, and custom SMTP host, port, user, and password.
+- **🌐 Network & Queue**: Set `PUBLIC_URL`, `FRONTEND_BASE_URL`, `QUEUE_PROVIDER` (`memory` or `redis`), `REDIS_URL`, and optional external video `WORKER_URL`.
+
+### Live Diagnostics & Testing
+- **Test Cloud Storage**: Click **"Test Storage"** in the top action bar. The server uploads a test buffer using the active storage configuration and validates the generated public URL.
+- **Test AI Keys**: Click **"Test AI Keys"** to verify that Gemini API or GCP Vertex AI project credentials are valid.
+- **Reset to .env**: For any setting currently stored in the Database, click **"Reset to .env"** to delete the DB override and immediately revert back to the environment variable.
+
+

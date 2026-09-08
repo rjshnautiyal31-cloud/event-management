@@ -10,18 +10,25 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
 - **Event-Scoped AI Stories & Multi-Video Support**:
   - Associate multiple AI story projects per event. Restrictable via Event ACL (`super_admin` & `event_admin`).
 - **Phase 1: Story Narrative Analysis**:
-  - Analyzes raw event text/narrative using **Google Gemini 2.5 Flash** to extract summary, emotional arc, key themes, mood, and key visual moments.
+  - Analyzes raw event text/narrative using **Google Gemini 2.5 Flash** via Vertex AI to extract story summary, emotional arc, key themes, mood, and distinct visual scene prompts.
 - **Phase 2: AI Lyrics & Vocal Song Generation**:
-  - Generates structured song lyrics in target genres (*Pop, Acoustic, Cinematic, Rock*).
-  - Synthesizes vocal singing/narration and layers it over a multi-chord musical backing track.
-- **Phase 3: Event Photos & Media Gallery**:
-  - Upload event photos and media assets stored locally or in S3 buckets.
-- **Phase 4: Scene Storyboard & Timeline Mapping**:
-  - Automatically maps key moments and uploaded event photos into timed scenes with text captions.
-- **Phase 5: High-Definition Video Rendering**:
-  - Stitches photos, vocal audio track, and **burned SRT lower-third scene subtitles** into a 720p/1080p HD MP4 video.
-- **Pluggable Provider Architecture**:
-  - Zero-cost 100% local development mode (*Local Storage, In-Memory Queue, Local Synth, Local FFmpeg*) with seamless cloud toggles (*AWS S3, BullMQ Redis, Suno AI, Replicate/Runway AI Video*) via `.env` flags.
+  - Generates authentic musical song compositions with melodic vocals and acoustic/electronic instruments using **Google DeepMind Lyria 3 Pro / Lyria 2** (`lyria-3-pro-preview`), ElevenLabs Music API, Suno, or local synthetic fallback.
+- **Phase 3: Event Photos & Pure AI Motion Video Generation**:
+  - Upload event photos and media assets stored locally, in **AWS S3**, **Cloudflare R2**, or **Google Cloud Storage (GCS)**.
+  - Generates realistic 5-second 16:9 cinematic motion video clips using **Google Gemini Omni 1.1 Flash** (`gemini-omni-1.1-flash-preview`) or Google Veo.
+- **Phase 4: Lyric-Synchronized Scene Storyboard & Timeline**:
+  - Automatically calculates scene durations matching the actual generated song length.
+  - Aligns individual lyric phrases and narrative beats to scenes, preventing repetitive visuals.
+- **Phase 5: Multi-Device Resolution Video Rendering**:
+  - Stitches scene clips, vocal audio track, and burned subtitles into high-definition MP4 videos with 5 customizable display presets:
+    - 🖥️ **Desktop Full HD (1080p)**: `1920x1080`, 16:9, 6000k bitrate.
+    - 💻 **Desktop HD (720p)**: `1280x720`, 16:9, 3500k bitrate.
+    - 📱 **Mobile Portrait (9:16)**: `1080x1920`, 9:16 for Reels, TikTok & Shorts.
+    - 📟 **Tablet Display (4:3)**: `1440x1080`, 4:3 for iPad and tablets.
+    - 🔲 **Social Square (1:1)**: `1080x1080`, 1:1 for Instagram and feed posts.
+- **Render Free Tier Optimized & Pluggable Storage**:
+  - Automatically limits FFmpeg to single-threaded low-memory streaming (`-threads 1`, `-preset veryfast`, `-bufsize 512k`) on Render Free Tier to stay safely within 512 MB RAM limits.
+  - Universal multi-cloud storage adapter supporting **Local disk**, **AWS S3**, **Cloudflare R2** (zero egress fees), and **Google Cloud Storage (GCS)**.
 
 ### 2. Core Event & Gate Management
 - **`#0A2D59` Deep Navy Brand Identity & Universal Top Navigation**:
@@ -76,14 +83,15 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
 - `POST /api/story-video/projects` (admin): Create a new AI story project linked to an event.
 - `GET /api/story-video/projects` (auth): List all story projects for an event.
 - `GET /api/story-video/projects/:id` (auth): Fetch details for a specific project.
-- `POST /api/story-video/projects/:id/analyze` (admin): Analyze story narrative using Gemini 3.6 Flash.
-- `POST /api/story-video/projects/:id/lyrics` (admin): Generate AI lyrics and synthesize vocal audio track via Google Cloud TTS.
+- `POST /api/story-video/projects/:id/analyze` (admin): Analyze story narrative using Gemini 2.5 Flash.
+- `POST /api/story-video/projects/:id/lyrics` (admin): Generate AI lyrics and synthesize song audio via Google Lyria 3 Pro / ElevenLabs.
 - `POST /api/story-video/projects/:id/media` (admin): Upload photo or video clip assets for video stitching.
 - `GET /api/story-video/projects/:id/media` (auth): Get media gallery items for a project.
 - `DELETE /api/story-video/projects/:id/media/:mediaId` (admin): Delete a specific uploaded photo or video clip.
 - `DELETE /api/story-video/projects/:id/media` (admin): Clear all uploaded media (activates Pure AI Scene Generation Mode).
-- `POST /api/story-video/projects/:id/storyboard` (admin): Generate scene timeline storyboard.
-- `POST /api/story-video/projects/:id/render` (admin): Trigger FFmpeg background video rendering task.
+- `POST /api/story-video/projects/:id/storyboard` (admin): Generate lyric-synchronized scene timeline storyboard.
+- `GET /api/story-video/video-presets` (auth): Fetch supported resolution presets (`1080p`, `720p`, `mobile`, `tablet`, `square`).
+- `POST /api/story-video/projects/:id/render` (admin): Trigger FFmpeg background video rendering with resolution preset.
 - `GET /api/story-video/jobs/:jobId` (auth): Poll video rendering job progress.
 
 ### Auth & User Accounts
@@ -106,31 +114,57 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
 ### `apps/api/.env`
 ```env
 PORT=4000
+NODE_ENV=development
+PUBLIC_URL=http://localhost:4000
 MONGO_URI=mongodb://127.0.0.1:27017/event_qr_system
 JWT_SECRET=dev-secret-change-me
 ADMIN_SETUP_KEY=setup-admin
 
-# Configurable AI & Cloud Provider Flags
-STORAGE_PROVIDER=local        # "local" | "s3"
+# Pluggable Providers
+STORAGE_PROVIDER=local        # "local" | "s3" | "r2" | "gcs"
 QUEUE_PROVIDER=memory          # "memory" | "redis"
-MUSIC_PROVIDER=local_synth     # "local_synth" | "suno" | "elevenlabs"
-VIDEO_PROVIDER=local_ffmpeg    # "local_ffmpeg" | "replicate" | "runway"
+MUSIC_PROVIDER=google_lyria    # "google_lyria" | "elevenlabs" | "suno" | "local_synth"
+VIDEO_PROVIDER=google_omni     # "google_omni" | "google_veo" | "local_ffmpeg"
 LLM_PROVIDER=gemini            # "gemini" | "openai"
 
-# API Keys & Cloud Config
+# Google Cloud / Vertex AI (Lyria 3 Pro, Gemini Omni, Gemini 2.5 Flash)
+GOOGLE_APPLICATION_CREDENTIALS=./gcp-service-account.json
+GOOGLE_CLOUD_PROJECT=your-gcp-project-id
 GEMINI_API_KEY=your_gemini_api_key_here
-REPLICATE_API_KEY=r8_your_replicate_key
-MUSIC_API_KEY=suno_your_music_key
-REDIS_URL=redis://127.0.0.1:6379
-S3_BUCKET=ai-story-media
-S3_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_aws_key
-AWS_SECRET_ACCESS_KEY=your_aws_secret
+
+# S3-Compatible Cloud Storage (AWS S3 or Cloudflare R2)
+S3_BUCKET=event-media
+S3_REGION=auto                 # "auto" for Cloudflare R2, or "us-east-1" for AWS S3
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+# For Cloudflare R2 (Zero egress fees):
+# S3_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com
+# S3_PUBLIC_DOMAIN=https://pub-<hash>.r2.dev
+
+# Google Cloud Storage (GCS)
+GCS_BUCKET=event-media-gcs
 
 # Resend / Email Config
 RESEND_API_KEY=re_your_api_key
 SENDER_EMAIL=onboarding@resend.dev
 ```
+
+---
+
+## Render Free Tier Deployment Guide
+
+### Why Render Free Tier Requires Cloud Storage
+1. **Ephemeral Disk**: Render Free Tier discards local disk files on redeploy or when the instance spins down. Uploaded media and rendered videos must be saved in **Cloudflare R2**, **Google Cloud Storage**, or **AWS S3** for persistent access.
+2. **512 MB Memory Limit**: The built-in video worker automatically detects Render (`process.env.RENDER || NODE_ENV=production`) and runs FFmpeg with:
+   - `-threads 1` (limits memory to ~280 MB RAM, preventing OOM SIGKILL).
+   - `-preset veryfast -bufsize 512k -maxrate <bitrate>`.
+3. **15-Minute Cold Sleep**: Set up a free monitoring check (e.g. [cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com)) to ping `GET https://your-api.onrender.com/health` every 10 minutes to prevent the instance from sleeping while users are active.
+
+### Recommended Free Tier Cloud Stack:
+- **Hosting**: Render Free Web Service (Node.js API + Static React SPA).
+- **Database**: MongoDB Atlas M0 Free Tier (512 MB storage).
+- **Media Storage**: **Cloudflare R2** (10 GB free storage, **0 egress fees**) or **Google Cloud Storage** (5 GB always free).
+- **AI Models**: Google Vertex AI Service Account (Gemini 2.5 Flash + Lyria + Gemini Omni).
 
 ---
 

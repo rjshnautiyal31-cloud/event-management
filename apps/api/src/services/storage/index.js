@@ -1,4 +1,5 @@
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { Storage as GoogleCloudStorage } from "@google-cloud/storage";
@@ -105,11 +106,12 @@ class GCSStorageProvider {
     };
 
     try {
-      if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      if (process.env.GOOGLE_APPLICATION_CREDENTIALS && fsSync.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
         options.keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-      } else {
+      } else if (fsSync.existsSync(serviceAccountPath)) {
         options.keyFilename = serviceAccountPath;
       }
+      // If neither file exists on disk, GoogleCloudStorage automatically uses Cloud Run Application Default Credentials (ADC)
     } catch (_) {}
 
     this.storage = new GoogleCloudStorage(options);

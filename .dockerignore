@@ -3,5 +3,7 @@ node_modules
 .gitignore
 .idea
 apps/web/dist
+apps/api/uploads
 npm-debug.log*
+*.log
 

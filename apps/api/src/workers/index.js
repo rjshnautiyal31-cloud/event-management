@@ -14,7 +14,8 @@ import { env } from "../config/env.js";
 import { createMusicalMelodyWavBuffer } from "../services/music/index.js";
 import { uploadAssetBuffer } from "../services/storage/index.js";
 
-ffmpeg.setFfmpegPath(ffmpegInstaller);
+const activeFfmpegPath = process.env.FFMPEG_PATH || (fsSync.existsSync("/usr/bin/ffmpeg") ? "/usr/bin/ffmpeg" : (fsSync.existsSync("/usr/local/bin/ffmpeg") ? "/usr/local/bin/ffmpeg" : ffmpegInstaller));
+ffmpeg.setFfmpegPath(activeFfmpegPath);
 
 // Helper to convert seconds into SRT timecode format (00:00:05,000)
 function formatSrtTime(secondsTotal) {
@@ -309,13 +310,9 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
           "-r", "25",
           "-an",
           "-c:v", "libx264",
-          "-preset", "ultrafast"
+          "-preset", "ultrafast",
+          "-threads", isConstrained ? "1" : "2"
         ];
-
-        // Low-memory guard: limit to 1 thread on Render Free Tier to avoid 512MB OOM crash
-        if (isConstrained) {
-          segOutputOpts.push("-threads", "1");
-        }
 
         cmd.outputOptions(segOutputOpts)
           .save(segPath)
@@ -329,6 +326,18 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       segmentPaths.push(segPath);
     }
 
+    // Verify all segment files exist, are readable, and non-empty
+    for (let i = 0; i < segmentPaths.length; i++) {
+      const seg = segmentPaths[i];
+      const stats = await fs.stat(seg).catch(() => null);
+      if (!stats || stats.size === 0) {
+        throw new Error(`Rendered segment ${i} is missing or empty (${seg})`);
+      }
+    }
+
+    // Brief sync buffer ensuring OS disk write descriptors are fully flushed
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
     // Build FFmpeg Concat List File
     const concatListPath = path.join(uploadDir, `concat_${timestamp}.txt`);
     let concatContent = "";
@@ -341,43 +350,60 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
 
     dbJob.progressPercent = 50;
     dbJob.currentStepMessage = `Stitching scene segments with song audio into ${preset.name}...`;
-    await dbJob.save();
+    await dbJob.save().catch(() => {});
 
-    const command = ffmpeg()
-      .input(concatListPath)
-      .inputOptions(["-f", "concat", "-safe", "0"])
-      .input(effectiveAudioPath);
+    // Dual-strategy stitch:
+    // 1. Primary: Ultrafast stream copy (-c:v copy) - 10x faster, zero re-encoding memory overhead, immune to multi-threaded CPU segfaults
+    // 2. Fallback: Safe re-encode with capped threads (threads=2) if stream copy encounters any container edge cases
+    const runStitch = (useStreamCopy = true) => {
+      const stitchCmd = ffmpeg()
+        .input(concatListPath)
+        .inputOptions(["-f", "concat", "-safe", "0"])
+        .input(effectiveAudioPath);
 
-    const finalOutputOpts = [
-      "-c:v", "libx264",
-      "-preset", "veryfast",
-      "-b:v", preset.bitrate,
-      "-maxrate", preset.bitrate,
-      "-bufsize", "512k",
-      "-c:a", "aac",
-      "-b:a", "192k",
-      "-t", String(targetSongDuration)
-    ];
+      const opts = useStreamCopy
+        ? [
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-shortest"
+          ]
+        : [
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-b:v", preset.bitrate,
+            "-maxrate", preset.bitrate,
+            "-bufsize", "512k",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-t", String(targetSongDuration),
+            "-threads", isConstrained ? "1" : "2"
+          ];
 
-    if (isConstrained) {
-      finalOutputOpts.push("-threads", "1");
+      return new Promise((resolve, reject) => {
+        stitchCmd
+          .outputOptions(opts)
+          .save(tempOutputPath)
+          .on("progress", async (p) => {
+            dbJob.progressPercent = Math.min(95, Math.max(50, Math.round(p.percent || 65)));
+            dbJob.currentStepMessage = `Finalizing ${preset.name} video stream...`;
+            await dbJob.save().catch(() => {});
+          })
+          .on("end", resolve)
+          .on("error", (err, stdout, stderr) => {
+            console.error(`FFmpeg stitch attempt failed (streamCopy=${useStreamCopy}):`, stderr || err.message);
+            reject(err);
+          });
+      });
+    };
+
+    try {
+      await runStitch(true);
+    } catch (streamErr) {
+      console.warn("[Video Worker] Stream copy stitch failed, attempting fallback re-encode:", streamErr.message);
+      await fs.unlink(tempOutputPath).catch(() => {});
+      await runStitch(false);
     }
-
-    await new Promise((resolve, reject) => {
-      command
-        .outputOptions(finalOutputOpts)
-        .save(tempOutputPath)
-        .on("progress", async (p) => {
-          dbJob.progressPercent = Math.min(95, Math.max(50, Math.round(p.percent || 60)));
-          dbJob.currentStepMessage = `Encoding ${preset.name} H.264 video stream...`;
-          await dbJob.save();
-        })
-        .on("end", resolve)
-        .on("error", (err, stdout, stderr) => {
-          console.error("FFmpeg error output:", stderr);
-          reject(err);
-        });
-    });
 
     // Read rendered video and upload via universal storage adapter
     const finalVideoBuffer = await fs.readFile(tempOutputPath);

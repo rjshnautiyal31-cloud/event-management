@@ -11,11 +11,12 @@ import { env } from "../../config/env.js";
 import { uploadAssetBuffer } from "../storage/index.js";
 
 const fsPromises = fs.promises;
-ffmpeg.setFfmpegPath(ffmpegInstaller);
+const activeFfmpegPath = process.env.FFMPEG_PATH || (fs.existsSync("/usr/bin/ffmpeg") ? "/usr/bin/ffmpeg" : (fs.existsSync("/usr/local/bin/ffmpeg") ? "/usr/local/bin/ffmpeg" : ffmpegInstaller));
+ffmpeg.setFfmpegPath(activeFfmpegPath);
 
 export function getAudioDurationFromFile(filePath) {
   return new Promise((resolve) => {
-    execFile(ffmpegInstaller, ["-i", filePath], (err, stdout, stderr) => {
+    execFile(activeFfmpegPath, ["-i", filePath], (err, stdout, stderr) => {
       const match = (stderr || "").match(/Duration:\s*(\d+):(\d+):(\d+\.\d+)/);
       if (match) {
         const hours = parseFloat(match[1]);

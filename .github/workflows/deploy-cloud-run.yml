@@ -1,0 +1,41 @@
+name: Deploy API to Google Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/api/**"
+      - "package*.json"
+      - "Dockerfile"
+      - ".github/workflows/deploy-cloud-run.yml"
+
+jobs:
+  deploy:
+    name: Build & Deploy to Cloud Run
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy event-qr-api \
+            --source . \
+            --project project-2a1614a0-3389-4a26-8d4 \
+            --region us-central1 \
+            --allow-unauthenticated \
+            --memory 2Gi \
+            --cpu 2 \
+            --timeout 600 \
+            --execution-environment gen2 \
+            --service-account ai-story-studio@project-2a1614a0-3389-4a26-8d4.iam.gserviceaccount.com

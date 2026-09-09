@@ -10,19 +10,23 @@ function getGeminiClient() {
   const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
   if (fsSync.existsSync(keyFilename)) {
     process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
+  }
+
+  if (env.googleCloudProject) {
     return {
       ai: new GoogleGenAI({
         vertexai: true,
-        project: env.googleCloudProject || "project-2a1614a0-3389-4a26-8d4",
-        location: "us-central1"
+        project: env.googleCloudProject,
+        location: env.googleCloudLocation || "us-central1"
       }),
       modelName: "gemini-2.5-flash"
     };
   }
+
   if (env.geminiApiKey && !env.geminiApiKey.includes("your_gemini_api_key_here")) {
     return {
       ai: new GoogleGenAI({ apiKey: env.geminiApiKey }),
-      modelName: "gemini-3.6-flash"
+      modelName: "gemini-2.5-flash"
     };
   }
   return null;

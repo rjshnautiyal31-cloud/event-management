@@ -13,7 +13,9 @@ export class GoogleOmniVideoAdapter {
     try {
       console.log(`[Google Gemini Omni Video] Authenticating with Vertex AI Service Account...`);
       const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
-      process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
+      if (fsSync.existsSync(keyFilename)) {
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
+      }
 
       const projectId = env.googleCloudProject || "project-2a1614a0-3389-4a26-8d4";
       const ai = new GoogleGenAI({

@@ -464,7 +464,9 @@ export class GoogleLyriaMusicAdapter {
     try {
       console.log(`[Google Lyria AI Music] Authenticating with Vertex AI for Lyria 3 Pro...`);
       const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
-      process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
+      if (fs.existsSync(keyFilename)) {
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
+      }
 
       const projectId = env.googleCloudProject || "project-2a1614a0-3389-4a26-8d4";
       const ai = new GoogleGenAI({
@@ -513,10 +515,13 @@ export class GoogleLyriaMusicAdapter {
       console.warn(`[Google Lyria AI Music] Lyria 3 Pro error: ${err.message}. Attempting legacy lyria-002 fallback...`);
       try {
         const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
-        const auth = new GoogleAuth({
-          keyFilename,
+        const authOptions = {
           scopes: ["https://www.googleapis.com/auth/cloud-platform"]
-        });
+        };
+        if (fs.existsSync(keyFilename)) {
+          authOptions.keyFilename = keyFilename;
+        }
+        const auth = new GoogleAuth(authOptions);
         const client = await auth.getClient();
         const token = await client.getAccessToken();
         const projectId = await auth.getProjectId() || env.googleCloudProject || "project-2a1614a0-3389-4a26-8d4";

@@ -2,7 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import path from "path";
 import fs from "fs/promises";
 import { env } from "../../config/env.js";
-import { uploadAssetBuffer } from "../storage/index.js";
+import { uploadAssetBuffer, buildStoryStorageKey } from "../storage/index.js";
 
 import fsSync from "fs";
 
@@ -192,7 +192,8 @@ Return a JSON array of scenes.`;
 }
 
 // 4. Generate Cinematic Visual Scene Images using Gemini Imagen 3 with Free AI Fallback
-export async function generateSceneImageWithGemini(visualPrompt) {
+export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
+  const { projectId, title = "", sceneNumber = 1 } = (typeof options === "object" && options !== null) ? options : {};
   const ai = getGeminiClient();
 
   if (ai) {
@@ -211,9 +212,15 @@ export async function generateSceneImageWithGemini(visualPrompt) {
 
       const imageBytesBase64 = response.generatedImages?.[0]?.image?.imageBytes;
       if (imageBytesBase64) {
-        const filename = `gemini_scene_${Date.now()}_${Math.floor(Math.random() * 1000)}.jpg`;
+        const filename = `scene_${sceneNumber}_frame_${Date.now()}_${Math.floor(Math.random() * 1000)}.jpg`;
         const buffer = Buffer.from(imageBytesBase64, "base64");
-        return await uploadAssetBuffer(buffer, filename, "image/jpeg");
+        const storageKey = buildStoryStorageKey({
+          projectId,
+          title,
+          category: "scenes/frames",
+          filename
+        });
+        return await uploadAssetBuffer(buffer, storageKey, "image/jpeg");
       }
     } catch (err) {
       console.warn("Gemini Imagen 3 direct generation unconfigured/failed, utilizing high-res AI generator:", err.message);
@@ -231,9 +238,15 @@ export async function generateSceneImageWithGemini(visualPrompt) {
 
     if (res.ok) {
       const arrayBuffer = await res.arrayBuffer();
-      const filename = `ai_scene_${Date.now()}_${seed}.jpg`;
+      const filename = `scene_${sceneNumber}_frame_${Date.now()}_${seed}.jpg`;
       const buffer = Buffer.from(arrayBuffer);
-      return await uploadAssetBuffer(buffer, filename, "image/jpeg");
+      const storageKey = buildStoryStorageKey({
+        projectId,
+        title,
+        category: "scenes/frames",
+        filename
+      });
+      return await uploadAssetBuffer(buffer, storageKey, "image/jpeg");
     }
   } catch (err) {
     console.error("AI Scene Image fetch failed:", err.message);

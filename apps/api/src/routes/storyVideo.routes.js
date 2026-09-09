@@ -12,7 +12,7 @@ import { GenerationJob } from "../models/GenerationJob.js";
 import { analyzeStoryWithGemini, generateLyricsWithGemini, generateSceneImageWithGemini, generateStoryboardFromLyrics } from "../services/providers/gemini.provider.js";
 import { getMusicProvider } from "../services/music/index.js";
 import { getVideoProvider } from "../services/video/index.js";
-import { getStorageProvider } from "../services/storage/index.js";
+import { getStorageProvider, buildStoryStorageKey } from "../services/storage/index.js";
 import { processVideoRenderJob, VIDEO_PRESETS } from "../workers/index.js";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -127,7 +127,8 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
       durationSeconds: lyricsDurationSeconds,
       mood: project.activeStoryAnalysisId.mood || "Upbeat",
       storyContext: project.storyText || project.activeStoryAnalysisId.summary || "",
-      title: project.title || ""
+      title: project.title || "",
+      projectId: project._id
     });
 
     const finalLyrics = audioResult.lyrics || lyricsText;
@@ -170,8 +171,15 @@ storyVideoRouter.post("/projects/:id/media", upload.single("file"), async (req, 
     const mediaType = isVideo ? "video" : "image";
 
     const storage = getStorageProvider();
-    const filename = `media_${Date.now()}_${ext}`;
-    const fileUrl = await storage.uploadFile(req.file.buffer, filename, req.file.mimetype);
+    const cleanOriginal = path.basename(req.file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 30);
+    const filename = `upload_${Date.now()}_${cleanOriginal}${ext}`;
+    const storageKey = buildStoryStorageKey({
+      projectId: project._id,
+      title: project.title,
+      category: "scenes/raw",
+      filename
+    });
+    const fileUrl = await storage.uploadFile(req.file.buffer, storageKey, req.file.mimetype);
 
     const mediaDoc = await Media.create({
       projectId: project._id,
@@ -250,7 +258,11 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
 
       // If project has no media at all, generate an initial frame for the first scene
       if (!media && index === 0 && sceneItem.visualIdea) {
-        const generatedImageUrl = await generateSceneImageWithGemini(sceneItem.visualIdea);
+        const generatedImageUrl = await generateSceneImageWithGemini(sceneItem.visualIdea, {
+          projectId: project._id,
+          title: project.title,
+          sceneNumber: sceneItem.sceneNumber || 1
+        });
         if (generatedImageUrl) {
           media = await Media.create({
             projectId: project._id,
@@ -321,7 +333,10 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/veo", async (req, res, n
     const videoUrl = await videoEngine.generateSceneVideoClip({
       imageUrl: sourceImageUrl,
       promptText,
-      durationSeconds: 5
+      durationSeconds: 5,
+      projectId: project._id,
+      title: project.title,
+      sceneNumber: scene.sceneNumber
     });
 
     if (!videoUrl || !videoUrl.endsWith(".mp4")) {
@@ -394,7 +409,10 @@ storyVideoRouter.post("/projects/:id/scenes/generate-all-veo", async (req, res, 
             const videoUrl = await videoEngine.generateSceneVideoClip({
               imageUrl: sourceImageUrl,
               promptText,
-              durationSeconds: 5
+              durationSeconds: 5,
+              projectId: project._id,
+              title: project.title,
+              sceneNumber: scene.sceneNumber
             });
 
             if (videoUrl && videoUrl.endsWith(".mp4")) {

@@ -12,7 +12,7 @@ import { Song } from "../models/Song.js";
 import { queueService } from "../services/queue/index.js";
 import { env } from "../config/env.js";
 import { createMusicalMelodyWavBuffer } from "../services/music/index.js";
-import { uploadAssetBuffer } from "../services/storage/index.js";
+import { uploadAssetBuffer, buildStoryStorageKey } from "../services/storage/index.js";
 
 const activeFfmpegPath = process.env.FFMPEG_PATH || (fsSync.existsSync("/usr/bin/ffmpeg") ? "/usr/bin/ffmpeg" : (fsSync.existsSync("/usr/local/bin/ffmpeg") ? "/usr/local/bin/ffmpeg" : ffmpegInstaller));
 ffmpeg.setFfmpegPath(activeFfmpegPath);
@@ -75,10 +75,17 @@ async function ensureLocalFile(fileUrlOrPath, tempDir, prefix = "asset", cleanup
 
   // If it references /uploads/ on local server
   if (fileUrlOrPath.includes("/uploads/")) {
+    const relPart = fileUrlOrPath.split("/uploads/")[1];
+    if (relPart) {
+      const localPath = path.join(process.cwd(), "uploads", relPart);
+      if (fsSync.existsSync(localPath)) {
+        return localPath;
+      }
+    }
     const filename = path.basename(fileUrlOrPath);
-    const localPath = path.join(process.cwd(), "uploads", filename);
-    if (fsSync.existsSync(localPath)) {
-      return localPath;
+    const fallbackPath = path.join(process.cwd(), "uploads", filename);
+    if (fsSync.existsSync(fallbackPath)) {
+      return fallbackPath;
     }
   }
 
@@ -407,9 +414,16 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
 
     // Read rendered video and upload via universal storage adapter
     const finalVideoBuffer = await fs.readFile(tempOutputPath);
-    const publicUrl = await uploadAssetBuffer(finalVideoBuffer, outputFilename, "video/mp4");
+    const storageKey = buildStoryStorageKey({
+      projectId,
+      title: projectDoc?.title || "",
+      category: "renders",
+      filename: outputFilename
+    });
+    const publicUrl = await uploadAssetBuffer(finalVideoBuffer, storageKey, "video/mp4");
 
     // Cleanup temporary segment files & downloaded cloud assets
+    await fs.unlink(tempOutputPath).catch(() => {});
     await fs.unlink(concatListPath).catch(() => {});
     await Promise.all(segmentPaths.map((sp) => fs.unlink(sp).catch(() => {})));
     await Promise.all(tempFilesToClean.map((tf) => fs.unlink(tf).catch(() => {})));

@@ -36,6 +36,7 @@ class LocalStorageProvider {
 
   async uploadFile(fileBuffer, filename, mimetype) {
     const filePath = path.join(this.uploadDir, filename);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, fileBuffer);
     const baseUrl = (env.publicUrl || `http://localhost:${env.port}`).replace(/\/+$/, "");
     return `${baseUrl}/uploads/${filename}`;
@@ -168,4 +169,30 @@ export function getStorageProvider() {
 export async function uploadAssetBuffer(fileBuffer, filename, mimetype) {
   const storage = getStorageProvider();
   return storage.uploadFile(fileBuffer, filename, mimetype);
+}
+
+/**
+ * Builds a clean, unique storage key for a story asset directly under {story-name}_{shortId}/
+ * E.g., sarah-wedding_a1b2c3/audio/song_123.mp3
+ *       sarah-wedding_a1b2c3/scenes/raw/upload_123.jpg
+ *       sarah-wedding_a1b2c3/scenes/clips/scene_1_clip_123.mp4
+ *       sarah-wedding_a1b2c3/renders/rendered_video_1080p_123.mp4
+ */
+export function buildStoryStorageKey({ projectId, title = "", category = "scenes", filename }) {
+  let slug = (title || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 40);
+  if (!slug) slug = "story";
+
+  const shortId = projectId ? projectId.toString().slice(-6) : Date.now().toString().slice(-6);
+  const storyFolder = `${slug}_${shortId}`;
+
+  const cleanFilename = path.basename(filename);
+  if (category) {
+    const cleanCategory = category.replace(/^\/+|\/+$/g, "");
+    return `${storyFolder}/${cleanCategory}/${cleanFilename}`;
+  }
+  return `${storyFolder}/${cleanFilename}`;
 }

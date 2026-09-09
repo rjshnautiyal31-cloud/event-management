@@ -8,7 +8,7 @@ import textToSpeech from "@google-cloud/text-to-speech";
 import { GoogleAuth } from "google-auth-library";
 import { GoogleGenAI } from "@google/genai";
 import { env } from "../../config/env.js";
-import { uploadAssetBuffer } from "../storage/index.js";
+import { uploadAssetBuffer, buildStoryStorageKey } from "../storage/index.js";
 
 const fsPromises = fs.promises;
 const activeFfmpegPath = process.env.FFMPEG_PATH || (fs.existsSync("/usr/bin/ffmpeg") ? "/usr/bin/ffmpeg" : (fs.existsSync("/usr/local/bin/ffmpeg") ? "/usr/local/bin/ffmpeg" : ffmpegInstaller));
@@ -219,7 +219,7 @@ async function fetchFallbackVocalAudio(lyricsText, tempVocalPath) {
 
 // Google Cloud Vocal & Music Song Adapter
 class GoogleTtsMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30 }) {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, projectId, title = "" }) {
     const timestamp = Date.now();
     const uploadDir = path.join(process.cwd(), "uploads");
     await fsPromises.mkdir(uploadDir, { recursive: true });
@@ -267,7 +267,13 @@ class GoogleTtsMusicAdapter {
     }
 
     const audioBuffer = await fsPromises.readFile(outputPath);
-    const audioUrl = await uploadAssetBuffer(audioBuffer, outputFilename, "audio/mpeg");
+    const storageKey = buildStoryStorageKey({
+      projectId,
+      title,
+      category: "audio",
+      filename: outputFilename
+    });
+    const audioUrl = await uploadAssetBuffer(audioBuffer, storageKey, "audio/mpeg");
 
     return {
       audioUrl,
@@ -278,17 +284,17 @@ class GoogleTtsMusicAdapter {
 
 // Local Synth Music Adapter
 class LocalSynthMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30 }) {
-    return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds });
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, projectId, title = "" }) {
+    return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title });
   }
 }
 
 // Suno AI Production Cloud Music Adapter
 class SunoMusicAdapter {
-  async generateMusic({ lyrics, genre, durationSeconds = 30 }) {
+  async generateMusic({ lyrics, genre, durationSeconds = 30, projectId, title = "" }) {
     const apiKey = env.musicApiKey || env.sunoApiKey;
     if (!apiKey) {
-      return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds });
+      return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title });
     }
 
     try {
@@ -316,17 +322,17 @@ class SunoMusicAdapter {
       console.error("Suno AI music generation error:", err.message);
     }
 
-    return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds });
+    return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title });
   }
 }
 
 // ElevenLabs Production Text-to-Music Adapter
 class ElevenLabsMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30 }) {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, projectId, title = "" }) {
     const apiKey = env.elevenLabsApiKey || env.musicApiKey;
     if (!apiKey) {
       console.warn("[ElevenLabs] ELEVENLABS_API_KEY missing, falling back to Google Cloud TTS adapter");
-      return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds });
+      return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title });
     }
 
     const timestamp = Date.now();
@@ -360,7 +366,13 @@ class ElevenLabsMusicAdapter {
       if (musicResponse.ok) {
         const audioBuffer = Buffer.from(await musicResponse.arrayBuffer());
         await fsPromises.writeFile(outputPath, audioBuffer);
-        const audioUrl = await uploadAssetBuffer(audioBuffer, outputFilename, "audio/mpeg");
+        const storageKey = buildStoryStorageKey({
+          projectId,
+          title,
+          category: "audio",
+          filename: outputFilename
+        });
+        const audioUrl = await uploadAssetBuffer(audioBuffer, storageKey, "audio/mpeg");
         console.log(`[ElevenLabs Music API] Successfully generated full ElevenLabs AI song (${audioBuffer.length} bytes)`);
         return {
           audioUrl,
@@ -456,7 +468,7 @@ class ElevenLabsMusicAdapter {
 
 // Google DeepMind Lyria 3 Pro AI Music Adapter (Vertex AI Next-Gen Interactions Model)
 export class GoogleLyriaMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, mood = "Upbeat", storyContext = "", title = "" }) {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, mood = "Upbeat", storyContext = "", title = "", projectId }) {
     const timestamp = Date.now();
     const uploadDir = path.join(process.cwd(), "uploads");
     await fsPromises.mkdir(uploadDir, { recursive: true });
@@ -468,10 +480,10 @@ export class GoogleLyriaMusicAdapter {
         process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
       }
 
-      const projectId = env.googleCloudProject || process.env.GOOGLE_CLOUD_PROJECT;
+      const projectIdEnv = env.googleCloudProject || process.env.GOOGLE_CLOUD_PROJECT;
       const ai = new GoogleGenAI({
         vertexai: true,
-        project: projectId,
+        project: projectIdEnv,
         location: "global"
       });
 
@@ -497,7 +509,13 @@ export class GoogleLyriaMusicAdapter {
         const outputPath = path.join(uploadDir, outputFilename);
         const audioBuffer = Buffer.from(interaction.output_audio.data, "base64");
         await fsPromises.writeFile(outputPath, audioBuffer);
-        const audioUrl = await uploadAssetBuffer(audioBuffer, outputFilename, "audio/mpeg");
+        const storageKey = buildStoryStorageKey({
+          projectId,
+          title,
+          category: "audio",
+          filename: outputFilename
+        });
+        const audioUrl = await uploadAssetBuffer(audioBuffer, storageKey, "audio/mpeg");
 
         const realDuration = await getAudioDurationFromFile(outputPath);
         const extractedLyrics = extractLyricsFromLyriaOutput(interaction.output_text);
@@ -566,7 +584,13 @@ export class GoogleLyriaMusicAdapter {
         await fsPromises.unlink(bgWavPath).catch(() => {});
 
         const audioBuffer = await fsPromises.readFile(outputPath);
-        const audioUrl = await uploadAssetBuffer(audioBuffer, outputFilename, "audio/mpeg");
+        const storageKey = buildStoryStorageKey({
+          projectId,
+          title,
+          category: "audio",
+          filename: outputFilename
+        });
+        const audioUrl = await uploadAssetBuffer(audioBuffer, storageKey, "audio/mpeg");
 
         const realDuration = await getAudioDurationFromFile(outputPath);
         return {
@@ -576,7 +600,7 @@ export class GoogleLyriaMusicAdapter {
         };
       } catch (fallbackErr) {
         console.warn(`[Google Lyria AI Music] Legacy fallback failed: ${fallbackErr.message}. Defaulting to TTS synth.`);
-        return googleTtsSynth.generateMusic({ lyrics, genre, durationSeconds });
+        return googleTtsSynth.generateMusic({ lyrics, genre, durationSeconds, projectId, title });
       }
     }
   }

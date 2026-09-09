@@ -3,11 +3,11 @@ import fs from "fs/promises";
 import fsSync from "fs";
 import { GoogleGenAI } from "@google/genai";
 import { env } from "../../config/env.js";
-import { uploadAssetBuffer } from "../storage/index.js";
+import { uploadAssetBuffer, buildStoryStorageKey } from "../storage/index.js";
 
 // Google Cloud Gemini Omni 1.1 Flash AI Video Adapter (Vertex AI Next-Gen Interactions)
 export class GoogleOmniVideoAdapter {
-  async generateSceneVideoClip({ imageUrl, promptText, durationSeconds = 5 }) {
+  async generateSceneVideoClip({ imageUrl, promptText, durationSeconds = 5, projectId: storyProjectId, title = "", sceneNumber = 1 }) {
     const cleanPrompt = (promptText || "Cinematic 5-second motion video clip, photorealistic 16:9 widescreen, cinematic camera motion").trim();
 
     try {
@@ -58,23 +58,20 @@ export class GoogleOmniVideoAdapter {
           if (imgBuffer && imgBuffer.length > 0) {
             inputPayload = [
               {
-                type: "image",
-                data: imgBuffer.toString("base64"),
-                mime_type: mimeType
+                inlineData: {
+                  mimeType,
+                  data: imgBuffer.toString("base64")
+                }
               },
-              {
-                type: "text",
-                text: `Animate this scene into a cinematic 5-second motion video clip: ${cleanPrompt}. Smooth cinematic camera movement, 16:9 widescreen.`
-              }
+              cleanPrompt
             ];
-            console.log(`[Google Gemini Omni Video] Attached source frame (${imgBuffer.length} bytes) for Image-to-Video animation`);
           }
         } catch (imgErr) {
-          console.warn("[Google Gemini Omni Video] Could not load image for Image-to-Video, proceeding with text prompt:", imgErr.message);
+          console.warn("[Google Gemini Omni Video] Could not fetch input image, proceeding with text-to-video:", imgErr.message);
         }
       }
 
-      let inter;
+      let inter = null;
       try {
         inter = await ai.interactions.create({
           model: "gemini-omni-1.1-flash-preview",
@@ -93,9 +90,15 @@ export class GoogleOmniVideoAdapter {
       }
 
       if (inter?.output_video?.data) {
-        const videoFilename = `omni_scene_${Date.now()}_${Math.floor(Math.random() * 1000)}.mp4`;
+        const videoFilename = `scene_${sceneNumber}_clip_${Date.now()}_${Math.floor(Math.random() * 1000)}.mp4`;
         const buffer = Buffer.from(inter.output_video.data, "base64");
-        const publicUrl = await uploadAssetBuffer(buffer, videoFilename, "video/mp4");
+        const storageKey = buildStoryStorageKey({
+          projectId: storyProjectId,
+          title,
+          category: "scenes/clips",
+          filename: videoFilename
+        });
+        const publicUrl = await uploadAssetBuffer(buffer, storageKey, "video/mp4");
 
         console.log(`[Google Gemini Omni Video] Successfully generated and stored MP4 video clip: ${publicUrl} (${inter.output_video.data.length} bytes)`);
         return publicUrl;
@@ -113,11 +116,11 @@ export const GoogleVeoVideoAdapter = GoogleOmniVideoAdapter;
 
 // Replicate Cloud AI Video Adapter
 class ReplicateVideoAdapter {
-  async generateSceneVideoClip({ imageUrl, promptText, durationSeconds = 5 }) {
+  async generateSceneVideoClip({ imageUrl, promptText, durationSeconds = 5, projectId: storyProjectId, title = "", sceneNumber = 1 }) {
     const apiKey = env.videoApiKey || env.replicateApiKey;
     if (!apiKey) {
       console.warn("REPLICATE_API_KEY missing. Falling back to Google Veo or static image frame.");
-      return new GoogleVeoVideoAdapter().generateSceneVideoClip({ imageUrl, promptText, durationSeconds });
+      return new GoogleVeoVideoAdapter().generateSceneVideoClip({ imageUrl, promptText, durationSeconds, projectId: storyProjectId, title, sceneNumber });
     }
 
     try {
@@ -173,7 +176,7 @@ class ReplicateVideoAdapter {
       console.error("Replicate AI video generation error:", err.message);
     }
 
-    return new GoogleVeoVideoAdapter().generateSceneVideoClip({ imageUrl, promptText, durationSeconds });
+    return new GoogleVeoVideoAdapter().generateSceneVideoClip({ imageUrl, promptText, durationSeconds, projectId: storyProjectId, title, sceneNumber });
   }
 }
 

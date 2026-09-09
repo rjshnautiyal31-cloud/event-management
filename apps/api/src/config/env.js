@@ -78,7 +78,7 @@ const PROPERTY_CONFIG = {
   s3PublicDomain: { envKeys: ["S3_PUBLIC_DOMAIN"], default: "" },
   awsAccessKeyId: { envKeys: ["AWS_ACCESS_KEY_ID"], default: "" },
   awsSecretAccessKey: { envKeys: ["AWS_SECRET_ACCESS_KEY"], default: "" },
-  gcsBucket: { envKeys: ["GCS_BUCKET"], default: "" },
+  gcsBucket: { envKeys: ["GCS_BUCKET"], default: "qr-event-story-media" },
 
   // External Worker & Environment
   workerUrl: { envKeys: ["WORKER_URL"], default: "" },

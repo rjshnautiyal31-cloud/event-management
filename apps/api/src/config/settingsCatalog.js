@@ -178,7 +178,7 @@ export const SETTINGS_CATALOG = [
     type: "text",
     isSecret: false,
     envKeys: ["GCS_BUCKET"],
-    defaultValue: ""
+    defaultValue: "qr-event-story-media"
   },
 
   // --- 5. Email & Ticketing Delivery ---

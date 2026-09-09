@@ -168,24 +168,111 @@ SENDER_EMAIL=onboarding@resend.dev
 
 ---
 
-## Render Free Tier Deployment Guide
+## Deployment Architectures: Cloud Run vs Render
 
-### Why Render Free Tier Requires Cloud Storage
-1. **Ephemeral Disk**: Render Free Tier discards local disk files on redeploy or when the instance spins down. Uploaded media and rendered videos must be saved in **Cloudflare R2**, **Google Cloud Storage**, or **AWS S3** for persistent access.
-2. **512 MB Memory Limit**: The built-in video worker automatically detects Render (`process.env.RENDER || NODE_ENV=production`) and runs FFmpeg with:
-   - `-threads 1` (limits memory to ~280 MB RAM, preventing OOM SIGKILL).
-   - `-preset veryfast -bufsize 512k -maxrate <bitrate>`.
-3. **15-Minute Cold Sleep**: Set up a free monitoring check (e.g. [cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com)) to ping `GET https://your-api.onrender.com/health` every 10 minutes to prevent the instance from sleeping while users are active.
+This platform supports two production deployment models for the backend API and video rendering engine:
 
-### Recommended Free Tier Cloud Stack:
-- **Hosting**: Render Free Web Service (Node.js API + Static React SPA).
-- **Database**: MongoDB Atlas M0 Free Tier (512 MB storage).
-- **Media Storage**: **Cloudflare R2** (10 GB free storage, **0 egress fees**) or **Google Cloud Storage** (5 GB always free).
-- **AI Models**: Google Vertex AI Service Account (Gemini 2.5 Flash + Lyria + Gemini Omni).
+| Architecture Component | Option A: Google Cloud Run (Recommended for AI Video) | Option B: Render Web Service (Free Tier) |
+| :--- | :--- | :--- |
+| **Backend API & Worker** | **Google Cloud Run** (2 vCPU, 2 GB RAM, Gen2, 600s timeout) | **Render Web Service** (0.5 vCPU, 512 MB RAM) |
+| **Frontend UI** | **Render Static Site** (Fast worldwide CDN) | **Render Static Site** |
+| **Media Storage** | **Google Cloud Storage (GCS)** (`qr-event-story-media`) | **Cloudflare R2** or **Google Cloud Storage** |
+| **Database** | **MongoDB Atlas M0** | **MongoDB Atlas M0** |
+| **Cost** | Free tier covers 2 million requests + generous compute | 100% Free Tier |
+| **Heavy Video Rendering** | Handles 1080p Full HD multi-scene videos effortlessly in seconds | Throttled to `-threads 1` to stay within 512 MB RAM |
 
 ---
 
-## Quick Start
+## How to Switch API Between Cloud Run and Render
+
+You can switch your backend between Google Cloud Run and Render at any time without changing application code. Only one environment variable in your frontend needs to point to the active backend URL.
+
+### Scenario 1: Switching from Render to Google Cloud Run (Active Setup)
+
+1. **Deploy API on Cloud Run**:
+   ```bash
+   gcloud run deploy event-qr-api \
+     --source . \
+     --project YOUR_GCP_PROJECT_ID \
+     --region us-central1 \
+     --allow-unauthenticated \
+     --memory 2Gi \
+     --cpu 2 \
+     --timeout 600 \
+     --execution-environment gen2 \
+     --service-account YOUR_SA_NAME@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com \
+     --set-env-vars MONGO_URI="YOUR_MONGODB_URI",JWT_SECRET="YOUR_JWT_SECRET",STORAGE_PROVIDER="gcs",GCS_BUCKET="YOUR_GCS_BUCKET",GOOGLE_CLOUD_PROJECT="YOUR_GCP_PROJECT_ID",GOOGLE_CLOUD_LOCATION="us-central1"
+   ```
+2. **Copy Cloud Run Service URL**:
+   Example: `https://event-qr-api-<hash>-<region>.a.run.app`
+3. **Update Frontend on Render**:
+   - Go to **Render Dashboard** → click your **Frontend Web Service / Static Site**.
+   - Navigate to **Environment** in the left sidebar.
+   - Update `VITE_API_BASE` to your Cloud Run URL:
+     `VITE_API_BASE=https://event-qr-api-<hash>-<region>.a.run.app`
+   - Click **Save Changes** → **Manual Deploy** → **Clear build cache & deploy**.
+4. **Suspend Render API Service** (Optional):
+   - In Render Dashboard, go to your old `apps/api` Web Service → click **Settings** → **Suspend Web Service** (to save resources).
+
+---
+
+### Scenario 2: Switching from Google Cloud Run back to Render
+
+If you ever want to run the backend completely on Render:
+
+1. **Resume or Create the Render API Web Service**:
+   - In Render Dashboard, click **New +** → **Web Service** (or unsuspend your existing API service).
+   - Connect your GitHub repository.
+   - **Root Directory**: `apps/api` (or empty if using root npm workspaces).
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+   - **Instance Type**: Free (0.5 CPU, 512 MB RAM).
+2. **Add Environment Variables in Render API Web Service**:
+   - `NODE_ENV`: `production`
+   - `PORT`: `10000` (or leave default, Render sets `PORT`)
+   - `MONGO_URI`: `mongodb+srv://...`
+   - `JWT_SECRET`: `your-jwt-secret`
+   - `STORAGE_PROVIDER`: `gcs` (or `r2` / `s3`)
+   - `GCS_BUCKET`: `your-storage-bucket`
+   - `GOOGLE_CLOUD_PROJECT`: `YOUR_GCP_PROJECT_ID`
+   - `GOOGLE_CLOUD_LOCATION`: `us-central1`
+3. **Configure Google Cloud Credentials on Render**:
+   - Render does not have GCP IAM Application Default Credentials.
+   - In Render Dashboard → API Service → **Secret Files**:
+     - File Name: `/etc/secrets/gcp-service-account.json`
+     - Contents: Paste the JSON contents of your GCP service account key.
+   - In Environment Variables, add:
+     - `GOOGLE_APPLICATION_CREDENTIALS`: `/etc/secrets/gcp-service-account.json`
+4. **Update Frontend on Render**:
+   - Go to your Frontend Static Site → **Environment**.
+   - Change `VITE_API_BASE` back to your Render API address:
+     `VITE_API_BASE=https://your-api.onrender.com`
+   - Click **Manual Deploy** → **Clear build cache & deploy**.
+5. **Scale Down Cloud Run** (Optional):
+   - To ensure you don't incur charges on Cloud Run, scale its minimum and maximum instances to 0:
+     ```bash
+     gcloud run services update event-qr-api --max-instances=0 --region=us-central1
+     ```
+
+---
+
+## Continuous Deployment to Cloud Run on `git push main`
+
+### Option 1: Native Cloud Run Continuous Deployment (Recommended)
+1. Open Google Cloud Console → **Cloud Run** → Click `event-qr-api`.
+2. Click **"SET UP CONTINUOUS DEPLOYMENT"**.
+3. Select **GitHub** and authorize repo: `rjshnautiyal31-cloud/event-management`.
+4. Branch: `^main$`.
+5. Build Type: **Dockerfile** (path: `/Dockerfile`).
+6. Click **Save**. Cloud Build automatically rebuilds and rolls out updates whenever commits hit `main`.
+
+### Option 2: GitHub Actions Workflow
+The repo includes [`.github/workflows/deploy-cloud-run.yml`](.github/workflows/deploy-cloud-run.yml).
+Add your service account key JSON as a repository secret named `GCP_SA_KEY` under **GitHub Settings → Secrets and variables → Actions**.
+
+---
+
+## Quick Start (Local Development)
 
 1. **Install dependencies at root**:
    ```bash
@@ -198,13 +285,14 @@ SENDER_EMAIL=onboarding@resend.dev
    npm run dev:web  # Web App on http://localhost:5173
    ```
 
-3. **Access AI Story-to-Video Studio**:
-   - Open browser to **`http://localhost:5173/#/studio`**.
-   - Log in as Event Admin / Super Admin to analyze stories, generate lyrics, upload photos, and render event music videos!
+3. **Access AI Story-to-Video Studio & Settings**:
+   - **Studio**: `http://localhost:5173/#/studio`
+   - **Settings Dashboard**: `http://localhost:5173/#/settings` (Strictly accessible by `super_admin` only).
 
 ---
 
 ## Documentation & References
 
-- Technical Implementation Plan: [`ai_story_to_video_implementation_plan.md`](./ai_story_to_video_implementation_plan.md)
 - User Guide: [`USER_GUIDE.md`](./USER_GUIDE.md)
+- Technical Implementation Plan: [`ai_story_to_video_implementation_plan.md`](./ai_story_to_video_implementation_plan.md)
+

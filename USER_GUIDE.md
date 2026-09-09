@@ -14,7 +14,9 @@ Welcome to the **Event QR Check-In System**! This application is designed to hel
 7. [QR Code Check-In Scanning](#7-qr-code-check-in-scanning)
 8. [Email Ticket Deliveries (Resend vs SMTP)](#8-email-ticket-deliveries-resend-vs-smtp)
 9. [AI Story-to-Song-to-Video Studio](#9-ai-story-to-song-to-video-studio)
-10. [Multi-Cloud Storage & Render Free Tier Deployment](#10-multi-cloud-storage--render-free-tier-deployment)
+10. [Google Cloud Run & Cloud Storage Production Setup](#10-google-cloud-run--cloud-storage-production-setup)
+11. [How to Switch API Between Cloud Run and Render](#11-how-to-switch-api-between-cloud-run-and-render)
+12. [Back Office Settings & Environment Variables (`/#/settings`)](#12-back-office-settings--environment-variables--settings)
 
 ---
 
@@ -238,27 +240,97 @@ STORAGE_PROVIDER=local
 PUBLIC_URL=http://localhost:4000
 ```
 
-### Low-Memory FFmpeg Guard
-When running on Render, the video worker automatically applies low-memory encoding flags:
-- `-threads 1`: Restricts FFmpeg to a single thread, reducing peak memory usage from 900MB to ~280MB.
-- `-preset veryfast`: Minimizes buffer allocations.
-- `-bufsize 512k -maxrate <bitrate>`: Enforces a strict streaming buffer window.
-
-### Preventing Inactivity Sleep (Keep-Alive Ping)
-Render free services spin down after 15 minutes of no HTTP requests. To prevent this while your event is active:
-1. Register for a free account at [cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com).
-2. Set up an HTTP check targeting:
-   ```
-   GET https://<your-render-app-name>.onrender.com/health
-   ```
-3. Set the interval to **every 10 minutes**.
-4. The endpoint responds with `{"status":"ok","timestamp":"..."}` in under 5ms with zero database overhead, keeping the instance warm.
+### Low-Memory FFmpeg Guard & Ultrafast Stream Copy
+The built-in video worker employs two optimization strategies:
+- **Ultrafast Stream Copy (`-c:v copy`)**: When stitching normalized scene clips together, FFmpeg performs direct stream copying without re-encoding video frames. This reduces render times from minutes to seconds and drastically lowers CPU and memory consumption.
+- **Render Free Tier Low-Memory Mode**: When running on Render (`NODE_ENV=production`), it caps FFmpeg to `-threads 1` and `-bufsize 512k` to stay safely within Render's 512 MB RAM limit.
 
 ---
 
-## 11. Back Office Settings & Environment Variables Management (`/#/settings`)
+## 10. Google Cloud Run & Cloud Storage Production Setup
 
-The platform includes a dedicated **System & Environment Settings** dashboard accessible by administrators and super administrators directly from the top navigation bar or the drawer menu (`⚙️ Settings`).
+For high-volume video rendering, Google Cloud Run is the recommended production backend target:
+- **Dedicated Compute**: 2 vCPU and 2 GB RAM (Gen2 execution environment, 600s timeout).
+- **Application Default Credentials (ADC)**: When running in Cloud Run, Google Cloud natively authenticates storage and Vertex AI through the container's service account without requiring a local `gcp-service-account.json` file.
+- **Direct Public Media CDN**: Media stored in Google Cloud Storage (`qr-event-story-media`) is served directly to users via Google's global CDN.
+
+### Cloud Run Deployment Command
+```bash
+gcloud run deploy event-qr-api \
+  --source . \
+  --project YOUR_GCP_PROJECT_ID \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --memory 2Gi \
+  --cpu 2 \
+  --timeout 600 \
+  --execution-environment gen2 \
+  --service-account YOUR_SA_NAME@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com \
+  --set-env-vars MONGO_URI="YOUR_MONGODB_URI",JWT_SECRET="YOUR_JWT_SECRET",STORAGE_PROVIDER="gcs",GCS_BUCKET="YOUR_GCS_BUCKET",GOOGLE_CLOUD_PROJECT="YOUR_GCP_PROJECT_ID",GOOGLE_CLOUD_LOCATION="us-central1"
+```
+
+---
+
+## 11. How to Switch API Between Cloud Run and Render
+
+Because the frontend and backend are completely decoupled, you can switch the backend between Google Cloud Run and Render at any time by changing a single environment variable in the frontend on Render.
+
+### Scenario A: Switching from Render to Google Cloud Run (Active Setup)
+1. **Deploy API on Cloud Run**: Run the `gcloud run deploy` command in Cloud Shell.
+2. **Note your Cloud Run URL**: (e.g., `https://event-qr-api-<hash>-<region>.a.run.app`).
+3. **Point Frontend to Cloud Run**:
+   - Go to your Render Dashboard → Frontend Static Site / Web Service → **Environment**.
+   - Set `VITE_API_BASE` to:
+     ```
+     VITE_API_BASE=https://event-qr-api-<hash>-<region>.a.run.app
+     ```
+   - Click **Save Changes** → **Manual Deploy** → **Clear build cache & deploy**.
+4. **Suspend Render API Service** (Optional):
+   - In Render Dashboard, go to your old `apps/api` Web Service → click **Settings** → **Suspend Web Service** (saves memory and avoids sleep issues).
+
+### Scenario B: Switching from Google Cloud Run back to Render
+1. **Unsuspend or Create the API Service on Render**:
+   - In Render Dashboard, go to your API Web Service and click **Resume**.
+   - If setting up fresh:
+     - **Root Directory**: `apps/api`
+     - **Build Command**: `npm install`
+     - **Start Command**: `npm start`
+     - **Instance Type**: Free (512 MB RAM)
+2. **Set Environment Variables on Render API Service**:
+   - `MONGO_URI`: `mongodb+srv://...`
+   - `JWT_SECRET`: `your_jwt_secret`
+   - `STORAGE_PROVIDER`: `gcs` (or `r2`)
+   - `GCS_BUCKET`: `your-storage-bucket`
+   - `GOOGLE_CLOUD_PROJECT`: `YOUR_GCP_PROJECT_ID`
+   - `GOOGLE_APPLICATION_CREDENTIALS`: `/etc/secrets/gcp-service-account.json`
+3. **Upload GCP Key to Render (Secret Files)**:
+   - On Render, open your API Web Service → **Secret Files**.
+   - Add a file `/etc/secrets/gcp-service-account.json` and paste your service account key JSON.
+4. **Point Frontend to Render**:
+   - In Render Dashboard, open your Frontend Static Site → **Environment**.
+   - Change `VITE_API_BASE` to:
+     ```
+     VITE_API_BASE=https://your-api.onrender.com
+     ```
+   - Click **Save Changes** → **Manual Deploy** → **Clear build cache & deploy**.
+5. **Scale Cloud Run to 0** (Optional):
+   - Prevent any unwanted charges on Cloud Run:
+     ```bash
+     gcloud run services update event-qr-api --max-instances=0 --region=us-central1
+     ```
+
+### Automated Continuous Deployment on `git push main`
+- **Via Cloud Run Console**: Open Cloud Run → `event-qr-api` → **Set Up Continuous Deployment** → connect GitHub repo `rjshnautiyal31-cloud/event-management` and branch `main`.
+- **Via GitHub Actions**: Add secret `GCP_SA_KEY` to GitHub repo settings; the workflow at [`.github/workflows/deploy-cloud-run.yml`](.github/workflows/deploy-cloud-run.yml) will deploy automatically on every push to `main`.
+
+---
+
+## 12. Back Office Settings & Environment Variables (`/#/settings`)
+
+The platform includes a dedicated **Back Office Settings Dashboard** accessible directly from the top navigation bar or drawer menu (`⚙️ Settings`).
+
+> [!IMPORTANT]
+> **Strict Super Admin Access Only**: The Settings page and its underlying API routes (`/api/settings/*`) are strictly guarded. Only users with the **`super_admin`** role can view or modify settings. Event Admins and Staff are blocked with `403 Forbidden`.
 
 ### Dual-Tier Precedence Hierarchy
 All system parameters and cloud credentials operate on a strict 2-tier resolution order:
@@ -267,13 +339,13 @@ All system parameters and cloud credentials operate on a strict 2-tier resolutio
    - Any value defined here overrides `.env` variables immediately without requiring a server reboot or restart.
    - Indicated in the UI by a 🟢 **`Database (BO)`** badge.
 2. **Tier 2 (Fallback Priority): Environment Variables (`.env`)**
-   - If a setting has no override saved in the Database, the application automatically reads the value from `process.env` (loaded from `.env` or Render environment settings).
+   - If a setting has no override saved in the Database, the application automatically reads the value from `process.env` (loaded from `.env` or Render/Cloud Run environment settings).
    - Indicated in the UI by a 🟡 **`.env Fallback`** badge.
 3. **Tier 3: Built-in Defaults**
    - If neither the Database nor `.env` specifies a value, a safe default is applied (e.g., `local` for storage, `memory` for queue, `google_lyria` for music).
 
 ### Configurable Categories
-- **☁️ Cloud Storage**: Switch between `local`, `s3`, `r2`, and `gcs`. Set custom S3 endpoints, public CDN domains, bucket names, and AWS/R2 credentials.
+- **☁️ Cloud Storage**: Switch between `local`, `s3`, `r2`, and `gcs`. Set custom S3 endpoints, public CDN domains, bucket names (`GCS_BUCKET`), and credentials.
 - **🤖 AI & Vertex LLM**: Set `GEMINI_API_KEY`, Google Cloud Project ID (`GOOGLE_CLOUD_PROJECT`), Vertex AI region, and default LLM provider.
 - **🎵 Music & Audio**: Set `MUSIC_PROVIDER` (`google_lyria`, `elevenlabs`, `suno`, `google_tts`, `local_synth`) and respective API keys.
 - **🎬 Motion Video**: Set `VIDEO_PROVIDER` (`google_omni`, `google_veo`, `replicate`, `local_ffmpeg`) and Replicate API keys.
@@ -284,5 +356,6 @@ All system parameters and cloud credentials operate on a strict 2-tier resolutio
 - **Test Cloud Storage**: Click **"Test Storage"** in the top action bar. The server uploads a test buffer using the active storage configuration and validates the generated public URL.
 - **Test AI Keys**: Click **"Test AI Keys"** to verify that Gemini API or GCP Vertex AI project credentials are valid.
 - **Reset to .env**: For any setting currently stored in the Database, click **"Reset to .env"** to delete the DB override and immediately revert back to the environment variable.
+
 
 

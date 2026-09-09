@@ -14,11 +14,11 @@ export const SETTINGS_CATALOG = [
     key: "GOOGLE_CLOUD_PROJECT",
     category: "ai",
     label: "Google Cloud Project ID",
-    description: "GCP Project ID used for Vertex AI (Google DeepMind Lyria and Gemini Omni models).",
+    description: "GCP Project ID for Vertex AI and Lyria music generation",
     type: "text",
     isSecret: false,
     envKeys: ["GOOGLE_CLOUD_PROJECT"],
-    defaultValue: "project-2a1614a0-3389-4a26-8d4"
+    defaultValue: ""
   },
   {
     key: "GOOGLE_CLOUD_LOCATION",

@@ -31,11 +31,11 @@ jobs:
         run: |
           gcloud run deploy event-qr-api \
             --source . \
-            --project project-2a1614a0-3389-4a26-8d4 \
+            --project ${{ secrets.GCP_PROJECT_ID }} \
             --region us-central1 \
             --allow-unauthenticated \
             --memory 2Gi \
             --cpu 2 \
             --timeout 600 \
             --execution-environment gen2 \
-            --service-account ai-story-studio@project-2a1614a0-3389-4a26-8d4.iam.gserviceaccount.com
+            --service-account ${{ secrets.GCP_SERVICE_ACCOUNT }}

@@ -67,7 +67,7 @@ const PROPERTY_CONFIG = {
 
   // API Keys & Cloud Config
   geminiApiKey: { envKeys: ["GEMINI_API_KEY"], default: "" },
-  googleCloudProject: { envKeys: ["GOOGLE_CLOUD_PROJECT"], default: "project-2a1614a0-3389-4a26-8d4" },
+  googleCloudProject: { envKeys: ["GOOGLE_CLOUD_PROJECT"], default: "" },
   googleCloudLocation: { envKeys: ["GOOGLE_CLOUD_LOCATION"], default: "us-central1" },
   redisUrl: { envKeys: ["REDIS_URL"], default: "redis://127.0.0.1:6379" },
 

@@ -17,7 +17,7 @@ export class GoogleOmniVideoAdapter {
         process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
       }
 
-      const projectId = env.googleCloudProject || "project-2a1614a0-3389-4a26-8d4";
+      const projectId = env.googleCloudProject || process.env.GOOGLE_CLOUD_PROJECT;
       const ai = new GoogleGenAI({
         vertexai: true,
         project: projectId,

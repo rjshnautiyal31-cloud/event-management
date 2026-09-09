@@ -468,7 +468,7 @@ export class GoogleLyriaMusicAdapter {
         process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
       }
 
-      const projectId = env.googleCloudProject || "project-2a1614a0-3389-4a26-8d4";
+      const projectId = env.googleCloudProject || process.env.GOOGLE_CLOUD_PROJECT;
       const ai = new GoogleGenAI({
         vertexai: true,
         project: projectId,
@@ -524,7 +524,7 @@ export class GoogleLyriaMusicAdapter {
         const auth = new GoogleAuth(authOptions);
         const client = await auth.getClient();
         const token = await client.getAccessToken();
-        const projectId = await auth.getProjectId() || env.googleCloudProject || "project-2a1614a0-3389-4a26-8d4";
+        const projectId = (await auth.getProjectId()) || env.googleCloudProject || process.env.GOOGLE_CLOUD_PROJECT;
         const location = process.env.GOOGLE_CLOUD_LOCATION || env.googleCloudLocation || "us-central1";
 
         const cleanFallbackPrompt = `Cinematic ${mood.toLowerCase()} soundtrack, ${genre.toLowerCase()} melody, celebratory event atmosphere, lush acoustic stereo mix`;

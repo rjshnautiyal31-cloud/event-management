@@ -13,10 +13,9 @@ RUN npm ci --omit=dev --workspace apps/api
 COPY apps/api ./apps/api
 
 ENV NODE_ENV=production
-ENV PORT=4000
 
 WORKDIR /app/apps/api
 
-EXPOSE 4000
+EXPOSE 8080
 
-CMD ["npm", "start"]
+CMD ["node", "src/server.js"]

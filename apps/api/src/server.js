@@ -5,8 +5,17 @@ async function bootstrap() {
   await connectDb();
   await loadDbSettings();
   console.log(`[Config] Loaded environment and database settings.`);
-  app.listen(env.port, () => {
-    console.log(`API listening on port ${env.port}`);
+  const listenPort = Number(process.env.PORT) || env.port || 8080;
+  const server = app.listen(listenPort, "0.0.0.0", () => {
+    console.log(`API listening on 0.0.0.0:${listenPort}`);
+  });
+
+  process.on("SIGTERM", () => {
+    console.log("SIGTERM received, shutting down gracefully...");
+    server.close(() => {
+      console.log("HTTP server closed.");
+      process.exit(0);
+    });
   });
 }
 

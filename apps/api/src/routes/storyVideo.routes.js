@@ -14,6 +14,7 @@ import { getMusicProvider } from "../services/music/index.js";
 import { getVideoProvider } from "../services/video/index.js";
 import { getStorageProvider, buildStoryStorageKey } from "../services/storage/index.js";
 import { processVideoRenderJob, VIDEO_PRESETS } from "../workers/index.js";
+import { SUPPORTED_LANGUAGES, getLanguageConfig } from "../config/languages.js";
 
 const upload = multer({ storage: multer.memoryStorage() });
 export const storyVideoRouter = Router();
@@ -21,6 +22,11 @@ export const storyVideoRouter = Router();
 // Enforce ACL: Require authentication and require admin role (super_admin, admin, or event_admin)
 storyVideoRouter.use(requireAuth);
 storyVideoRouter.use(requireRole("admin"));
+
+// 0. Get Supported Languages Catalog for AI Audio & Video
+storyVideoRouter.get("/languages", (req, res) => {
+  res.json(SUPPORTED_LANGUAGES);
+});
 
 // 1. Get Projects for an Event (an event can have multiple story/song/video projects)
 storyVideoRouter.get("/projects", async (req, res, next) => {
@@ -44,7 +50,7 @@ storyVideoRouter.get("/projects", async (req, res, next) => {
 // 2. Create a new AI Story Project for a specific Event
 storyVideoRouter.post("/projects", requireEventAccess(["event_admin"]), async (req, res, next) => {
   try {
-    const { eventId, title, storyText, description } = req.body;
+    const { eventId, title, storyText, description, language } = req.body;
     if (!eventId || !title || !storyText) {
       return res.status(400).json({ message: "eventId, title, and story text are required" });
     }
@@ -55,6 +61,7 @@ storyVideoRouter.post("/projects", requireEventAccess(["event_admin"]), async (r
       title,
       description: description || "",
       storyText,
+      language: language || "en",
       status: "draft"
     });
 
@@ -79,6 +86,27 @@ storyVideoRouter.get("/projects/:id", async (req, res, next) => {
   }
 });
 
+// Update Project settings / language
+storyVideoRouter.patch("/projects/:id", async (req, res, next) => {
+  try {
+    const project = await Project.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    const { language, title, description, storyText } = req.body;
+    if (language !== undefined) project.language = language;
+    if (title !== undefined) project.title = title;
+    if (description !== undefined) project.description = description;
+    if (storyText !== undefined) project.storyText = storyText;
+
+    await project.save();
+    res.json(project);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // 4. Analyze Story Narrative with Gemini AI
 storyVideoRouter.post("/projects/:id/analyze", async (req, res, next) => {
   try {
@@ -87,7 +115,14 @@ storyVideoRouter.post("/projects/:id/analyze", async (req, res, next) => {
       return res.status(404).json({ message: "Project not found" });
     }
 
-    const analysisData = await analyzeStoryWithGemini(project.storyText);
+    const { language } = req.body || {};
+    if (language && project.language !== language) {
+      project.language = language;
+    }
+
+    const analysisData = await analyzeStoryWithGemini(project.storyText, {
+      language: project.language || "en"
+    });
 
     const analysisDoc = await StoryAnalysis.create({
       projectId: project._id,
@@ -107,14 +142,21 @@ storyVideoRouter.post("/projects/:id/analyze", async (req, res, next) => {
 // 5. Generate AI Lyrics & Synth Audio Track
 storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
   try {
-    const { genre, musicProvider } = req.body;
+    const { genre, musicProvider, language } = req.body;
     const project = await Project.findById(req.params.id).populate("activeStoryAnalysisId");
     if (!project || !project.activeStoryAnalysisId) {
       return res.status(400).json({ message: "Project must be analyzed first" });
     }
 
+    const effectiveLanguage = language || project.language || "en";
+    if (language && project.language !== language) {
+      project.language = language;
+    }
+
     const targetGenre = genre || project.activeStoryAnalysisId.suggestedGenres?.[0] || "Pop";
-    const lyricsText = await generateLyricsWithGemini(project.activeStoryAnalysisId.summary, targetGenre);
+    const lyricsText = await generateLyricsWithGemini(project.activeStoryAnalysisId.summary, targetGenre, {
+      language: effectiveLanguage
+    });
 
     const providerToUse = musicProvider || "google_lyria";
     const musicEngine = getMusicProvider(providerToUse);
@@ -128,7 +170,8 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
       mood: project.activeStoryAnalysisId.mood || "Upbeat",
       storyContext: project.storyText || project.activeStoryAnalysisId.summary || "",
       title: project.title || "",
-      projectId: project._id
+      projectId: project._id,
+      language: effectiveLanguage
     });
 
     const finalLyrics = audioResult.lyrics || lyricsText;
@@ -141,6 +184,7 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
       audioUrl: audioResult.audioUrl,
       durationSeconds: audioResult.durationSeconds,
       provider: providerToUse,
+      language: effectiveLanguage,
       status: "ready"
     });
 
@@ -239,12 +283,13 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
     const lyrics = project.activeSongId.lyrics || "";
     const storyContext = project.summary || project.title || "";
 
-    console.log(`[API Storyboard] Generating synchronized storyboard from lyrics (${totalSongDuration}s, ~${targetSceneDuration}s/scene)...`);
+    console.log(`[API Storyboard] Generating synchronized storyboard from lyrics (${totalSongDuration}s, ~${targetSceneDuration}s/scene, lang=${project.language || project.activeSongId.language || "en"})...`);
     const generatedScenes = await generateStoryboardFromLyrics({
       storyContext,
       lyrics,
       totalDurationSeconds: totalSongDuration,
-      targetSceneDuration: Number(targetSceneDuration) || 6
+      targetSceneDuration: Number(targetSceneDuration) || 6,
+      language: project.language || project.activeSongId.language || "en"
     });
 
     console.log(`[API Storyboard] Generated ${generatedScenes.length} synchronized scenes matching song lyrics.`);

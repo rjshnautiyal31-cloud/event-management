@@ -13,6 +13,7 @@ const projectSchema = new mongoose.Schema(
       default: "draft",
       index: true
     },
+    language: { type: String, default: "en" },
     activeStoryAnalysisId: { type: mongoose.Schema.Types.ObjectId, ref: "StoryAnalysis" },
     activeSongId: { type: mongoose.Schema.Types.ObjectId, ref: "Song" },
     activeStoryboardId: { type: mongoose.Schema.Types.ObjectId, ref: "Storyboard" },

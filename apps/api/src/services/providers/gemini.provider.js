@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs/promises";
 import { env } from "../../config/env.js";
 import { uploadAssetBuffer, buildStoryStorageKey } from "../storage/index.js";
+import { getLanguageConfig } from "../../config/languages.js";
 
 import fsSync from "fs";
 
@@ -32,16 +33,18 @@ function getGeminiClient() {
   return null;
 }
 
-// 1. Analyze Story Narrative with Gemini Flash
-export async function analyzeStoryWithGemini(storyText) {
+// 1. Analyze Story Narrative with Gemini 1.5 Flash (Multilingual-aware)
+export async function analyzeStoryWithGemini(storyText, options = {}) {
   const clientInfo = getGeminiClient();
+  const language = (typeof options === "string" ? options : options?.language) || "en";
+  const langConfig = getLanguageConfig(language);
 
   const mockAnalysis = {
-    summary: storyText.slice(0, 200) + "...",
-    emotionalArc: ["hopeful", "challenging", "triumphant"],
-    themes: ["perseverance", "community", "celebration"],
+    summary: `A memorable event celebration filled with joy, connection, and cherished memories. (${langConfig.name})`,
+    emotionalArc: ["Excited arrival & anticipation", "Heartfelt connection & shared laughs", "Inspiring celebration & farewell"],
+    themes: ["Connection", "Celebration", "Memories"],
     suggestedGenres: ["Pop", "Acoustic", "Cinematic"],
-    mood: "Inspiring",
+    mood: "Uplifting",
     keyMoments: [
       { momentNumber: 1, description: "Opening moments", visualIdea: "Cinematic wide shot of an elegant event venue glowing under warm morning sunlight, 8k resolution, professional photography", suggestedDurationSeconds: 5 },
       { momentNumber: 2, description: "Main event activities", visualIdea: "Joyful group of event attendees cheering, celebrating, and engaging in vibrant discussions at a modern gala, photorealistic", suggestedDurationSeconds: 5 },
@@ -53,7 +56,8 @@ export async function analyzeStoryWithGemini(storyText) {
 
   try {
     const prompt = `Analyze the following event story for an AI music video project.
-Provide a concise summary (max 3 sentences), emotional arc (3 stages), 3 key themes, mood, and exactly 4 to 6 key visual moments for scene image generation (photorealistic 16:9 cinematic descriptions) with duration estimates (5-8 seconds each):
+The target language for this project is ${langConfig.name} (${langConfig.nativeName}).
+Provide a concise narrative summary (max 3 sentences in ${langConfig.name}), emotional arc (3 stages in ${langConfig.name}), 3 key themes (in ${langConfig.name}), mood, and exactly 4 to 6 key visual moments for scene image generation (photorealistic 16:9 cinematic visual descriptions written in English so visual generation models render optimal quality) with duration estimates (5-8 seconds each):
 
 ${storyText.slice(0, 5000)}`;
 
@@ -95,16 +99,26 @@ ${storyText.slice(0, 5000)}`;
   }
 }
 
-// 2. Generate Structured Song Lyrics with Gemini Flash
-export async function generateLyricsWithGemini(storySummary, targetGenre) {
+// 2. Generate Structured Song Lyrics with Gemini Flash (in selected language)
+export async function generateLyricsWithGemini(storySummary, targetGenre, options = {}) {
   const clientInfo = getGeminiClient();
+  const language = (typeof options === "string" ? options : options?.language) || "en";
+  const langConfig = getLanguageConfig(language);
 
-  const mockLyrics = `[Verse 1]\nGathered here today in light\nMemories so clear and bright\n\n[Chorus]\nThis is our event, our time to shine\nShared moments forever divine\n\n[Outro]\nTogether as one.`;
+  const mockLyrics = langConfig.code === "hi"
+    ? `[Verse 1]\nखुशियों का यह समां है यहाँ\nयादों का एक नया कारवां\n\n[Chorus]\nये हमारा जश्न, हमारी है दास्तां\nसंग हमारे सारा आसमां\n\n[Outro]\nसदा रहे ये प्यार का जहां।`
+    : langConfig.code === "es"
+    ? `[Verse 1]\nUn momento especial que brilla hoy\nCon recuerdos que guardo donde voy\n\n[Chorus]\nEsta es nuestra fiesta, nuestro cantar\nUnidos para siempre recordar\n\n[Outro]\nJuntos hasta el final.`
+    : `[Verse 1]\nGathered here today in light\nMemories so clear and bright\n\n[Chorus]\nThis is our event, our time to shine\nShared moments forever divine\n\n[Outro]\nTogether as one.`;
 
   if (!clientInfo) return mockLyrics;
 
   try {
-    const prompt = `Write structured song lyrics (Verse 1, Chorus, Verse 2, Chorus, Outro) based on this story summary: "${storySummary}". Genre style: ${targetGenre}. Keep lines rhythmically balanced for singing.`;
+    const prompt = `Write structured song lyrics (Verse 1, Chorus, Verse 2, Chorus, Outro) in ${langConfig.name} (${langConfig.nativeName}) based on this story summary: "${storySummary}".
+Genre style: ${targetGenre}.
+Keep lines rhythmically balanced, poetic, expressive, and natural for singing in ${langConfig.name}.
+${langConfig.code !== "en" ? `Important: Write the lyrics authentically in ${langConfig.name} (${langConfig.nativeName}) with natural rhyme and musical meter.` : ""}
+Output only the formatted song lyrics with section headers like [Verse 1], [Chorus], [Verse 2], [Chorus], [Outro].`;
 
     const response = await clientInfo.ai.models.generateContent({
       model: clientInfo.modelName,
@@ -119,8 +133,9 @@ export async function generateLyricsWithGemini(storySummary, targetGenre) {
 }
 
 // 3. Generate Synchronized Chronological Storyboard from Song Lyrics & Duration
-export async function generateStoryboardFromLyrics({ storyContext = "", lyrics = "", totalDurationSeconds = 30, targetSceneDuration = 6 }) {
+export async function generateStoryboardFromLyrics({ storyContext = "", lyrics = "", totalDurationSeconds = 30, targetSceneDuration = 6, language = "en" }) {
   const clientInfo = getGeminiClient();
+  const langConfig = getLanguageConfig(language);
 
   const fallbackSceneCount = Math.max(3, Math.round(totalDurationSeconds / targetSceneDuration));
   const fallbackSceneDuration = Math.round(totalDurationSeconds / fallbackSceneCount);
@@ -138,8 +153,9 @@ export async function generateStoryboardFromLyrics({ storyContext = "", lyrics =
   try {
     const prompt = `You are an expert music video director.
 Total Audio Song Duration: ${totalDurationSeconds} seconds.
+Language: ${langConfig.name} (${langConfig.nativeName}).
 Story context: "${storyContext.slice(0, 500)}"
-Song lyrics:
+Song lyrics (in ${langConfig.name}):
 """
 ${lyrics}
 """
@@ -147,8 +163,8 @@ ${lyrics}
 Create a chronological sequence of distinct visual scenes synchronized with the song:
 1. Divide the entire song timeline (${totalDurationSeconds} seconds) into sequential, non-overlapping scenes.
 2. Each scene should be between 5 and 7 seconds long (matching standard AI video clips of ~5-6s duration, so video clips never need to repeat!).
-3. Assign the exact matching lyric lines sung during that time window to each scene.
-4. For every scene, write a rich, unique, non-repetitive visual prompt for AI video generation (16:9 widescreen, photorealistic cinematic camera movement, specific lighting and environment reflecting the emotion of those lyrics).
+3. Assign the exact matching lyric lines (lyricSnippet) in ${langConfig.name} sung during that time window to each scene.
+4. For every scene, write a rich, unique, non-repetitive visual prompt (visualIdea in English) for AI video/image generation (16:9 widescreen, photorealistic cinematic camera movement, specific lighting and environment reflecting the emotion of those lyrics).
 5. Absolutely avoid repeating actions or visual settings across scenes. Each scene must advance the visual story.
 6. The first scene must start at startTimeSeconds = 0, and the last scene must end at endTimeSeconds = ${totalDurationSeconds}.
 

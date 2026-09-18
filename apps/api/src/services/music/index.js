@@ -9,6 +9,7 @@ import { GoogleAuth } from "google-auth-library";
 import { GoogleGenAI } from "@google/genai";
 import { env } from "../../config/env.js";
 import { uploadAssetBuffer, buildStoryStorageKey } from "../storage/index.js";
+import { getLanguageConfig } from "../../config/languages.js";
 
 const fsPromises = fs.promises;
 const activeFfmpegPath = process.env.FFMPEG_PATH || (fs.existsSync("/usr/bin/ffmpeg") ? "/usr/bin/ffmpeg" : (fs.existsSync("/usr/local/bin/ffmpeg") ? "/usr/local/bin/ffmpeg" : ffmpegInstaller));
@@ -126,7 +127,7 @@ export function createMusicalMelodyWavBuffer(durationSeconds = 30, sampleRate = 
 }
 
 // OAuth2 Authenticated Google Cloud Text-to-Speech Studio Vocal Adapter
-async function fetchGoogleCloudNeuralVocalAudio(lyricsText, tempVocalPath) {
+async function fetchGoogleCloudNeuralVocalAudio(lyricsText, tempVocalPath, language = "en") {
   const cleanLyrics = (lyricsText || "")
     .replace(/\[.*?\]/g, "")
     .replace(/\s+/g, " ")
@@ -134,6 +135,7 @@ async function fetchGoogleCloudNeuralVocalAudio(lyricsText, tempVocalPath) {
 
   if (!cleanLyrics) return false;
 
+  const langConfig = getLanguageConfig(language);
   const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
 
   try {
@@ -145,14 +147,15 @@ async function fetchGoogleCloudNeuralVocalAudio(lyricsText, tempVocalPath) {
     }
 
     const ttsClient = new textToSpeech.TextToSpeechClient(clientOptions);
+    const voiceConfig = langConfig.gcpVoice || {
+      languageCode: "en-US",
+      name: "en-US-Neural2-F",
+      ssmlGender: "FEMALE"
+    };
 
     const [response] = await ttsClient.synthesizeSpeech({
       input: { text: cleanLyrics },
-      voice: {
-        languageCode: "en-US",
-        name: "en-US-Neural2-F",
-        ssmlGender: "FEMALE"
-      },
+      voice: voiceConfig,
       audioConfig: {
         audioEncoding: "MP3",
         speakingRate: 0.95,
@@ -162,18 +165,18 @@ async function fetchGoogleCloudNeuralVocalAudio(lyricsText, tempVocalPath) {
 
     if (response.audioContent) {
       await fsPromises.writeFile(tempVocalPath, response.audioContent, "binary");
-      console.log(`[Google Cloud TTS OAuth2] Successfully synthesized Google Neural2 Studio Vocal audio file (${response.audioContent.length} bytes)`);
+      console.log(`[Google Cloud TTS OAuth2] Successfully synthesized Google ${voiceConfig.languageCode} (${voiceConfig.name}) Studio Vocal audio file (${response.audioContent.length} bytes) for ${langConfig.name}`);
       return true;
     }
   } catch (err) {
-    console.warn("Google Cloud OAuth2 TTS call failed, falling back to local vocal synthesis:", err.message);
+    console.warn(`Google Cloud OAuth2 TTS call failed for ${langConfig.code}, falling back to local vocal synthesis:`, err.message);
   }
 
   return false;
 }
 
 // Multi-chunk Zero-Loss Vocal Audio Fetcher
-async function fetchFallbackVocalAudio(lyricsText, tempVocalPath) {
+async function fetchFallbackVocalAudio(lyricsText, tempVocalPath, language = "en") {
   const cleanLyrics = (lyricsText || "")
     .replace(/\[.*?\]/g, "")
     .replace(/\s+/g, " ")
@@ -181,6 +184,7 @@ async function fetchFallbackVocalAudio(lyricsText, tempVocalPath) {
 
   if (!cleanLyrics) return false;
 
+  const langConfig = getLanguageConfig(language);
   const sentences = cleanLyrics.match(/.{1,140}(\s+|$)/g) || [cleanLyrics];
   const chunkBuffers = [];
   const agent = new https.Agent({ rejectUnauthorized: false });
@@ -189,7 +193,7 @@ async function fetchFallbackVocalAudio(lyricsText, tempVocalPath) {
     const sentence = sentences[i].trim();
     if (!sentence) continue;
 
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&q=${encodeURIComponent(sentence)}&tl=en`;
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&q=${encodeURIComponent(sentence)}&tl=${encodeURIComponent(langConfig.code || "en")}`;
 
     const chunkBuf = await new Promise((resolve) => {
       const chunks = [];
@@ -213,13 +217,13 @@ async function fetchFallbackVocalAudio(lyricsText, tempVocalPath) {
 
   const combinedVocalBuffer = Buffer.concat(chunkBuffers);
   await fsPromises.writeFile(tempVocalPath, combinedVocalBuffer);
-  console.log(`[Vocal Synthesis Engine] Successfully synthesized vocal audio buffer of ${combinedVocalBuffer.length} bytes`);
+  console.log(`[Vocal Synthesis Engine] Successfully synthesized vocal audio buffer of ${combinedVocalBuffer.length} bytes in ${langConfig.name}`);
   return true;
 }
 
 // Google Cloud Vocal & Music Song Adapter
 class GoogleTtsMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, projectId, title = "" }) {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, projectId, title = "", language = "en" }) {
     const timestamp = Date.now();
     const uploadDir = path.join(process.cwd(), "uploads");
     await fsPromises.mkdir(uploadDir, { recursive: true });
@@ -233,10 +237,10 @@ class GoogleTtsMusicAdapter {
     const wavBuffer = createMusicalMelodyWavBuffer(durationSeconds, 44100, genre);
     await fsPromises.writeFile(bgPath, wavBuffer);
 
-    // 2. Fetch vocal audio via OAuth2 Google Cloud Neural2 TTS or Multi-chunk fallback
-    let hasVocals = await fetchGoogleCloudNeuralVocalAudio(lyrics, vocalPath);
+    // 2. Fetch vocal audio via OAuth2 Google Cloud Neural2 TTS or Multi-chunk fallback in selected language
+    let hasVocals = await fetchGoogleCloudNeuralVocalAudio(lyrics, vocalPath, language);
     if (!hasVocals) {
-      hasVocals = await fetchFallbackVocalAudio(lyrics, vocalPath);
+      hasVocals = await fetchFallbackVocalAudio(lyrics, vocalPath, language);
     }
 
     // 3. Mix vocal audio track with background music using FFmpeg
@@ -284,18 +288,20 @@ class GoogleTtsMusicAdapter {
 
 // Local Synth Music Adapter
 class LocalSynthMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, projectId, title = "" }) {
-    return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title });
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, projectId, title = "", language = "en" }) {
+    return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
   }
 }
 
 // Suno AI Production Cloud Music Adapter
 class SunoMusicAdapter {
-  async generateMusic({ lyrics, genre, durationSeconds = 30, projectId, title = "" }) {
+  async generateMusic({ lyrics, genre, durationSeconds = 30, projectId, title = "", language = "en" }) {
     const apiKey = env.musicApiKey || env.sunoApiKey;
     if (!apiKey) {
-      return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title });
+      return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
     }
+
+    const langConfig = getLanguageConfig(language);
 
     try {
       const response = await fetch("https://api.suno.ai/v1/generate", {
@@ -306,8 +312,8 @@ class SunoMusicAdapter {
         },
         body: JSON.stringify({
           prompt: lyrics,
-          tags: genre,
-          title: "Event Song",
+          tags: `${genre}, ${langConfig.name}`,
+          title: title || `Event Song (${langConfig.name})`,
           make_instrumental: false,
           wait_audio: true
         })
@@ -322,19 +328,20 @@ class SunoMusicAdapter {
       console.error("Suno AI music generation error:", err.message);
     }
 
-    return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title });
+    return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
   }
 }
 
 // ElevenLabs Production Text-to-Music Adapter
 class ElevenLabsMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, projectId, title = "" }) {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, projectId, title = "", language = "en" }) {
     const apiKey = env.elevenLabsApiKey || env.musicApiKey;
     if (!apiKey) {
       console.warn("[ElevenLabs] ELEVENLABS_API_KEY missing, falling back to Google Cloud TTS adapter");
-      return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title });
+      return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
     }
 
+    const langConfig = getLanguageConfig(language);
     const timestamp = Date.now();
     const uploadDir = path.join(process.cwd(), "uploads");
     await fsPromises.mkdir(uploadDir, { recursive: true });
@@ -343,11 +350,11 @@ class ElevenLabsMusicAdapter {
     const outputPath = path.join(uploadDir, outputFilename);
 
     const cleanLyrics = (lyrics || "").replace(/\[.*?\]/g, "").replace(/\s+/g, " ").trim();
-    const promptText = `A ${genre} style song with full vocals and melody. Lyrics: ${cleanLyrics}`;
+    const promptText = `A ${genre} style song with full singing vocals in ${langConfig.name} and melody. Lyrics: ${cleanLyrics}`;
 
     // 1. Try ElevenLabs Official Text-to-Music Endpoint (POST /v1/music)
     try {
-      console.log(`[ElevenLabs Music API] Requesting AI song generation from https://api.elevenlabs.io/v1/music...`);
+      console.log(`[ElevenLabs Music API] Requesting AI song generation from https://api.elevenlabs.io/v1/music in ${langConfig.name}...`);
       const musicResponse = await fetch("https://api.elevenlabs.io/v1/music", {
         method: "POST",
         headers: {
@@ -405,7 +412,7 @@ class ElevenLabsMusicAdapter {
         },
         body: JSON.stringify({
           text: cleanLyrics,
-          model_id: "eleven_monolingual_v1",
+          model_id: langConfig.code === "en" ? "eleven_monolingual_v1" : "eleven_multilingual_v2",
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.75
@@ -417,7 +424,7 @@ class ElevenLabsMusicAdapter {
         const audioBuffer = Buffer.from(await response.arrayBuffer());
         await fsPromises.writeFile(vocalPath, audioBuffer);
         hasVocals = true;
-        console.log(`[ElevenLabs Speech API] Successfully synthesized ElevenLabs vocal track (${audioBuffer.length} bytes)`);
+        console.log(`[ElevenLabs Speech API] Successfully synthesized ElevenLabs vocal track (${audioBuffer.length} bytes) for ${langConfig.name}`);
       } else {
         const errText = await response.text();
         console.warn(`[ElevenLabs Speech API] Returned status ${response.status}: ${errText}`);
@@ -427,7 +434,7 @@ class ElevenLabsMusicAdapter {
     }
 
     if (!hasVocals) {
-      hasVocals = await fetchGoogleCloudNeuralVocalAudio(lyrics, vocalPath) || await fetchFallbackVocalAudio(lyrics, vocalPath);
+      hasVocals = await fetchGoogleCloudNeuralVocalAudio(lyrics, vocalPath, language) || await fetchFallbackVocalAudio(lyrics, vocalPath, language);
     }
 
     // 3. Mix vocal audio track with background music using FFmpeg
@@ -457,7 +464,13 @@ class ElevenLabsMusicAdapter {
     }
 
     const audioBuffer = await fsPromises.readFile(outputPath);
-    const audioUrl = await uploadAssetBuffer(audioBuffer, outputFilename, "audio/mpeg");
+    const storageKey = buildStoryStorageKey({
+      projectId,
+      title,
+      category: "audio",
+      filename: outputFilename
+    });
+    const audioUrl = await uploadAssetBuffer(audioBuffer, storageKey, "audio/mpeg");
 
     return {
       audioUrl,
@@ -468,13 +481,15 @@ class ElevenLabsMusicAdapter {
 
 // Google DeepMind Lyria 3 Pro AI Music Adapter (Vertex AI Next-Gen Interactions Model)
 export class GoogleLyriaMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, mood = "Upbeat", storyContext = "", title = "", projectId }) {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, mood = "Upbeat", storyContext = "", title = "", projectId, language = "en" }) {
     const timestamp = Date.now();
     const uploadDir = path.join(process.cwd(), "uploads");
     await fsPromises.mkdir(uploadDir, { recursive: true });
 
+    const langConfig = getLanguageConfig(language);
+
     try {
-      console.log(`[Google Lyria AI Music] Authenticating with Vertex AI for Lyria 3 Pro...`);
+      console.log(`[Google Lyria AI Music] Authenticating with Vertex AI for Lyria 3 Pro in ${langConfig.name}...`);
       const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
       if (fs.existsSync(keyFilename)) {
         process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
@@ -490,13 +505,14 @@ export class GoogleLyriaMusicAdapter {
       // Construct rich musical prompt incorporating story context and lyrics
       let promptInput = `Song Genre: ${genre} (${mood}).\n`;
       if (title) promptInput += `Title: ${title}.\n`;
+      promptInput += `Language of Vocals: ${langConfig.name} (${langConfig.nativeName}).\n`;
       if (storyContext && storyContext.trim()) {
         promptInput += `Story Context / Narrative: ${storyContext.trim().slice(0, 1500)}.\n`;
       }
       if (lyrics && lyrics.trim().length > 10) {
-        promptInput += `Lyrics / Thematic Guide:\n${lyrics.trim().slice(0, 1200)}\n`;
+        promptInput += `Lyrics / Thematic Guide (in ${langConfig.name}):\n${lyrics.trim().slice(0, 1200)}\n`;
       }
-      promptInput += `Perform an authentic, cohesive song with full melodic singing vocals, natural harmonies, evocative instrumentation matching ${genre}, and a balanced musical structure (intro, verses, chorus, bridge, outro).`;
+      promptInput += `Perform an authentic, cohesive song with full melodic singing vocals in ${langConfig.name}, natural harmonies, evocative instrumentation matching ${genre}, and a balanced musical structure (intro, verses, chorus, bridge, outro).`;
 
       console.log(`[Google Lyria AI Music] Generating full song with lyria-3-pro-preview: "${promptInput.slice(0, 100)}..."`);
       const interaction = await ai.interactions.create({
@@ -520,7 +536,7 @@ export class GoogleLyriaMusicAdapter {
         const realDuration = await getAudioDurationFromFile(outputPath);
         const extractedLyrics = extractLyricsFromLyriaOutput(interaction.output_text);
 
-        console.log(`[Google Lyria AI Music] Lyria 3 Pro created full song: ${outputFilename} (${realDuration}s, ${audioBuffer.length} bytes)`);
+        console.log(`[Google Lyria AI Music] Lyria 3 Pro created full song: ${outputFilename} (${realDuration}s, ${audioBuffer.length} bytes) in ${langConfig.name}`);
         return {
           audioUrl,
           durationSeconds: realDuration,
@@ -542,11 +558,11 @@ export class GoogleLyriaMusicAdapter {
         const auth = new GoogleAuth(authOptions);
         const client = await auth.getClient();
         const token = await client.getAccessToken();
-        const projectId = (await auth.getProjectId()) || env.googleCloudProject || process.env.GOOGLE_CLOUD_PROJECT;
+        const projectIdEnvResolved = (await auth.getProjectId()) || env.googleCloudProject || process.env.GOOGLE_CLOUD_PROJECT;
         const location = process.env.GOOGLE_CLOUD_LOCATION || env.googleCloudLocation || "us-central1";
 
-        const cleanFallbackPrompt = `Cinematic ${mood.toLowerCase()} soundtrack, ${genre.toLowerCase()} melody, celebratory event atmosphere, lush acoustic stereo mix`;
-        const response = await fetch(`https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/lyria-002:predict`, {
+        const cleanFallbackPrompt = `Cinematic ${mood.toLowerCase()} soundtrack, ${genre.toLowerCase()} melody, celebratory event atmosphere, lush acoustic stereo mix, ${langConfig.name} singing mood`;
+        const response = await fetch(`https://${location}-aiplatform.googleapis.com/v1/projects/${projectIdEnvResolved}/locations/${location}/publishers/google/models/lyria-002:predict`, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${token.token}`,
@@ -600,7 +616,7 @@ export class GoogleLyriaMusicAdapter {
         };
       } catch (fallbackErr) {
         console.warn(`[Google Lyria AI Music] Legacy fallback failed: ${fallbackErr.message}. Defaulting to TTS synth.`);
-        return googleTtsSynth.generateMusic({ lyrics, genre, durationSeconds, projectId, title });
+        return googleTtsSynth.generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
       }
     }
   }

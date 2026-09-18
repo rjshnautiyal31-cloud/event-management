@@ -422,19 +422,50 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     });
     const publicUrl = await uploadAssetBuffer(finalVideoBuffer, storageKey, "video/mp4");
 
+    // Generate and upload .srt subtitles synchronized with scenes
+    let subtitlesUrl = null;
+    try {
+      let currentSrtTime = 0;
+      const srtBlocks = [];
+      scenesToRender.forEach((scene, i) => {
+        const startTime = currentSrtTime;
+        const endTime = currentSrtTime + scene.duration;
+        currentSrtTime = endTime;
+        const text = scene.captionText || `Scene ${scene.sceneNumber}`;
+        srtBlocks.push(`${i + 1}\n${formatSrtTime(startTime)} --> ${formatSrtTime(endTime)}\n${text}\n`);
+      });
+
+      const srtContent = srtBlocks.join("\n");
+      const srtFilename = `subtitles_${timestamp}.srt`;
+      const srtStorageKey = buildStoryStorageKey({
+        projectId,
+        title: projectDoc?.title || "",
+        category: "renders",
+        filename: srtFilename
+      });
+      subtitlesUrl = await uploadAssetBuffer(Buffer.from(srtContent, "utf-8"), srtStorageKey, "text/plain");
+      console.log(`[Video Worker] Uploaded synchronized SRT subtitles to ${subtitlesUrl}`);
+    } catch (srtErr) {
+      console.warn("[Video Worker] Subtitle upload failed (non-critical):", srtErr.message);
+    }
+
     // Cleanup temporary segment files & downloaded cloud assets
     await fs.unlink(tempOutputPath).catch(() => {});
     await fs.unlink(concatListPath).catch(() => {});
     await Promise.all(segmentPaths.map((sp) => fs.unlink(sp).catch(() => {})));
     await Promise.all(tempFilesToClean.map((tf) => fs.unlink(tf).catch(() => {})));
 
+    const effectiveLanguage = projectDoc?.language || songDoc?.language || "en";
     const videoDoc = await Video.create({
       projectId,
       videoUrl: publicUrl,
       durationSeconds: targetSongDuration,
       resolution: `${preset.width}x${preset.height} (${preset.shortLabel})`,
       aspectRatio: preset.aspectRatio,
-      preset: presetKey
+      preset: presetKey,
+      language: effectiveLanguage,
+      subtitlesUrl: subtitlesUrl || undefined,
+      fileSizeBytes: finalVideoBuffer.length
     });
 
     dbJob.status = "completed";

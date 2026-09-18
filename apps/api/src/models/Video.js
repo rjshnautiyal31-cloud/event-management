@@ -8,6 +8,8 @@ const videoSchema = new mongoose.Schema(
     resolution: { type: String, default: "1080p" },
     aspectRatio: { type: String, default: "16:9" },
     preset: { type: String, default: "1080p" },
+    language: { type: String, default: "en" },
+    subtitlesUrl: { type: String },
     fileSizeBytes: { type: Number }
   },
   { timestamps: true }

@@ -9,6 +9,7 @@ const songSchema = new mongoose.Schema(
     audioUrl: { type: String },
     durationSeconds: { type: Number, default: 30 },
     provider: { type: String, default: "local_synth" },
+    language: { type: String, default: "en" },
     status: { type: String, enum: ["pending", "generating", "ready", "failed"], default: "pending" }
   },
   { timestamps: true }

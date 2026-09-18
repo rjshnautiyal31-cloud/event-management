@@ -21,6 +21,30 @@ export function ProjectStudioPage({ auth, token: propToken }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newStory, setNewTitleStory] = useState("");
+  const [newLanguage, setNewLanguage] = useState("en");
+
+  // Multilingual State
+  const [languages, setLanguages] = useState([
+    { code: "en", name: "English", nativeName: "English (US)", flag: "🇺🇸" },
+    { code: "hi", name: "Hindi", nativeName: "हिन्दी", flag: "🇮🇳" },
+    { code: "es", name: "Spanish", nativeName: "Español", flag: "🇪🇸" },
+    { code: "fr", name: "French", nativeName: "Français", flag: "🇫🇷" },
+    { code: "de", name: "German", nativeName: "Deutsch", flag: "🇩🇪" },
+    { code: "it", name: "Italian", nativeName: "Italiano", flag: "🇮🇹" },
+    { code: "pt", name: "Portuguese", nativeName: "Português", flag: "🇵🇹" },
+    { code: "ja", name: "Japanese", nativeName: "日本語", flag: "🇯🇵" },
+    { code: "zh", name: "Chinese", nativeName: "中文 (Mandarin)", flag: "🇨🇳" },
+    { code: "ar", name: "Arabic", nativeName: "العربية", flag: "🇸🇦" },
+    { code: "ru", name: "Russian", nativeName: "Русский", flag: "🇷🇺" },
+    { code: "ko", name: "Korean", nativeName: "한국어", flag: "🇰🇷" },
+    { code: "bn", name: "Bengali", nativeName: "বাংলা", flag: "🇮🇳" },
+    { code: "ta", name: "Tamil", nativeName: "தமிழ்", flag: "🇮🇳" },
+    { code: "te", name: "Telugu", nativeName: "తెలుగు", flag: "🇮🇳" },
+    { code: "mr", name: "Marathi", nativeName: "मराठी", flag: "🇮🇳" },
+    { code: "gu", name: "Gujarati", nativeName: "ગુજરાતી", flag: "🇮🇳" },
+    { code: "pa", name: "Punjabi", nativeName: "ਪੰਜਾਬੀ", flag: "🇮🇳" }
+  ]);
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
 
   // Genre & AI Provider State
   const [selectedGenre, setSelectedGenre] = useState("Pop");
@@ -49,7 +73,27 @@ export function ProjectStudioPage({ auth, token: propToken }) {
   useEffect(() => {
     loadEvents();
     loadVideoPresets();
+    loadLanguages();
   }, []);
+
+  async function loadLanguages() {
+    try {
+      const data = await api("/api/story-video/languages", { token });
+      if (Array.isArray(data) && data.length > 0) {
+        setLanguages(data);
+      }
+    } catch (_) {}
+  }
+
+  function getLanguageLabel(code) {
+    const match = languages.find(l => l.code === code);
+    return match ? `${match.flag} ${match.name} (${match.nativeName})` : (code ? code.toUpperCase() : "English");
+  }
+
+  function getLanguageShort(code) {
+    const match = languages.find(l => l.code === code);
+    return match ? `${match.flag} ${match.name}` : (code ? code.toUpperCase() : "English");
+  }
 
   async function loadVideoPresets() {
     try {
@@ -75,8 +119,27 @@ export function ProjectStudioPage({ auth, token: propToken }) {
   useEffect(() => {
     if (activeProject) {
       loadMediaItems(activeProject._id);
+      if (activeProject.language) {
+        setSelectedLanguage(activeProject.language);
+      }
     }
   }, [activeProject]);
+
+  async function handleLanguageChange(newLang) {
+    setSelectedLanguage(newLang);
+    if (activeProject?._id) {
+      try {
+        await api(`/api/story-video/projects/${activeProject._id}`, {
+          token,
+          method: "PATCH",
+          body: { language: newLang }
+        });
+        setActiveProject(prev => prev ? { ...prev, language: newLang } : prev);
+      } catch (err) {
+        console.warn("Failed to patch project language:", err.message);
+      }
+    }
+  }
 
   async function loadEvents() {
     try {
@@ -123,11 +186,17 @@ export function ProjectStudioPage({ auth, token: propToken }) {
       const project = await api("/api/story-video/projects", {
         token,
         method: "POST",
-        body: { eventId: selectedEventId, title: newTitle, storyText: newStory }
+        body: {
+          eventId: selectedEventId,
+          title: newTitle,
+          storyText: newStory,
+          language: newLanguage
+        }
       });
       setSuccess("Story Project created for Event successfully!");
       setNewTitle("");
       setNewTitleStory("");
+      setNewLanguage("en");
       setShowCreateModal(false);
       await loadProjects(selectedEventId);
       setActiveProject(project);
@@ -142,13 +211,15 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     if (!activeProject) return;
     setLoading(true);
     setError("");
-    setSuccess("Analyzing story narrative and key scenes with Gemini AI (~10-15s)...");
+    const langLabel = getLanguageLabel(selectedLanguage);
+    setSuccess(`Analyzing story narrative in ${langLabel} with Gemini AI (~10-15s)...`);
     try {
       const analysis = await api(`/api/story-video/projects/${activeProject._id}/analyze`, {
         token,
-        method: "POST"
+        method: "POST",
+        body: { language: selectedLanguage }
       });
-      setSuccess("Story analyzed with Gemini AI!");
+      setSuccess(`Story analyzed with Gemini AI in ${langLabel}!`);
       await loadProjects(selectedEventId);
       const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
       setActiveProject(updated);
@@ -167,14 +238,19 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     setSuccess("");
     try {
       const providerLabel = selectedMusicProvider === "google_lyria" ? "Google Lyria 3 Pro" : selectedMusicProvider === "elevenlabs" ? "ElevenLabs" : selectedMusicProvider === "suno" ? "Suno AI" : "Google Cloud TTS";
-      setSuccess(`🎵 Composing full studio song with ${providerLabel} (~60-90s)... Generating singing vocals, acoustics & melody.`);
+      const langLabel = getLanguageLabel(selectedLanguage);
+      setSuccess(`🎵 Composing full studio song in ${langLabel} with ${providerLabel} (~60-90s)... Generating singing vocals, acoustics & melody.`);
 
       await api(`/api/story-video/projects/${activeProject._id}/lyrics`, {
         token,
         method: "POST",
-        body: { genre: selectedGenre, musicProvider: selectedMusicProvider }
+        body: {
+          genre: selectedGenre,
+          musicProvider: selectedMusicProvider,
+          language: selectedLanguage
+        }
       });
-      setSuccess(`🎉 AI Lyrics & ${providerLabel} song track generated successfully!`);
+      setSuccess(`🎉 AI Lyrics & ${providerLabel} song track generated in ${langLabel} successfully!`);
       const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
       setActiveProject(updated);
       setActiveTab("media");
@@ -439,7 +515,14 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                     : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
                 }`}
               >
-                <div className="font-bold truncate">{proj.title}</div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold truncate">{proj.title}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase shrink-0 ${
+                    activeProject?._id === proj._id ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+                  }`}>
+                    {getLanguageShort(proj.language)}
+                  </span>
+                </div>
                 <div className="text-[11px] opacity-75 capitalize mt-0.5">Status: {proj.status}</div>
               </button>
             ))}
@@ -481,9 +564,30 @@ export function ProjectStudioPage({ auth, token: propToken }) {
               {/* Tab 1: Story Input & Analysis */}
               {activeTab === "story" && (
                 <div className="space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <div>
+                      <h3 className="text-lg font-black text-slate-900">{activeProject.title}</h3>
+                      <div className="text-xs text-slate-500 mt-0.5">Story Project • Status: <span className="font-semibold capitalize text-[#0A2D59]">{activeProject.status}</span></div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-bold text-slate-600">Language:</label>
+                      <select
+                        value={selectedLanguage}
+                        onChange={(e) => handleLanguageChange(e.target.value)}
+                        className="border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold bg-white focus:ring-2 focus:ring-[#0A2D59]"
+                      >
+                        {languages.map((l) => (
+                          <option key={l.code} value={l.code}>
+                            {l.flag} {l.name} ({l.nativeName})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
                   <div>
-                    <h3 className="text-lg font-black text-slate-900">{activeProject.title}</h3>
-                    <p className="text-sm text-slate-600 mt-2 bg-slate-50 p-4 rounded-xl border border-slate-200 whitespace-pre-wrap">
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Story Narrative:</label>
+                    <p className="text-sm text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-200 whitespace-pre-wrap">
                       {activeProject.storyText}
                     </p>
                   </div>
@@ -493,12 +597,17 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                     disabled={loading}
                     className="bg-[#0A2D59] text-white hover:bg-slate-800 font-bold px-6 py-3 rounded-xl shadow text-sm transition flex items-center gap-2"
                   >
-                    <span>✨</span> {loading ? "Analyzing with Gemini AI..." : "Analyze Story Narrative"}
+                    <span>✨</span> {loading ? `Analyzing in ${getLanguageShort(selectedLanguage)}...` : `Analyze Story Narrative (${getLanguageShort(selectedLanguage)})`}
                   </button>
 
                   {activeProject.activeStoryAnalysisId && (
                     <div className="bg-blue-50 border border-blue-200 p-5 rounded-2xl space-y-3 text-sm">
-                      <h4 className="font-bold text-[#0A2D59]">Gemini Analysis Summary</h4>
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-[#0A2D59]">Gemini Analysis Summary</h4>
+                        <span className="text-xs font-bold bg-blue-200 text-blue-900 px-2.5 py-0.5 rounded-full">
+                          🌐 {getLanguageShort(activeProject.language || selectedLanguage)}
+                        </span>
+                      </div>
                       <p className="text-slate-700">{activeProject.activeStoryAnalysisId.summary}</p>
                       <div className="flex flex-wrap gap-2 pt-2">
                         {activeProject.activeStoryAnalysisId.themes?.map((t, idx) => (
@@ -516,7 +625,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
               {activeTab === "lyrics" && (
                 <div className="space-y-6">
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="text-xs font-bold text-slate-700 block mb-1.5">Music Model Engine:</label>
                         <select
@@ -524,7 +633,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                           onChange={(e) => setSelectedMusicProvider(e.target.value)}
                           className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold bg-white focus:ring-2 focus:ring-[#0A2D59]"
                         >
-                          <option value="google_lyria">🌟 Google DeepMind Lyria 3 Pro (Full Vocals & Song - Studio Quality)</option>
+                          <option value="google_lyria">🌟 Google DeepMind Lyria 3 Pro (Full Vocals & Song)</option>
                           <option value="elevenlabs">🎵 ElevenLabs Music Synthesis</option>
                           <option value="suno">🎸 Suno AI Music</option>
                           <option value="google_tts">🔊 Google Cloud Neural2 TTS + Rhythm Synth</option>
@@ -544,6 +653,21 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                           <option value="Rock">Rock (Energetic & Dynamic)</option>
                         </select>
                       </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1.5">Lyrics & Vocal Language:</label>
+                        <select
+                          value={selectedLanguage}
+                          onChange={(e) => handleLanguageChange(e.target.value)}
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold bg-white focus:ring-2 focus:ring-[#0A2D59]"
+                        >
+                          {languages.map((l) => (
+                            <option key={l.code} value={l.code}>
+                              {l.flag} {l.name} ({l.nativeName})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
 
                     <div className="pt-2 flex justify-end">
@@ -555,12 +679,12 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                         {loading ? (
                           <>
                             <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                            Synthesizing Song...
+                            Synthesizing in {getLanguageShort(selectedLanguage)}...
                           </>
                         ) : (
                           <>
                             <span>✨</span>
-                            Generate AI Lyrics & Song
+                            Generate AI Lyrics & Song ({getLanguageShort(selectedLanguage)})
                           </>
                         )}
                       </button>
@@ -572,8 +696,10 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                       <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
                         <div className="flex items-center justify-between mb-2">
                           <h4 className="font-black text-sm text-slate-800">Generated AI Lyrics</h4>
-                          <span className="text-xs bg-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full font-bold">
-                            {activeProject.activeSongId.genre} • {activeProject.activeSongId.mood}
+                          <span className="text-xs bg-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1.5">
+                            <span>{activeProject.activeSongId.genre} • {activeProject.activeSongId.mood}</span>
+                            <span>•</span>
+                            <span>🌐 {getLanguageShort(activeProject.activeSongId.language || selectedLanguage)}</span>
                           </span>
                         </div>
                         <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
@@ -662,8 +788,12 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-slate-900 text-sm">Scene Storyboard & Lyric Timeline</h3>
                         {activeProject.activeSongId && (
-                          <span className="bg-indigo-100 text-indigo-800 text-[11px] font-bold px-2 py-0.5 rounded-full border border-indigo-200">
-                            🎵 {activeProject.activeSongId.durationSeconds || 30}s Audio • {activeProject.activeStoryboardId?.scenes?.length || 0} Scenes (~5-6s each)
+                          <span className="bg-indigo-100 text-indigo-800 text-[11px] font-bold px-2 py-0.5 rounded-full border border-indigo-200 flex items-center gap-1">
+                            <span>🎵 {activeProject.activeSongId.durationSeconds || 30}s Audio</span>
+                            <span>•</span>
+                            <span>{activeProject.activeStoryboardId?.scenes?.length || 0} Scenes (~5-6s each)</span>
+                            <span>•</span>
+                            <span>🌐 {getLanguageShort(activeProject.language || selectedLanguage)}</span>
                           </span>
                         )}
                       </div>
@@ -896,7 +1026,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                           )}
 
                           {/* Pre-Render Specifications Summary */}
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 text-xs border-t border-slate-800">
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-2 text-xs border-t border-slate-800">
                             <div className="bg-slate-800/80 p-3 rounded-xl">
                               <div className="text-slate-400 font-bold">Total Duration:</div>
                               <div className="font-extrabold text-emerald-400 mt-0.5">
@@ -921,6 +1051,12 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                               <div className="text-slate-400 font-bold">Target Resolution:</div>
                               <div className="font-extrabold text-purple-400 mt-0.5">
                                 {videoPresets[selectedPreset]?.shortLabel || "1080p"} ({videoPresets[selectedPreset]?.width}x{videoPresets[selectedPreset]?.height})
+                              </div>
+                            </div>
+                            <div className="bg-slate-800/80 p-3 rounded-xl col-span-2 md:col-span-1">
+                              <div className="text-slate-400 font-bold">Language & Subtitles:</div>
+                              <div className="font-extrabold text-pink-400 mt-0.5 truncate">
+                                {getLanguageShort(activeProject.language || selectedLanguage)}
                               </div>
                             </div>
                           </div>
@@ -951,7 +1087,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                         <h4 className="font-black text-sm text-slate-800 flex items-center gap-2">
                           <span>🎬</span> Rendered Event Video Preview
                         </h4>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="bg-emerald-100 text-emerald-800 font-black text-xs px-2.5 py-1 rounded-full border border-emerald-300">
                             {activeProject.activeVideoId.resolution || "1080p"}
                           </span>
@@ -959,6 +1095,20 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                             <span className="bg-blue-100 text-blue-800 font-black text-xs px-2.5 py-1 rounded-full border border-blue-300">
                               {activeProject.activeVideoId.aspectRatio}
                             </span>
+                          )}
+                          <span className="bg-purple-100 text-purple-800 font-black text-xs px-2.5 py-1 rounded-full border border-purple-300">
+                            🌐 {getLanguageShort(activeProject.activeVideoId.language || activeProject.language)}
+                          </span>
+                          {activeProject.activeVideoId.subtitlesUrl && (
+                            <a
+                              href={activeProject.activeVideoId.subtitlesUrl}
+                              download={`subtitles_${activeProject.activeVideoId.language || "track"}.srt`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="bg-purple-900 hover:bg-purple-800 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow inline-flex items-center gap-1.5 transition"
+                            >
+                              <span>💬</span> Subtitles (.srt)
+                            </a>
                           )}
                           <a
                             href={activeProject.activeVideoId.videoUrl}
@@ -976,9 +1126,21 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                         <video
                           key={activeProject.activeVideoId.videoUrl}
                           controls
-                          src={activeProject.activeVideoId.videoUrl}
+                          crossOrigin="anonymous"
                           className="max-h-[500px] w-auto max-w-full rounded-xl shadow-xl border border-slate-300"
-                        />
+                        >
+                          <source src={activeProject.activeVideoId.videoUrl} type="video/mp4" />
+                          {activeProject.activeVideoId.subtitlesUrl && (
+                            <track
+                              kind="subtitles"
+                              src={activeProject.activeVideoId.subtitlesUrl}
+                              srcLang={activeProject.activeVideoId.language || "en"}
+                              label={`${getLanguageShort(activeProject.activeVideoId.language)} Subtitles`}
+                              default
+                            />
+                          )}
+                          Your browser does not support the video tag.
+                        </video>
                       </div>
                     </div>
                   )}
@@ -1012,6 +1174,24 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                   onChange={(e) => setNewTitle(e.target.value)}
                   className="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A2D59]"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Language for Song & Video</label>
+                <select
+                  value={newLanguage}
+                  onChange={(e) => setNewLanguage(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-semibold focus:ring-2 focus:ring-[#0A2D59] bg-white"
+                >
+                  {languages.map((l) => (
+                    <option key={l.code} value={l.code}>
+                      {l.flag} {l.name} ({l.nativeName})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Lyrics, singing vocals, and synchronized subtitles will be generated in this language.
+                </p>
               </div>
 
               <div>

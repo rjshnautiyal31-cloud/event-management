@@ -142,7 +142,7 @@ storyVideoRouter.post("/projects/:id/analyze", async (req, res, next) => {
 // 5. Generate AI Lyrics & Synth Audio Track
 storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
   try {
-    const { genre, musicProvider, language } = req.body;
+    const { genre, musicProvider, language, targetDuration } = req.body;
     const project = await Project.findById(req.params.id).populate("activeStoryAnalysisId");
     if (!project || !project.activeStoryAnalysisId) {
       return res.status(400).json({ message: "Project must be analyzed first" });
@@ -153,20 +153,21 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
       project.language = language;
     }
 
+    const desiredDuration = Number(targetDuration) || 180;
     const targetGenre = genre || project.activeStoryAnalysisId.suggestedGenres?.[0] || "Pop";
+
     const lyricsText = await generateLyricsWithGemini(project.activeStoryAnalysisId.summary, targetGenre, {
-      language: effectiveLanguage
+      language: effectiveLanguage,
+      targetDuration: desiredDuration
     });
 
     const providerToUse = musicProvider || "google_lyria";
     const musicEngine = getMusicProvider(providerToUse);
-    const wordCount = lyricsText.split(/\s+/).filter(Boolean).length;
-    const lyricsDurationSeconds = Math.max(30, Math.min(90, Math.ceil(wordCount / 2.2)));
 
     const audioResult = await musicEngine.generateMusic({
       lyrics: lyricsText,
       genre: targetGenre,
-      durationSeconds: lyricsDurationSeconds,
+      durationSeconds: desiredDuration,
       mood: project.activeStoryAnalysisId.mood || "Upbeat",
       storyContext: project.storyText || project.activeStoryAnalysisId.summary || "",
       title: project.title || "",
@@ -182,9 +183,11 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
       genre: targetGenre,
       mood: project.activeStoryAnalysisId.mood || "Upbeat",
       audioUrl: audioResult.audioUrl,
-      durationSeconds: audioResult.durationSeconds,
-      provider: providerToUse,
+      durationSeconds: audioResult.durationSeconds || desiredDuration,
+      provider: audioResult.provider || providerToUse,
       language: effectiveLanguage,
+      isFallback: Boolean(audioResult.isFallback),
+      fallbackReason: audioResult.fallbackReason || "",
       status: "ready"
     });
 

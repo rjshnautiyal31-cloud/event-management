@@ -10,6 +10,8 @@ const songSchema = new mongoose.Schema(
     durationSeconds: { type: Number, default: 30 },
     provider: { type: String, default: "local_synth" },
     language: { type: String, default: "en" },
+    isFallback: { type: Boolean, default: false },
+    fallbackReason: { type: String },
     status: { type: String, enum: ["pending", "generating", "ready", "failed"], default: "pending" }
   },
   { timestamps: true }

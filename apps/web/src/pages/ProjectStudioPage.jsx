@@ -49,6 +49,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
   // Genre & AI Provider State
   const [selectedGenre, setSelectedGenre] = useState("Pop");
   const [selectedMusicProvider, setSelectedMusicProvider] = useState("google_lyria");
+  const [selectedTargetDuration, setSelectedTargetDuration] = useState("180");
   const [generatingVeoSceneIdx, setGeneratingVeoSceneIdx] = useState(null);
   const [generatingAllVeo, setGeneratingAllVeo] = useState(false);
 
@@ -239,21 +240,32 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     try {
       const providerLabel = selectedMusicProvider === "google_lyria" ? "Google Lyria 3 Pro" : selectedMusicProvider === "elevenlabs" ? "ElevenLabs" : selectedMusicProvider === "suno" ? "Suno AI" : "Google Cloud TTS";
       const langLabel = getLanguageLabel(selectedLanguage);
-      setSuccess(`🎵 Composing full studio song in ${langLabel} with ${providerLabel} (~60-90s)... Generating singing vocals, acoustics & melody.`);
+      const targetSec = Number(selectedTargetDuration) || 180;
+      const targetSecLabel = targetSec >= 120 ? "~3 min full studio song" : `${targetSec}s track`;
+      setSuccess(`🎵 Composing ${targetSecLabel} in ${langLabel} with ${providerLabel} (~60-90s)... Generating singing vocals, acoustics & melody.`);
 
-      await api(`/api/story-video/projects/${activeProject._id}/lyrics`, {
+      const songRes = await api(`/api/story-video/projects/${activeProject._id}/lyrics`, {
         token,
         method: "POST",
         body: {
           genre: selectedGenre,
           musicProvider: selectedMusicProvider,
-          language: selectedLanguage
+          language: selectedLanguage,
+          targetDuration: targetSec
         }
       });
-      setSuccess(`🎉 AI Lyrics & ${providerLabel} song track generated in ${langLabel} successfully!`);
       const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
       setActiveProject(updated);
-      setActiveTab("media");
+
+      if (songRes.isFallback) {
+        setSuccess(`⚠️ Generated via backup vocal synthesizer (${songRes.durationSeconds ? `${songRes.durationSeconds}s` : "30s"}) as Lyria 3 Pro was temporarily busy. You can retry with Lyria 3 Pro anytime!`);
+      } else {
+        const mins = songRes.durationSeconds ? Math.floor(songRes.durationSeconds / 60) : 0;
+        const secs = songRes.durationSeconds ? songRes.durationSeconds % 60 : 0;
+        const durStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+        setSuccess(`🎉 Full AI Lyrics & ${providerLabel} song track (${durStr}) generated in ${langLabel} successfully!`);
+      }
+      setActiveTab("lyrics");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -625,7 +637,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
               {activeTab === "lyrics" && (
                 <div className="space-y-6">
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div>
                         <label className="text-xs font-bold text-slate-700 block mb-1.5">Music Model Engine:</label>
                         <select
@@ -651,6 +663,20 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                           <option value="Acoustic">Acoustic (Warm & Organic)</option>
                           <option value="Cinematic">Cinematic (Epic & Orchestral)</option>
                           <option value="Rock">Rock (Energetic & Dynamic)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1.5">Target Song Duration:</label>
+                        <select
+                          value={selectedTargetDuration}
+                          onChange={(e) => setSelectedTargetDuration(e.target.value)}
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold bg-white focus:ring-2 focus:ring-[#0A2D59]"
+                        >
+                          <option value="180">🌟 Full Studio Song (~3 min)</option>
+                          <option value="90">🎵 Extended Track (90 sec)</option>
+                          <option value="60">📻 Standard Track (60 sec)</option>
+                          <option value="30">⚡ Short Clip / Reel (30 sec)</option>
                         </select>
                       </div>
 
@@ -693,6 +719,33 @@ export function ProjectStudioPage({ auth, token: propToken }) {
 
                   {activeProject.activeSongId && (
                     <div className="space-y-4">
+                      {/* Fallback Warning Notice */}
+                      {activeProject.activeSongId.isFallback && (
+                        <div className="bg-amber-50 border border-amber-300 text-amber-900 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">⚠️</span>
+                            <div>
+                              <div className="font-bold text-xs uppercase tracking-wider text-amber-800">
+                                Generated via Backup Vocal Synthesizer ({activeProject.activeSongId.durationSeconds || 30}s)
+                              </div>
+                              <p className="text-xs text-amber-700 mt-0.5">
+                                {activeProject.activeSongId.fallbackReason
+                                  ? `Lyria 3 Pro was temporarily busy (${activeProject.activeSongId.fallbackReason}). A rhythmic backing vocal track was synthesized instead.`
+                                  : "Lyria 3 Pro was temporarily busy, so the backup vocal synthesizer created this track."}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={handleGenerateLyrics}
+                            disabled={loading}
+                            className="bg-amber-700 hover:bg-amber-800 text-white font-bold text-xs px-4 py-2 rounded-xl shadow transition flex items-center gap-1.5"
+                          >
+                            <span>🔄</span>
+                            <span>Retry with Lyria 3 Pro (~3 min)</span>
+                          </button>
+                        </div>
+                      )}
+
                       <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
                         <div className="flex items-center justify-between mb-2">
                           <h4 className="font-black text-sm text-slate-800">Generated AI Lyrics</h4>
@@ -711,8 +764,13 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                         <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex flex-wrap items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-emerald-950">🎵 Soundtrack Ready:</span>
-                            <span className="text-[11px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-md font-semibold">
-                              {activeProject.activeSongId.provider?.includes("lyria") ? "🌟 Google DeepMind Lyria" : activeProject.activeSongId.provider || "Studio Audio"}
+                            <span className={`text-[11px] px-2.5 py-0.5 rounded-md font-semibold ${activeProject.activeSongId.isFallback ? "bg-amber-200 text-amber-900 border border-amber-300" : "bg-emerald-200 text-emerald-900"}`}>
+                              {activeProject.activeSongId.isFallback
+                                ? "⚠️ Backup Vocal Synthesizer"
+                                : activeProject.activeSongId.provider?.includes("lyria")
+                                ? "🌟 Google DeepMind Lyria 3 Pro"
+                                : activeProject.activeSongId.provider || "Studio Audio"}
+                              {" "}• {activeProject.activeSongId.durationSeconds ? `${Math.floor(activeProject.activeSongId.durationSeconds / 60)}m ${activeProject.activeSongId.durationSeconds % 60}s` : "30s"}
                             </span>
                           </div>
                           <audio controls src={activeProject.activeSongId.audioUrl} className="h-9" />

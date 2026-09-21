@@ -223,7 +223,7 @@ async function fetchFallbackVocalAudio(lyricsText, tempVocalPath, language = "en
 
 // Google Cloud Vocal & Music Song Adapter
 class GoogleTtsMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, projectId, title = "", language = "en" }) {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 60, projectId, title = "", language = "en" }) {
     const timestamp = Date.now();
     const uploadDir = path.join(process.cwd(), "uploads");
     await fsPromises.mkdir(uploadDir, { recursive: true });
@@ -233,15 +233,23 @@ class GoogleTtsMusicAdapter {
     const outputFilename = `google_song_${timestamp}.mp3`;
     const outputPath = path.join(uploadDir, outputFilename);
 
-    // 1. Generate background musical chord progression matching selected genre & duration
-    const wavBuffer = createMusicalMelodyWavBuffer(durationSeconds, 44100, genre);
-    await fsPromises.writeFile(bgPath, wavBuffer);
-
-    // 2. Fetch vocal audio via OAuth2 Google Cloud Neural2 TTS or Multi-chunk fallback in selected language
+    // 1. Fetch vocal audio via OAuth2 Google Cloud Neural2 TTS or Multi-chunk fallback in selected language
     let hasVocals = await fetchGoogleCloudNeuralVocalAudio(lyrics, vocalPath, language);
     if (!hasVocals) {
       hasVocals = await fetchFallbackVocalAudio(lyrics, vocalPath, language);
     }
+
+    let vocalDuration = 0;
+    if (hasVocals) {
+      vocalDuration = await getAudioDurationFromFile(vocalPath);
+    }
+
+    // Determine target duration: ensure it covers full vocals + 3s musical outro, or matches requested durationSeconds
+    const targetDuration = Math.max(Number(durationSeconds) || 60, vocalDuration > 0 ? vocalDuration + 3 : 30);
+
+    // 2. Generate background musical chord progression matching selected genre & target duration
+    const wavBuffer = createMusicalMelodyWavBuffer(targetDuration, 44100, genre);
+    await fsPromises.writeFile(bgPath, wavBuffer);
 
     // 3. Mix vocal audio track with background music using FFmpeg
     if (hasVocals) {
@@ -252,7 +260,7 @@ class GoogleTtsMusicAdapter {
           .complexFilter([
             "[0:a]volume=0.20[bg]",
             "[1:a]volume=2.5[voc]",
-            "[bg][voc]amix=inputs=2:duration=first[a]"
+            "[bg][voc]amix=inputs=2:duration=first:dropout_transition=2[a]"
           ])
           .outputOptions(["-map", "[a]", "-c:a", "libmp3lame", "-b:a", "192k"])
           .save(outputPath)
@@ -278,27 +286,41 @@ class GoogleTtsMusicAdapter {
       filename: outputFilename
     });
     const audioUrl = await uploadAssetBuffer(audioBuffer, storageKey, "audio/mpeg");
+    const realDuration = await getAudioDurationFromFile(outputPath);
 
     return {
       audioUrl,
-      durationSeconds
+      durationSeconds: realDuration || targetDuration,
+      provider: "google_tts",
+      isFallback: false
     };
   }
 }
 
 // Local Synth Music Adapter
 class LocalSynthMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, projectId, title = "", language = "en" }) {
-    return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 60, projectId, title = "", language = "en" }) {
+    const res = await new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
+    return {
+      ...res,
+      provider: "local_synth",
+      isFallback: false
+    };
   }
 }
 
 // Suno AI Production Cloud Music Adapter
 class SunoMusicAdapter {
-  async generateMusic({ lyrics, genre, durationSeconds = 30, projectId, title = "", language = "en" }) {
+  async generateMusic({ lyrics, genre, durationSeconds = 180, projectId, title = "", language = "en" }) {
     const apiKey = env.musicApiKey || env.sunoApiKey;
     if (!apiKey) {
-      return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
+      const res = await new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
+      return {
+        ...res,
+        provider: "suno_fallback_tts",
+        isFallback: true,
+        fallbackReason: "Suno AI API key not configured, used vocal synthesizer fallback"
+      };
     }
 
     const langConfig = getLanguageConfig(language);
@@ -322,13 +344,19 @@ class SunoMusicAdapter {
       if (response.ok) {
         const data = await response.json();
         const audioUrl = data[0]?.audio_url || data.audio_url;
-        if (audioUrl) return { audioUrl, durationSeconds };
+        if (audioUrl) return { audioUrl, durationSeconds, provider: "suno", isFallback: false };
       }
     } catch (err) {
       console.error("Suno AI music generation error:", err.message);
     }
 
-    return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
+    const res = await new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
+    return {
+      ...res,
+      provider: "suno_fallback_tts",
+      isFallback: true,
+      fallbackReason: "Suno AI request failed, used vocal synthesizer fallback"
+    };
   }
 }
 
@@ -394,12 +422,6 @@ class ElevenLabsMusicAdapter {
     }
 
     // 2. Fallback: ElevenLabs Speech TTS (/v1/text-to-speech) mixed with backing track
-    const bgPath = path.join(uploadDir, `bg_${timestamp}.wav`);
-    const vocalPath = path.join(uploadDir, `vocal_eleven_${timestamp}.mp3`);
-
-    const wavBuffer = createMusicalMelodyWavBuffer(durationSeconds, 44100, genre);
-    await fsPromises.writeFile(bgPath, wavBuffer);
-
     let hasVocals = false;
     try {
       const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // Rachel voice
@@ -437,6 +459,15 @@ class ElevenLabsMusicAdapter {
       hasVocals = await fetchGoogleCloudNeuralVocalAudio(lyrics, vocalPath, language) || await fetchFallbackVocalAudio(lyrics, vocalPath, language);
     }
 
+    let vocalDuration = 0;
+    if (hasVocals) {
+      vocalDuration = await getAudioDurationFromFile(vocalPath);
+    }
+
+    const targetDuration = Math.max(Number(durationSeconds) || 60, vocalDuration > 0 ? vocalDuration + 3 : 30);
+    const wavBuffer = createMusicalMelodyWavBuffer(targetDuration, 44100, genre);
+    await fsPromises.writeFile(bgPath, wavBuffer);
+
     // 3. Mix vocal audio track with background music using FFmpeg
     if (hasVocals) {
       await new Promise((resolve, reject) => {
@@ -446,7 +477,7 @@ class ElevenLabsMusicAdapter {
           .complexFilter([
             "[0:a]volume=0.20[bg]",
             "[1:a]volume=2.5[voc]",
-            "[bg][voc]amix=inputs=2:duration=first[a]"
+            "[bg][voc]amix=inputs=2:duration=first:dropout_transition=2[a]"
           ])
           .outputOptions(["-map", "[a]", "-c:a", "libmp3lame", "-b:a", "192k"])
           .save(outputPath)
@@ -471,17 +502,21 @@ class ElevenLabsMusicAdapter {
       filename: outputFilename
     });
     const audioUrl = await uploadAssetBuffer(audioBuffer, storageKey, "audio/mpeg");
+    const realDuration = await getAudioDurationFromFile(outputPath);
 
     return {
       audioUrl,
-      durationSeconds
+      durationSeconds: realDuration || targetDuration,
+      provider: "elevenlabs_speech_mix",
+      isFallback: true,
+      fallbackReason: "ElevenLabs v1/music endpoint unavailable, used high-quality voice synthesizer"
     };
   }
 }
 
 // Google DeepMind Lyria 3 Pro AI Music Adapter (Vertex AI Next-Gen Interactions Model)
 export class GoogleLyriaMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, mood = "Upbeat", storyContext = "", title = "", projectId, language = "en" }) {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 180, mood = "Upbeat", storyContext = "", title = "", projectId, language = "en" }) {
     const timestamp = Date.now();
     const uploadDir = path.join(process.cwd(), "uploads");
     await fsPromises.mkdir(uploadDir, { recursive: true });
@@ -514,11 +549,28 @@ export class GoogleLyriaMusicAdapter {
       }
       promptInput += `Perform an authentic, cohesive song with full melodic singing vocals in ${langConfig.name}, natural harmonies, evocative instrumentation matching ${genre}, and a balanced musical structure (intro, verses, chorus, bridge, outro).`;
 
-      console.log(`[Google Lyria AI Music] Generating full song with lyria-3-pro-preview: "${promptInput.slice(0, 100)}..."`);
-      const interaction = await ai.interactions.create({
-        model: "lyria-3-pro-preview",
-        input: promptInput
-      });
+      let interaction = null;
+      let lastLyriaErr = null;
+
+      // Try Lyria 3 Pro with 1 automatic retry on transient error
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.log(`[Google Lyria AI Music] Generating full song with lyria-3-pro-preview (Attempt ${attempt}/2): "${promptInput.slice(0, 100)}..."`);
+          interaction = await ai.interactions.create({
+            model: "lyria-3-pro-preview",
+            input: promptInput
+          });
+          if (interaction?.output_audio?.data) {
+            break;
+          }
+        } catch (callErr) {
+          lastLyriaErr = callErr;
+          console.warn(`[Google Lyria AI Music] Lyria 3 Pro attempt ${attempt} failed: ${callErr.message}`);
+          if (attempt === 1) {
+            await new Promise((r) => setTimeout(r, 2000));
+          }
+        }
+      }
 
       if (interaction?.output_audio?.data) {
         const outputFilename = `lyria_song_${timestamp}.mp3`;
@@ -540,11 +592,13 @@ export class GoogleLyriaMusicAdapter {
         return {
           audioUrl,
           durationSeconds: realDuration,
-          lyrics: extractedLyrics || lyrics
+          lyrics: extractedLyrics || lyrics,
+          provider: "google_lyria",
+          isFallback: false
         };
       }
 
-      throw new Error("No audio payload returned from Lyria 3 Pro interaction");
+      throw lastLyriaErr || new Error("No audio payload returned from Lyria 3 Pro interaction");
     } catch (err) {
       console.warn(`[Google Lyria AI Music] Lyria 3 Pro error: ${err.message}. Attempting legacy lyria-002 fallback...`);
       try {
@@ -612,11 +666,19 @@ export class GoogleLyriaMusicAdapter {
         return {
           audioUrl,
           durationSeconds: realDuration,
-          lyrics
+          lyrics,
+          provider: "google_lyria_002",
+          isFallback: false
         };
       } catch (fallbackErr) {
         console.warn(`[Google Lyria AI Music] Legacy fallback failed: ${fallbackErr.message}. Defaulting to TTS synth.`);
-        return googleTtsSynth.generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
+        const fallbackRes = await googleTtsSynth.generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
+        return {
+          ...fallbackRes,
+          provider: "google_lyria_fallback_tts",
+          isFallback: true,
+          fallbackReason: err.message || "Lyria 3 Pro temporarily busy"
+        };
       }
     }
   }

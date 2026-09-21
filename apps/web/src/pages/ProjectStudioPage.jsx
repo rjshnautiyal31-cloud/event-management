@@ -50,6 +50,9 @@ export function ProjectStudioPage({ auth, token: propToken }) {
   const [selectedGenre, setSelectedGenre] = useState("Pop");
   const [selectedMusicProvider, setSelectedMusicProvider] = useState("google_lyria");
   const [selectedTargetDuration, setSelectedTargetDuration] = useState("180");
+  const [selectedVoiceType, setSelectedVoiceType] = useState("female");
+  const [customVoicePrompt, setCustomVoicePrompt] = useState("");
+  const [customVoiceId, setCustomVoiceId] = useState("");
   const [generatingVeoSceneIdx, setGeneratingVeoSceneIdx] = useState(null);
   const [generatingAllVeo, setGeneratingAllVeo] = useState(false);
 
@@ -123,6 +126,15 @@ export function ProjectStudioPage({ auth, token: propToken }) {
       if (activeProject.language) {
         setSelectedLanguage(activeProject.language);
       }
+      if (activeProject.voiceType) {
+        setSelectedVoiceType(activeProject.voiceType);
+      }
+      if (activeProject.customVoicePrompt) {
+        setCustomVoicePrompt(activeProject.customVoicePrompt);
+      }
+      if (activeProject.customVoiceId) {
+        setCustomVoiceId(activeProject.customVoiceId);
+      }
     }
   }, [activeProject]);
 
@@ -138,6 +150,22 @@ export function ProjectStudioPage({ auth, token: propToken }) {
         setActiveProject(prev => prev ? { ...prev, language: newLang } : prev);
       } catch (err) {
         console.warn("Failed to patch project language:", err.message);
+      }
+    }
+  }
+
+  async function handleVoiceTypeChange(newVoice) {
+    setSelectedVoiceType(newVoice);
+    if (activeProject?._id) {
+      try {
+        await api(`/api/story-video/projects/${activeProject._id}`, {
+          token,
+          method: "PATCH",
+          body: { voiceType: newVoice }
+        });
+        setActiveProject(prev => prev ? { ...prev, voiceType: newVoice } : prev);
+      } catch (err) {
+        console.warn("Failed to patch project voiceType:", err.message);
       }
     }
   }
@@ -242,7 +270,15 @@ export function ProjectStudioPage({ auth, token: propToken }) {
       const langLabel = getLanguageLabel(selectedLanguage);
       const targetSec = Number(selectedTargetDuration) || 180;
       const targetSecLabel = targetSec >= 120 ? "~3 min full studio song" : `${targetSec}s track`;
-      setSuccess(`🎵 Composing ${targetSecLabel} in ${langLabel} with ${providerLabel} (~60-90s)... Generating singing vocals, acoustics & melody.`);
+      const voiceLabel = selectedVoiceType === "male"
+        ? "👨 Male Vocals"
+        : selectedVoiceType === "duet"
+        ? "👫 Duet Vocals"
+        : selectedVoiceType === "custom"
+        ? `🎙️ Custom (${customVoicePrompt || customVoiceId || "Vocal Style"})`
+        : "👩 Female Vocals";
+
+      setSuccess(`🎵 Composing ${targetSecLabel} (${voiceLabel}) in ${langLabel} with ${providerLabel} (~60-90s)... Generating singing vocals, acoustics & melody.`);
 
       const songRes = await api(`/api/story-video/projects/${activeProject._id}/lyrics`, {
         token,
@@ -251,7 +287,10 @@ export function ProjectStudioPage({ auth, token: propToken }) {
           genre: selectedGenre,
           musicProvider: selectedMusicProvider,
           language: selectedLanguage,
-          targetDuration: targetSec
+          targetDuration: targetSec,
+          voiceType: selectedVoiceType,
+          customVoicePrompt,
+          customVoiceId
         }
       });
       const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
@@ -637,7 +676,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
               {activeTab === "lyrics" && (
                 <div className="space-y-6">
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                       <div>
                         <label className="text-xs font-bold text-slate-700 block mb-1.5">Music Model Engine:</label>
                         <select
@@ -694,7 +733,60 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                           ))}
                         </select>
                       </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 block mb-1.5">Vocal Voice Type:</label>
+                        <select
+                          value={selectedVoiceType}
+                          onChange={(e) => handleVoiceTypeChange(e.target.value)}
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold bg-white focus:ring-2 focus:ring-[#0A2D59]"
+                        >
+                          <option value="female">👩 Female Lead Vocals</option>
+                          <option value="male">👨 Male Lead Vocals</option>
+                          <option value="duet">👫 Duet (Male & Female Vocals)</option>
+                          <option value="custom">🎙️ Custom Voice / Timbre</option>
+                        </select>
+                      </div>
                     </div>
+
+                    {selectedVoiceType === "custom" && (
+                      <div className="bg-white border border-blue-200 rounded-xl p-4 shadow-sm space-y-3">
+                        <div className="flex items-center gap-2 text-xs font-bold text-[#0A2D59]">
+                          <span>🎙️</span>
+                          <span>Custom Vocal Style & Timbre Specifications</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs font-semibold text-slate-600 block mb-1">
+                              Vocal Performance Style / Timbre Description:
+                            </label>
+                            <input
+                              type="text"
+                              value={customVoicePrompt}
+                              onChange={(e) => setCustomVoicePrompt(e.target.value)}
+                              placeholder="e.g. Warm raspy indie folk baritone, soulful R&B soprano with soft vibrato"
+                              className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-[#0A2D59]"
+                            />
+                            <p className="text-[11px] text-slate-400 mt-1">Directly conditions Lyria 3 Pro singing style and timbre</p>
+                          </div>
+                          {selectedMusicProvider === "elevenlabs" && (
+                            <div>
+                              <label className="text-xs font-semibold text-slate-600 block mb-1">
+                                ElevenLabs Custom Voice ID (Optional):
+                              </label>
+                              <input
+                                type="text"
+                                value={customVoiceId}
+                                onChange={(e) => setCustomVoiceId(e.target.value)}
+                                placeholder="e.g. 21m00Tcm4TlvDq8ikWAM or cloned voice ID"
+                                className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-mono focus:ring-2 focus:ring-[#0A2D59]"
+                              />
+                              <p className="text-[11px] text-slate-400 mt-1">Overrides default ElevenLabs voice</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="pt-2 flex justify-end">
                       <button
@@ -771,6 +863,13 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                                 ? "🌟 Google DeepMind Lyria 3 Pro"
                                 : activeProject.activeSongId.provider || "Studio Audio"}
                               {" "}• {activeProject.activeSongId.durationSeconds ? `${Math.floor(activeProject.activeSongId.durationSeconds / 60)}m ${activeProject.activeSongId.durationSeconds % 60}s` : "30s"}
+                              {" "}• {activeProject.activeSongId.voiceType === "male"
+                                ? "👨 Male Vocals"
+                                : activeProject.activeSongId.voiceType === "duet"
+                                ? "👫 Duet Vocals"
+                                : activeProject.activeSongId.voiceType === "custom"
+                                ? "🎙️ Custom Voice"
+                                : "👩 Female Vocals"}
                             </span>
                           </div>
                           <audio controls src={activeProject.activeSongId.audioUrl} className="h-9" />

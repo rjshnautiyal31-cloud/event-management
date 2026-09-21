@@ -94,11 +94,14 @@ storyVideoRouter.patch("/projects/:id", async (req, res, next) => {
       return res.status(404).json({ message: "Project not found" });
     }
 
-    const { language, title, description, storyText } = req.body;
+    const { language, title, description, storyText, voiceType, customVoicePrompt, customVoiceId } = req.body;
     if (language !== undefined) project.language = language;
     if (title !== undefined) project.title = title;
     if (description !== undefined) project.description = description;
     if (storyText !== undefined) project.storyText = storyText;
+    if (voiceType !== undefined) project.voiceType = voiceType;
+    if (customVoicePrompt !== undefined) project.customVoicePrompt = customVoicePrompt;
+    if (customVoiceId !== undefined) project.customVoiceId = customVoiceId;
 
     await project.save();
     res.json(project);
@@ -142,7 +145,7 @@ storyVideoRouter.post("/projects/:id/analyze", async (req, res, next) => {
 // 5. Generate AI Lyrics & Synth Audio Track
 storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
   try {
-    const { genre, musicProvider, language, targetDuration } = req.body;
+    const { genre, musicProvider, language, targetDuration, voiceType, customVoicePrompt, customVoiceId } = req.body;
     const project = await Project.findById(req.params.id).populate("activeStoryAnalysisId");
     if (!project || !project.activeStoryAnalysisId) {
       return res.status(400).json({ message: "Project must be analyzed first" });
@@ -152,6 +155,11 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
     if (language && project.language !== language) {
       project.language = language;
     }
+
+    const effectiveVoiceType = voiceType || project.voiceType || "female";
+    project.voiceType = effectiveVoiceType;
+    if (customVoicePrompt !== undefined) project.customVoicePrompt = customVoicePrompt;
+    if (customVoiceId !== undefined) project.customVoiceId = customVoiceId;
 
     const desiredDuration = Number(targetDuration) || 180;
     const targetGenre = genre || project.activeStoryAnalysisId.suggestedGenres?.[0] || "Pop";
@@ -172,7 +180,10 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
       storyContext: project.storyText || project.activeStoryAnalysisId.summary || "",
       title: project.title || "",
       projectId: project._id,
-      language: effectiveLanguage
+      language: effectiveLanguage,
+      voiceType: effectiveVoiceType,
+      customVoicePrompt: customVoicePrompt || project.customVoicePrompt || "",
+      customVoiceId: customVoiceId || project.customVoiceId || ""
     });
 
     const finalLyrics = audioResult.lyrics || lyricsText;
@@ -186,6 +197,9 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
       durationSeconds: audioResult.durationSeconds || desiredDuration,
       provider: audioResult.provider || providerToUse,
       language: effectiveLanguage,
+      voiceType: audioResult.voiceType || effectiveVoiceType,
+      customVoicePrompt: customVoicePrompt || project.customVoicePrompt || "",
+      customVoiceId: customVoiceId || project.customVoiceId || "",
       isFallback: Boolean(audioResult.isFallback),
       fallbackReason: audioResult.fallbackReason || "",
       status: "ready"

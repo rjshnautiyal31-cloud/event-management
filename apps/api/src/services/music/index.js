@@ -9,7 +9,7 @@ import { GoogleAuth } from "google-auth-library";
 import { GoogleGenAI } from "@google/genai";
 import { env } from "../../config/env.js";
 import { uploadAssetBuffer, buildStoryStorageKey } from "../storage/index.js";
-import { getLanguageConfig } from "../../config/languages.js";
+import { getLanguageConfig, getLanguageGcpVoice } from "../../config/languages.js";
 
 const fsPromises = fs.promises;
 const activeFfmpegPath = process.env.FFMPEG_PATH || (fs.existsSync("/usr/bin/ffmpeg") ? "/usr/bin/ffmpeg" : (fs.existsSync("/usr/local/bin/ffmpeg") ? "/usr/local/bin/ffmpeg" : ffmpegInstaller));
@@ -127,7 +127,7 @@ export function createMusicalMelodyWavBuffer(durationSeconds = 30, sampleRate = 
 }
 
 // OAuth2 Authenticated Google Cloud Text-to-Speech Studio Vocal Adapter
-async function fetchGoogleCloudNeuralVocalAudio(lyricsText, tempVocalPath, language = "en") {
+async function fetchGoogleCloudNeuralVocalAudio(lyricsText, tempVocalPath, language = "en", voiceType = "female") {
   const cleanLyrics = (lyricsText || "")
     .replace(/\[.*?\]/g, "")
     .replace(/\s+/g, " ")
@@ -147,11 +147,7 @@ async function fetchGoogleCloudNeuralVocalAudio(lyricsText, tempVocalPath, langu
     }
 
     const ttsClient = new textToSpeech.TextToSpeechClient(clientOptions);
-    const voiceConfig = langConfig.gcpVoice || {
-      languageCode: "en-US",
-      name: "en-US-Neural2-F",
-      ssmlGender: "FEMALE"
-    };
+    const voiceConfig = getLanguageGcpVoice(language, voiceType);
 
     const [response] = await ttsClient.synthesizeSpeech({
       input: { text: cleanLyrics },
@@ -165,7 +161,7 @@ async function fetchGoogleCloudNeuralVocalAudio(lyricsText, tempVocalPath, langu
 
     if (response.audioContent) {
       await fsPromises.writeFile(tempVocalPath, response.audioContent, "binary");
-      console.log(`[Google Cloud TTS OAuth2] Successfully synthesized Google ${voiceConfig.languageCode} (${voiceConfig.name}) Studio Vocal audio file (${response.audioContent.length} bytes) for ${langConfig.name}`);
+      console.log(`[Google Cloud TTS OAuth2] Successfully synthesized Google ${voiceConfig.languageCode} (${voiceConfig.name}, ${voiceConfig.ssmlGender}) Studio Vocal audio file (${response.audioContent.length} bytes) for ${langConfig.name}`);
       return true;
     }
   } catch (err) {
@@ -223,7 +219,7 @@ async function fetchFallbackVocalAudio(lyricsText, tempVocalPath, language = "en
 
 // Google Cloud Vocal & Music Song Adapter
 class GoogleTtsMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 60, projectId, title = "", language = "en" }) {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 60, projectId, title = "", language = "en", voiceType = "female", customVoicePrompt = "", customVoiceId = "" }) {
     const timestamp = Date.now();
     const uploadDir = path.join(process.cwd(), "uploads");
     await fsPromises.mkdir(uploadDir, { recursive: true });
@@ -233,8 +229,8 @@ class GoogleTtsMusicAdapter {
     const outputFilename = `google_song_${timestamp}.mp3`;
     const outputPath = path.join(uploadDir, outputFilename);
 
-    // 1. Fetch vocal audio via OAuth2 Google Cloud Neural2 TTS or Multi-chunk fallback in selected language
-    let hasVocals = await fetchGoogleCloudNeuralVocalAudio(lyrics, vocalPath, language);
+    // 1. Fetch vocal audio via OAuth2 Google Cloud Neural2 TTS or Multi-chunk fallback in selected language & voice
+    let hasVocals = await fetchGoogleCloudNeuralVocalAudio(lyrics, vocalPath, language, voiceType);
     if (!hasVocals) {
       hasVocals = await fetchFallbackVocalAudio(lyrics, vocalPath, language);
     }
@@ -292,6 +288,7 @@ class GoogleTtsMusicAdapter {
       audioUrl,
       durationSeconds: realDuration || targetDuration,
       provider: "google_tts",
+      voiceType,
       isFallback: false
     };
   }
@@ -299,11 +296,12 @@ class GoogleTtsMusicAdapter {
 
 // Local Synth Music Adapter
 class LocalSynthMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 60, projectId, title = "", language = "en" }) {
-    const res = await new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 60, projectId, title = "", language = "en", voiceType = "female", customVoicePrompt = "", customVoiceId = "" }) {
+    const res = await new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language, voiceType, customVoicePrompt, customVoiceId });
     return {
       ...res,
       provider: "local_synth",
+      voiceType,
       isFallback: false
     };
   }
@@ -311,19 +309,27 @@ class LocalSynthMusicAdapter {
 
 // Suno AI Production Cloud Music Adapter
 class SunoMusicAdapter {
-  async generateMusic({ lyrics, genre, durationSeconds = 180, projectId, title = "", language = "en" }) {
+  async generateMusic({ lyrics, genre, durationSeconds = 180, projectId, title = "", language = "en", voiceType = "female", customVoicePrompt = "", customVoiceId = "" }) {
     const apiKey = env.musicApiKey || env.sunoApiKey;
     if (!apiKey) {
-      const res = await new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
+      const res = await new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language, voiceType, customVoicePrompt, customVoiceId });
       return {
         ...res,
         provider: "suno_fallback_tts",
+        voiceType,
         isFallback: true,
         fallbackReason: "Suno AI API key not configured, used vocal synthesizer fallback"
       };
     }
 
     const langConfig = getLanguageConfig(language);
+    const vocalTag = voiceType === "male"
+      ? "male vocals"
+      : voiceType === "duet"
+      ? "duet vocals"
+      : (voiceType === "custom" && customVoicePrompt)
+      ? customVoicePrompt
+      : "female vocals";
 
     try {
       const response = await fetch("https://api.suno.ai/v1/generate", {
@@ -334,7 +340,7 @@ class SunoMusicAdapter {
         },
         body: JSON.stringify({
           prompt: lyrics,
-          tags: `${genre}, ${langConfig.name}`,
+          tags: `${genre}, ${langConfig.name}, ${vocalTag}`,
           title: title || `Event Song (${langConfig.name})`,
           make_instrumental: false,
           wait_audio: true
@@ -344,16 +350,17 @@ class SunoMusicAdapter {
       if (response.ok) {
         const data = await response.json();
         const audioUrl = data[0]?.audio_url || data.audio_url;
-        if (audioUrl) return { audioUrl, durationSeconds, provider: "suno", isFallback: false };
+        if (audioUrl) return { audioUrl, durationSeconds, provider: "suno", voiceType, isFallback: false };
       }
     } catch (err) {
       console.error("Suno AI music generation error:", err.message);
     }
 
-    const res = await new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
+    const res = await new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language, voiceType, customVoicePrompt, customVoiceId });
     return {
       ...res,
       provider: "suno_fallback_tts",
+      voiceType,
       isFallback: true,
       fallbackReason: "Suno AI request failed, used vocal synthesizer fallback"
     };
@@ -362,11 +369,11 @@ class SunoMusicAdapter {
 
 // ElevenLabs Production Text-to-Music Adapter
 class ElevenLabsMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, projectId, title = "", language = "en" }) {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 30, projectId, title = "", language = "en", voiceType = "female", customVoicePrompt = "", customVoiceId = "" }) {
     const apiKey = env.elevenLabsApiKey || env.musicApiKey;
     if (!apiKey) {
       console.warn("[ElevenLabs] ELEVENLABS_API_KEY missing, falling back to Google Cloud TTS adapter");
-      return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
+      return new GoogleTtsMusicAdapter().generateMusic({ lyrics, genre, durationSeconds, projectId, title, language, voiceType, customVoicePrompt, customVoiceId });
     }
 
     const langConfig = getLanguageConfig(language);
@@ -378,7 +385,15 @@ class ElevenLabsMusicAdapter {
     const outputPath = path.join(uploadDir, outputFilename);
 
     const cleanLyrics = (lyrics || "").replace(/\[.*?\]/g, "").replace(/\s+/g, " ").trim();
-    const promptText = `A ${genre} style song with full singing vocals in ${langConfig.name} and melody. Lyrics: ${cleanLyrics}`;
+    const vocalDescriptor = voiceType === "male"
+      ? "male singing vocals"
+      : voiceType === "duet"
+      ? "male and female duet singing vocals"
+      : (voiceType === "custom" && customVoicePrompt)
+      ? `${customVoicePrompt} singing vocals`
+      : "female singing vocals";
+
+    const promptText = `A ${genre} style song with ${vocalDescriptor} in ${langConfig.name} and melody. Lyrics: ${cleanLyrics}`;
 
     // 1. Try ElevenLabs Official Text-to-Music Endpoint (POST /v1/music)
     try {
@@ -411,7 +426,9 @@ class ElevenLabsMusicAdapter {
         console.log(`[ElevenLabs Music API] Successfully generated full ElevenLabs AI song (${audioBuffer.length} bytes)`);
         return {
           audioUrl,
-          durationSeconds
+          durationSeconds,
+          voiceType,
+          provider: "elevenlabs"
         };
       } else {
         const errText = await musicResponse.text();
@@ -424,7 +441,9 @@ class ElevenLabsMusicAdapter {
     // 2. Fallback: ElevenLabs Speech TTS (/v1/text-to-speech) mixed with backing track
     let hasVocals = false;
     try {
-      const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // Rachel voice
+      const isMale = String(voiceType).toLowerCase() === "male";
+      const defaultVoiceId = isMale ? "pNInz6obpgDQGcFmaJgB" : "21m00Tcm4TlvDq8ikWAM"; // Adam (Male) vs Rachel (Female)
+      const voiceId = customVoiceId || process.env.ELEVENLABS_VOICE_ID || defaultVoiceId;
       const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
         method: "POST",
         headers: {
@@ -508,6 +527,7 @@ class ElevenLabsMusicAdapter {
       audioUrl,
       durationSeconds: realDuration || targetDuration,
       provider: "elevenlabs_speech_mix",
+      voiceType,
       isFallback: true,
       fallbackReason: "ElevenLabs v1/music endpoint unavailable, used high-quality voice synthesizer"
     };
@@ -516,7 +536,7 @@ class ElevenLabsMusicAdapter {
 
 // Google DeepMind Lyria 3 Pro AI Music Adapter (Vertex AI Next-Gen Interactions Model)
 export class GoogleLyriaMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 180, mood = "Upbeat", storyContext = "", title = "", projectId, language = "en" }) {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 180, mood = "Upbeat", storyContext = "", title = "", projectId, language = "en", voiceType = "female", customVoicePrompt = "", customVoiceId = "" }) {
     const timestamp = Date.now();
     const uploadDir = path.join(process.cwd(), "uploads");
     await fsPromises.mkdir(uploadDir, { recursive: true });
@@ -524,7 +544,7 @@ export class GoogleLyriaMusicAdapter {
     const langConfig = getLanguageConfig(language);
 
     try {
-      console.log(`[Google Lyria AI Music] Authenticating with Vertex AI for Lyria 3 Pro in ${langConfig.name}...`);
+      console.log(`[Google Lyria AI Music] Authenticating with Vertex AI for Lyria 3 Pro in ${langConfig.name} (${voiceType})...`);
       const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
       if (fs.existsSync(keyFilename)) {
         process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
@@ -537,17 +557,27 @@ export class GoogleLyriaMusicAdapter {
         location: "global"
       });
 
+      let vocalStyleInstruction = "expressive female lead singing vocals";
+      if (voiceType === "male") {
+        vocalStyleInstruction = "expressive male lead singing vocals";
+      } else if (voiceType === "duet") {
+        vocalStyleInstruction = "harmonious male and female duet singing vocals";
+      } else if (voiceType === "custom" && customVoicePrompt && customVoicePrompt.trim()) {
+        vocalStyleInstruction = `${customVoicePrompt.trim()} singing vocals`;
+      }
+
       // Construct rich musical prompt incorporating story context and lyrics
       let promptInput = `Song Genre: ${genre} (${mood}).\n`;
       if (title) promptInput += `Title: ${title}.\n`;
       promptInput += `Language of Vocals: ${langConfig.name} (${langConfig.nativeName}).\n`;
+      promptInput += `Vocal Performance Style: ${vocalStyleInstruction}.\n`;
       if (storyContext && storyContext.trim()) {
         promptInput += `Story Context / Narrative: ${storyContext.trim().slice(0, 1500)}.\n`;
       }
       if (lyrics && lyrics.trim().length > 10) {
         promptInput += `Lyrics / Thematic Guide (in ${langConfig.name}):\n${lyrics.trim().slice(0, 1200)}\n`;
       }
-      promptInput += `Perform an authentic, cohesive song with full melodic singing vocals in ${langConfig.name}, natural harmonies, evocative instrumentation matching ${genre}, and a balanced musical structure (intro, verses, chorus, bridge, outro).`;
+      promptInput += `Perform an authentic, cohesive song with ${vocalStyleInstruction} in ${langConfig.name}, natural harmonies, evocative instrumentation matching ${genre}, and a balanced musical structure (intro, verses, chorus, bridge, outro).`;
 
       let interaction = null;
       let lastLyriaErr = null;
@@ -594,6 +624,7 @@ export class GoogleLyriaMusicAdapter {
           durationSeconds: realDuration,
           lyrics: extractedLyrics || lyrics,
           provider: "google_lyria",
+          voiceType,
           isFallback: false
         };
       }
@@ -668,14 +699,16 @@ export class GoogleLyriaMusicAdapter {
           durationSeconds: realDuration,
           lyrics,
           provider: "google_lyria_002",
+          voiceType,
           isFallback: false
         };
       } catch (fallbackErr) {
         console.warn(`[Google Lyria AI Music] Legacy fallback failed: ${fallbackErr.message}. Defaulting to TTS synth.`);
-        const fallbackRes = await googleTtsSynth.generateMusic({ lyrics, genre, durationSeconds, projectId, title, language });
+        const fallbackRes = await googleTtsSynth.generateMusic({ lyrics, genre, durationSeconds, projectId, title, language, voiceType, customVoicePrompt, customVoiceId });
         return {
           ...fallbackRes,
           provider: "google_lyria_fallback_tts",
+          voiceType,
           isFallback: true,
           fallbackReason: err.message || "Lyria 3 Pro temporarily busy"
         };

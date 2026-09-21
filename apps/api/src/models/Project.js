@@ -14,6 +14,9 @@ const projectSchema = new mongoose.Schema(
       index: true
     },
     language: { type: String, default: "en" },
+    voiceType: { type: String, default: "female" },
+    customVoicePrompt: { type: String, default: "" },
+    customVoiceId: { type: String, default: "" },
     activeStoryAnalysisId: { type: mongoose.Schema.Types.ObjectId, ref: "StoryAnalysis" },
     activeSongId: { type: mongoose.Schema.Types.ObjectId, ref: "Song" },
     activeStoryboardId: { type: mongoose.Schema.Types.ObjectId, ref: "Storyboard" },

@@ -12,6 +12,9 @@ const songSchema = new mongoose.Schema(
     language: { type: String, default: "en" },
     isFallback: { type: Boolean, default: false },
     fallbackReason: { type: String },
+    voiceType: { type: String, enum: ["female", "male", "duet", "custom"], default: "female" },
+    customVoicePrompt: { type: String, default: "" },
+    customVoiceId: { type: String, default: "" },
     status: { type: String, enum: ["pending", "generating", "ready", "failed"], default: "pending" }
   },
   { timestamps: true }

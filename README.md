@@ -9,16 +9,28 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
 ### 1. AI Story-to-Song-to-Video Studio (`/#/studio`)
 - **Event-Scoped AI Stories & Multi-Video Support**:
   - Associate multiple AI story projects per event. Restrictable via Event ACL (`super_admin` & `event_admin`).
-- **Phase 1: Story Narrative Analysis**:
-  - Analyzes raw event text/narrative using **Google Gemini 2.5 Flash** via Vertex AI to extract story summary, emotional arc, key themes, mood, and distinct visual scene prompts.
-- **Phase 2: AI Lyrics & Vocal Song Generation**:
-  - Generates authentic musical song compositions with melodic vocals and acoustic/electronic instruments using **Google DeepMind Lyria 3 Pro / Lyria 2** (`lyria-3-pro-preview`), ElevenLabs Music API, Suno, or local synthetic fallback.
+- **Multilingual Narrative & Audio Synthesis (10+ Languages)**:
+  - Generate story analysis, poetic song lyrics, singing vocals, visual storyboards, and burned subtitles in **English**, **Hindi (हिन्दी)**, **Spanish (Español)**, **French (Français)**, **German (Deutsch)**, **Japanese (日本語)**, **Chinese (中文)**, **Arabic (العربية)**, **Portuguese (Português)**, and **Bengali (বাংলা)**.
+  - Native script rendering (Devanagari, Hanzi, Arabic, etc.) with automatic cross-lingual visual translation for AI video generators.
+- **Phase 1: Story Narrative Analysis & Character Cast Bible (Level 1 Control)**:
+  - Analyzes raw event text/narrative using **Google Gemini 2.5 Flash** via Vertex AI to extract story summary, emotional arc, key themes, and visual scene prompts.
+  - **👥 Cast & Characters Consistency Guide**: Define recurring characters with Name, Role, and Physical Appearance & Attire (e.g. *Rahul • Groom: 30yo man in cream sherwani and red safa*). Gemini weaves these exact visual anchors into every scene prompt featuring them to ensure facial and outfit consistency across AI video renders.
+  - **🎬 Director Guidelines & Must-Have Scenes**: Provide specific camera directions, required milestones, or must-have moments (e.g. *garland exchange, champagne toast, lantern release*) that Gemini prioritizes during timeline generation.
+- **Phase 2: AI Lyrics, Vocal Voice Selection & Duration Control**:
+  - **Vocalist Voice Selection**: Choose between **👩 Female Vocalist**, **👨 Male Vocalist**, **👥 Duet / Harmonized Ensemble**, or **🎙️ Custom Vocal Persona** (e.g., *warm acoustic contralto*, *husky rock baritone*, *Indian classical female vocals*).
+  - **Flexible Duration Control**: Select audio target length from **15s, 30s, 45s, 60s, 90s, 120s up to 180s (3 full minutes)**.
+  - Generates authentic musical song compositions using **Google DeepMind Lyria 3 Pro / Lyria 2** (`lyria-3-pro-preview`), ElevenLabs Music API, Suno, or local synthetic fallback.
+  - Features intelligent prompt conditioning, automatic Lyria retry on rate limits, and transparent fallback indicator badges in the UI.
 - **Phase 3: Event Photos & Pure AI Motion Video Generation**:
   - Upload event photos and media assets stored locally, in **AWS S3**, **Cloudflare R2**, or **Google Cloud Storage (GCS)**.
   - Generates realistic 5-second 16:9 cinematic motion video clips using **Google Gemini Omni 1.1 Flash** (`gemini-omni-1.1-flash-preview`) or Google Veo.
-- **Phase 4: Lyric-Synchronized Scene Storyboard & Timeline**:
-  - Automatically calculates scene durations matching the actual generated song length.
-  - Aligns individual lyric phrases and narrative beats to scenes, preventing repetitive visuals.
+- **Phase 4: Lyric-Synchronized Scene Storyboard & Granular Scene Editor (Level 2 Control)**:
+  - Automatically calculates scene durations (~5-6s each) matching the exact song audio duration so clips never loop or freeze.
+  - **✏️ Interactive Visual Action / Prompt Editor**: Edit visual prompts for any scene inline with quick-insert character buttons (`+Rahul`).
+  - **👤 Scene Cast Tagging**: Easily toggle which characters appear in which scene (`✓ Rahul` / `+ Priya`).
+  - **🎨 Individual Scene AI Frame Regeneration**: Re-paint AI visual frames for specific scenes without regenerating the whole project.
+  - **✨ Per-Scene Gemini Omni Video**: Generate or re-generate 5s motion video clips for individual scenes or batch-render all scenes at once.
+  - **Source Media Reassignment**: Assign uploaded event photos/videos or AI frames on a per-scene basis.
 - **Phase 5: Multi-Device Resolution Video Rendering**:
   - Stitches scene clips, vocal audio track, and burned subtitles into high-definition MP4 videos with 5 customizable display presets:
     - 🖥️ **Desktop Full HD (1080p)**: `1920x1080`, 16:9, 6000k bitrate.
@@ -84,11 +96,11 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
 - `entrylogs`: Historical check-in log records with denormalized names/emails.
 
 ### AI Story-to-Video Collections
-- `projects`: Story projects linked to `eventId` with references to active analysis, song, storyboard, and video.
+- `projects`: Story projects linked to `eventId` with references to active analysis, song, storyboard, and video, plus `language`, `characters: [{ name, role, visualDescription, referenceMediaId }]`, and `directorGuidelines`.
 - `storyanalyses`: Story analysis output (summary, emotional arc, themes, key moments).
-- `songs`: Generated lyrics, audio URL, duration, genre, mood.
-- `medias`: Uploaded photo & video clip media items per project (`fileUrl`, `mediaType`).
-- `storyboards`: Scene timeline mapping (sceneNumber, start/end timestamps, mediaId, captionText).
+- `songs`: Generated lyrics, audio URL, duration, genre, mood, `language`, `voiceType`, and `musicProvider`.
+- `medias`: Uploaded photo & video clip media items per project (`fileUrl`, `mediaType`, `caption`).
+- `storyboards`: Scene timeline mapping (sceneNumber, start/end timestamps, lyricSnippet, visualPrompt, captionText, mediaId, and `characters: [String]`).
 - `videos`: Rendered video documents (videoUrl, durationSeconds, resolution).
 - `generationjobs`: Async background job status tracking (jobType, progressPercent, currentStepMessage).
 
@@ -97,16 +109,21 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
 ## API Endpoints
 
 ### AI Story-to-Video Studio (`/api/story-video/*`)
-- `POST /api/story-video/projects` (admin): Create a new AI story project linked to an event.
+- `POST /api/story-video/projects` (admin): Create a new AI story project with optional language, characters cast, and director guidelines.
 - `GET /api/story-video/projects` (auth): List all story projects for an event.
-- `GET /api/story-video/projects/:id` (auth): Fetch details for a specific project.
-- `POST /api/story-video/projects/:id/analyze` (admin): Analyze story narrative using Gemini 2.5 Flash.
-- `POST /api/story-video/projects/:id/lyrics` (admin): Generate AI lyrics and synthesize song audio via Google Lyria 3 Pro / ElevenLabs.
+- `GET /api/story-video/projects/:id` (auth): Fetch full project details (populated with analysis, song, storyboard, media, and video).
+- `PATCH /api/story-video/projects/:id` (admin): Update project settings (title, language, characters cast, director guidelines).
+- `POST /api/story-video/projects/:id/analyze` (admin): Analyze story narrative using Gemini 2.5 Flash in the selected language.
+- `POST /api/story-video/projects/:id/lyrics` (admin): Generate AI lyrics and synthesize song audio with duration, genre, language, and vocal voice type.
 - `POST /api/story-video/projects/:id/media` (admin): Upload photo or video clip assets for video stitching.
 - `GET /api/story-video/projects/:id/media` (auth): Get media gallery items for a project.
 - `DELETE /api/story-video/projects/:id/media/:mediaId` (admin): Delete a specific uploaded photo or video clip.
 - `DELETE /api/story-video/projects/:id/media` (admin): Clear all uploaded media (activates Pure AI Scene Generation Mode).
-- `POST /api/story-video/projects/:id/storyboard` (admin): Generate lyric-synchronized scene timeline storyboard.
+- `POST /api/story-video/projects/:id/storyboard` (admin): Generate lyric-synchronized scene timeline incorporating character cast descriptions and director guidelines.
+- `PATCH /api/story-video/projects/:id/scenes/:sceneIndex` (admin): Update an individual scene's visual prompt, caption, characters, or assigned media.
+- `POST /api/story-video/projects/:id/scenes/:sceneIndex/image` (admin): Generate / regenerate a high-resolution AI image frame for a specific scene.
+- `POST /api/story-video/projects/:id/scenes/:sceneIndex/veo` (admin): Generate / regenerate a 5s Gemini Omni 1.1 motion video clip for a specific scene with custom prompt.
+- `POST /api/story-video/projects/:id/scenes/generate-all-veo` (admin): Batch generate Gemini Omni 1.1 motion video clips for all storyboard scenes.
 - `GET /api/story-video/video-presets` (auth): Fetch supported resolution presets (`1080p`, `720p`, `mobile`, `tablet`, `square`).
 - `POST /api/story-video/projects/:id/render` (admin): Trigger FFmpeg background video rendering with resolution preset.
 - `GET /api/story-video/jobs/:jobId` (auth): Poll video rendering job progress.

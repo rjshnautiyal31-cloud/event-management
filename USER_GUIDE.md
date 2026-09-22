@@ -137,57 +137,104 @@ Navigate to **`/#/studio`** (accessible from the top navigation bar or drawer me
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Stage 1: Story Narrative & Emotional Arc Analysis
-1. Select an existing story project or click **"+ New Story Project"**.
-2. Enter your **Event Narrative** (e.g., keynote speech highlights, founder's anniversary story, wedding vows, or conference milestones).
-3. Click **"Analyze Story Narrative"**.
-4. **Google Gemini 2.5 Flash** (via Vertex AI) analyzes the text and produces:
-   - **Executive Summary** & overall emotional sentiment.
-   - **Thematic Highlights**: Key themes and narrative mood.
-   - **Scene Breakdowns**: Chronological visual scenes with distinct camera directions, emotional beats, and lighting suggestions.
+### 9.1 Multilingual Story-to-Song-to-Video Engine
+The studio natively supports **10 major global languages**:
+- 🇺🇸 **English** (en)
+- 🇮🇳 **Hindi (हिन्दी)** (hi)
+- 🇪🇸 **Spanish (Español)** (es)
+- 🇫🇷 **French (Français)** (fr)
+- 🇩🇪 **German (Deutsch)** (de)
+- 🇯🇵 **Japanese (日本語)** (ja)
+- 🇨🇳 **Chinese (中文)** (zh)
+- 🇸🇦 **Arabic (العربية)** (ar)
+- 🇧🇷 **Portuguese (Português)** (pt)
+- 🇧🇩 **Bengali (বাংলা)** (bn)
 
-### Stage 2: AI Song Lyrics & Full Vocal Track Generation
-1. Switch to **Tab 2: AI Lyrics & Audio**.
-2. Select your desired musical genre:
-   - 🎸 **Acoustic / Folk**: Intimate guitars, organic percussion, warm vocals.
-   - 🎹 **Cinematic Orchestral**: Sweeping strings, brass climaxes, grand choir harmonies.
-   - 🎤 **Pop / Uplifting**: Energetic tempo, catchy hooks, modern production.
-   - ⚡ **Epic Rock**: Driving drums, soaring electric guitars, powerful vocals.
-3. Choose the target song duration (30 seconds up to full 3-minute songs).
-4. Click **"Generate AI Song & Vocals"**:
-   - The studio triggers **Google DeepMind Lyria 3 Pro / Lyria 2** (`lyria-3-pro-preview`) via Vertex AI.
-   - It composes an authentic melody with harmonized vocals, instruments, and structured sections (*Intro, Verse, Chorus, Bridge, Outro*).
-   - Listen to the audio preview directly in the built-in media player.
+**How Multilingual Generation Works**:
+1. Select your target language during project creation or in the top-right language picker in **Tab 1**.
+2. **Native Lyrics & Script**: Gemini Flash 2.5 crafts rhythmic, rhyming lyrics in the chosen language and native script (e.g., Devanagari for Hindi, Pinyin/Hanzi for Chinese).
+3. **Vocal Singing & Synthesis**: The vocal synthesis models adapt to the language's phonetics and accent patterns.
+4. **Synchronized Subtitles**: Captions burned into the final video preserve the native typography and lyrics.
+5. **Cross-Lingual Visual Prompts**: Storyboard visual directions for AI video and image engines are generated in English to maximize fidelity with models like Google Gemini Omni 1.1 Flash and Google Imagen 3.
+
+---
+
+### Stage 1: Story Narrative, Cast Bible & Director Directives (Level 1 Control)
+1. Select an existing story project or click **"+ New Story Project"**.
+2. **Story Narrative**: Enter raw event memories, speeches, or summaries.
+3. **👥 Cast & Characters Consistency Guide (Visual Bible)**:
+   - Define the key individuals in your story (*Rahul, Priya, Keynote Speaker, Birthday Star*).
+   - Provide their **Role in Event** and specific **Visual Appearance & Attire** (e.g. *30yo Indian man with short black hair, wearing a cream silk sherwani with red turban*).
+   - **Why This Matters**: Generative AI models often change character faces and clothes between clips. By defining your cast here, Gemini systematically injects these visual descriptors into every scene featuring that character, preserving visual identity throughout the entire video.
+4. **🎬 Director Guidelines & Must-Have Scenes**:
+   - Provide directives for specific moments you want featured (e.g. *1. Grand welcome. 2. Stage garland exchange. 3. Family champagne toast. 4. Lantern lighting at dusk.*).
+   - Gemini prioritizes these moments when laying out the chronological timeline.
+5. Click **"Analyze Story Narrative"** to generate an executive summary, emotional arc, and thematic tags.
+
+---
+
+### Stage 2: AI Song Lyrics, Vocal Voice Selection & Duration Control
+Switch to **Tab 2: AI Lyrics & Audio**:
+1. **Music Engine**:
+   - 🌟 **Google DeepMind Lyria 3 Pro** (`lyria-3-pro-preview`): State-of-the-art vocal composition and acoustic production.
+   - 🎵 **ElevenLabs Music Synthesis**: Polished studio pop, acoustic, and electronic production.
+   - 🎸 **Suno AI**: Melodic song synthesis.
+   - 🔊 **Google Cloud Neural2 TTS**: High-fidelity speech synthesis over rhythmically synchronized backing beats.
+2. **Vocal Voice Selection**:
+   - 👩 **Female Vocalist**: Emotive soprano / alto lead vocals.
+   - 👨 **Male Vocalist**: Warm tenor / baritone lead vocals.
+   - 👥 **Duet / Harmonized Ensemble**: Harmonious dual vocal arrangement.
+   - 🎙️ **Custom Vocal Persona**: Freely type any vocal style (e.g., *husky delta blues singer*, *ethereal operatic choir*, *energetic K-pop vocalist*).
+3. **Musical Style / Genre**:
+   - 🎸 Acoustic / Folk • 🎹 Cinematic Orchestral • 🎤 Pop / Uplifting • ⚡ Epic Rock • 🥁 Lo-Fi Chill • 🎷 Jazz / Soul • 🪕 Traditional / Cultural.
+4. **Audio Song Duration Control**:
+   - Choose between **15s, 30s, 45s, 60s, 90s, 120s, up to 180s (3 full minutes)**.
+   - The AI writes structured lyrics (*Verses, Chorus, Bridge, Outro*) tailored to fill the target time window.
+5. Click **"Generate AI Song & Vocals"**:
+   - Includes automatic retry if a model is temporarily rate-limited.
+   - **Transparent Fallback Badges**: The player clearly displays which engine produced the audio track (e.g. `🌟 DeepMind Lyria 3 Pro` or `🔊 Neural2 TTS + Rhythm Synth`) so you are always aware of the active provider.
+
+---
 
 ### Stage 3: Event Photos & Pure AI Motion Video Generation
-1. Switch to **Tab 3: Media Gallery**.
-2. **Uploading Real Event Media**:
-   - Drag and drop or browse photos (`.jpg`, `.png`, `.webp`) or video clips (`.mp4`, `.mov`).
-   - Assets are uploaded directly to your configured storage provider (Cloudflare R2, Google Cloud Storage, AWS S3, or Local).
-3. **Pure AI Cinematic Scene Mode**:
+Switch to **Tab 3: Media Gallery**:
+1. **Uploading Real Event Media**:
+   - Upload real event photos (`.jpg`, `.png`, `.webp`) or video clips (`.mp4`, `.mov`).
+   - Assets are securely stored in your chosen storage backend (Cloudflare R2, Google Cloud Storage, AWS S3, or Local).
+2. **Pure AI Cinematic Scene Mode**:
    - If no photos are uploaded (or if you click **"Clear All Media"**), the engine switches to **Pure AI Mode**.
-   - It generates realistic 5-second 16:9 motion video clips for every scene using **Google Gemini Omni 1.1 Flash** (`gemini-omni-1.1-flash-preview`) or Google Veo.
+   - It generates 16:9 photorealistic visual scenes for every moment without requiring any manual uploads.
 
-### Stage 4: Lyric-Synchronized Scene Storyboard & Timeline
-1. Switch to **Tab 4: Timeline & Storyboard**.
-2. Click **"Generate Storyboard"**:
-   - The engine automatically detects the exact audio duration of your generated song (e.g. 154s or 172s).
-   - It distributes storyboard scenes across the song timeline to prevent repetitive clips.
-   - Each scene is assigned its precise lyric phrase, start timestamp, end timestamp, and visual media clip.
-3. Review the interactive storyboard cards to verify scene sequencing.
+---
+
+### Stage 4: Lyric-Synchronized Storyboard & Granular Scene Editor (Level 2 Control)
+Switch to **Tab 4: Timeline & Storyboard**:
+1. Click **"🎵 Sync Storyboard with Song Lyrics"**:
+   - The engine analyzes the actual generated audio duration (e.g. 30s = 5 scenes of ~6s each; 180s = 30 scenes of ~6s each).
+   - Natural 5–6s scene cuts are created to match AI video clip lengths, ensuring video clips never need to freeze or loop.
+   - Gemini maps specific lyric lines and tags featured characters in each scene.
+2. **Granular Scene-by-Scene Controls**:
+   - **👥 Scene Cast Tagging**: View characters assigned to each scene. Click cast pills (e.g. `✓ Rahul` / `+ Priya`) to toggle characters into or out of any scene.
+   - **✏️ Interactive Visual Action / Prompt Editor**: Click **"✏️ Edit Prompt"** to edit the scene's visual action, camera angle, and environment. Use the **`+Name` Quick-Insert** buttons to instantly append that character's detailed physical traits to your prompt. Click **"Save Prompt"** to save changes immediately.
+   - **🎨 Regenerate AI Image Frame**: Click **"🎨 Regen Image"** to generate a fresh high-resolution AI image frame for that specific scene using the updated prompt.
+   - **✨ Convert to Gemini Omni Video / Regenerate Video**: Click **"✨ Convert to Gemini Omni Video"** to render a realistic 5-second 16:9 motion video clip using **Google Gemini Omni 1.1 Flash** (`gemini-omni-1.1-flash-preview`).
+   - **✨ Batch Generation**: Click **"Generate Gemini Omni Video Clips (All Scenes)"** in the top action bar to batch-render motion clips for the entire storyboard.
+   - **Source Media Reassignment**: If you have uploaded media in your gallery, use the **Source Visual Media** dropdown on any scene card to assign a specific uploaded photo or video clip instead of the AI frame.
+
+---
 
 ### Stage 5: Multi-Device Resolution Video Rendering & Download
-1. Switch to **Tab 5: Render & Video**.
-2. Choose your target **Display & Resolution Preset**:
-   - 🖥️ **Desktop Full HD (1080p)**: `1920x1080` (16:9 widescreen, 6000 kb/s) — Best for big screens, YouTube, and event presentations.
+Switch to **Tab 5: Render & Video**:
+1. Choose your target **Display & Resolution Preset**:
+   - 🖥️ **Desktop Full HD (1080p)**: `1920x1080` (16:9 widescreen, 6000 kb/s) — Big screens, YouTube, and event presentations.
    - 💻 **Desktop HD (720p)**: `1280x720` (16:9 standard HD, 3500 kb/s) — Balanced rendering speed for web streaming.
    - 📱 **Mobile Portrait (9:16)**: `1080x1920` (9:16 vertical, 4500 kb/s) — Optimized for TikTok, Instagram Reels, and YouTube Shorts.
-   - 📟 **Tablet Display (4:3)**: `1440x1080` (4:3 ratio, 4500 kb/s) — Tailored for iPads, POS terminals, and tablet kiosks.
-   - 🔲 **Social Square (1:1)**: `1080x1080` (1:1 square, 4000 kb/s) — Perfect for Instagram feed posts and LinkedIn carousels.
-3. Click **"Start Video Render"**:
-   - A background FFmpeg worker stitches the video segments, synchronizes the song audio, burns subtitles, and monitors progress in real time (0% to 100%).
-4. **Playback & Download**:
-   - Once rendering finishes, play the high-definition video directly in the browser player with resolution and duration badges.
+   - 📟 **Tablet Display (4:3)**: `1440x1080` (4:3 ratio, 4500 kb/s) — iPads, POS terminals, and tablet kiosks.
+   - 🔲 **Social Square (1:1)**: `1080x1080` (1:1 square, 4000 kb/s) — Instagram feed posts and LinkedIn carousels.
+2. Click **"Start Video Render"**:
+   - A background FFmpeg worker stitches the video segments, synchronizes the song audio, burns multilingual subtitles, and monitors progress in real time (0% to 100%).
+3. **Playback & Download**:
+   - Play the finished high-definition video directly in the browser player.
    - Click **"Download Video (MP4)"** to save the finished MP4 file locally.
 
 ---

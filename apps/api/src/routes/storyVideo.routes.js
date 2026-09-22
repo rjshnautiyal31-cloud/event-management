@@ -13,11 +13,111 @@ import { analyzeStoryWithGemini, generateLyricsWithGemini, generateSceneImageWit
 import { getMusicProvider } from "../services/music/index.js";
 import { getVideoProvider } from "../services/video/index.js";
 import { getStorageProvider, buildStoryStorageKey } from "../services/storage/index.js";
-import { processVideoRenderJob, VIDEO_PRESETS } from "../workers/index.js";
+import { processVideoRenderJob, VIDEO_PRESETS, formatSrtTime, formatVttTime } from "../workers/index.js";
 import { SUPPORTED_LANGUAGES, getLanguageConfig } from "../config/languages.js";
 
 const upload = multer({ storage: multer.memoryStorage() });
 export const storyVideoRouter = Router();
+
+// Public Subtitle Streaming Routes (Used by HTML5 <track> & media players)
+storyVideoRouter.get("/projects/:id/subtitles.vtt", async (req, res, next) => {
+  try {
+    const project = await Project.findById(req.params.id)
+      .populate("activeStoryboardId activeSongId activeVideoId");
+
+    if (!project) {
+      return res.status(404).send("Project not found");
+    }
+
+    const video = project.activeVideoId;
+    const storyboard = project.activeStoryboardId;
+    const song = project.activeSongId;
+    const totalDuration = video?.durationSeconds || song?.durationSeconds || 30;
+
+    let scenes = storyboard?.scenes || [];
+    let curTime = 0;
+    const vttBlocks = ["WEBVTT\n"];
+
+    if (scenes.length > 0) {
+      const hasExplicit = scenes.every(s => typeof s.startTimeSeconds === "number" && typeof s.endTimeSeconds === "number" && s.endTimeSeconds > s.startTimeSeconds);
+      let rawDurations = [];
+      if (hasExplicit) {
+        rawDurations = scenes.map(s => Math.max(1, s.endTimeSeconds - s.startTimeSeconds));
+        const totalRaw = rawDurations.reduce((a, b) => a + b, 0);
+        const ratio = totalDuration / totalRaw;
+        rawDurations = rawDurations.map(d => Number((d * ratio).toFixed(2)));
+      } else {
+        const perScene = Number((totalDuration / scenes.length).toFixed(2));
+        rawDurations = Array.from({ length: scenes.length }, () => perScene);
+      }
+
+      scenes.forEach((scene, i) => {
+        const dur = rawDurations[i] || 5;
+        const start = curTime;
+        const end = curTime + dur;
+        curTime = end;
+        const text = scene.captionText || scene.lyricSnippet || `Scene ${scene.sceneNumber || i + 1}`;
+        vttBlocks.push(`${i + 1}\n${formatVttTime(start)} --> ${formatVttTime(end)}\n${text}\n`);
+      });
+    }
+
+    res.setHeader("Content-Type", "text/vtt; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(vttBlocks.join("\n"));
+  } catch (err) {
+    next(err);
+  }
+});
+
+storyVideoRouter.get("/projects/:id/subtitles.srt", async (req, res, next) => {
+  try {
+    const project = await Project.findById(req.params.id)
+      .populate("activeStoryboardId activeSongId activeVideoId");
+
+    if (!project) {
+      return res.status(404).send("Project not found");
+    }
+
+    const video = project.activeVideoId;
+    const storyboard = project.activeStoryboardId;
+    const song = project.activeSongId;
+    const totalDuration = video?.durationSeconds || song?.durationSeconds || 30;
+
+    let scenes = storyboard?.scenes || [];
+    let curTime = 0;
+    const srtBlocks = [];
+
+    if (scenes.length > 0) {
+      const hasExplicit = scenes.every(s => typeof s.startTimeSeconds === "number" && typeof s.endTimeSeconds === "number" && s.endTimeSeconds > s.startTimeSeconds);
+      let rawDurations = [];
+      if (hasExplicit) {
+        rawDurations = scenes.map(s => Math.max(1, s.endTimeSeconds - s.startTimeSeconds));
+        const totalRaw = rawDurations.reduce((a, b) => a + b, 0);
+        const ratio = totalDuration / totalRaw;
+        rawDurations = rawDurations.map(d => Number((d * ratio).toFixed(2)));
+      } else {
+        const perScene = Number((totalDuration / scenes.length).toFixed(2));
+        rawDurations = Array.from({ length: scenes.length }, () => perScene);
+      }
+
+      scenes.forEach((scene, i) => {
+        const dur = rawDurations[i] || 5;
+        const start = curTime;
+        const end = curTime + dur;
+        curTime = end;
+        const text = scene.captionText || scene.lyricSnippet || `Scene ${scene.sceneNumber || i + 1}`;
+        srtBlocks.push(`${i + 1}\n${formatSrtTime(start)} --> ${formatSrtTime(end)}\n${text}\n`);
+      });
+    }
+
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Content-Disposition", `attachment; filename="subtitles_${project._id}.srt"`);
+    res.send(srtBlocks.join("\n"));
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Enforce ACL: Require authentication and require admin role (super_admin, admin, or event_admin)
 storyVideoRouter.use(requireAuth);

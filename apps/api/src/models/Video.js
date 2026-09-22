@@ -10,6 +10,7 @@ const videoSchema = new mongoose.Schema(
     preset: { type: String, default: "1080p" },
     language: { type: String, default: "en" },
     subtitlesUrl: { type: String },
+    vttUrl: { type: String },
     fileSizeBytes: { type: Number }
   },
   { timestamps: true }

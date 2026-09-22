@@ -18,7 +18,7 @@ const activeFfmpegPath = process.env.FFMPEG_PATH || (fsSync.existsSync("/usr/bin
 ffmpeg.setFfmpegPath(activeFfmpegPath);
 
 // Helper to convert seconds into SRT timecode format (00:00:05,000)
-function formatSrtTime(secondsTotal) {
+export function formatSrtTime(secondsTotal) {
   const hrs = Math.floor(secondsTotal / 3600);
   const mins = Math.floor((secondsTotal % 3600) / 60);
   const secs = Math.floor(secondsTotal % 60);
@@ -26,6 +26,17 @@ function formatSrtTime(secondsTotal) {
 
   const pad = (n, z = 2) => String(n).padStart(z, "0");
   return `${pad(hrs)}:${pad(mins)}:${pad(secs)},${pad(millis, 3)}`;
+}
+
+// Helper to convert seconds into WebVTT timecode format (00:00:05.000)
+export function formatVttTime(secondsTotal) {
+  const hrs = Math.floor(secondsTotal / 3600);
+  const mins = Math.floor((secondsTotal % 3600) / 60);
+  const secs = Math.floor(secondsTotal % 60);
+  const millis = Math.floor((secondsTotal % 1) * 1000);
+
+  const pad = (n, z = 2) => String(n).padStart(z, "0");
+  return `${pad(hrs)}:${pad(mins)}:${pad(secs)}.${pad(millis, 3)}`;
 }
 
 // Pure JS 24-bit solid color BMP image generator
@@ -422,17 +433,20 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     });
     const publicUrl = await uploadAssetBuffer(finalVideoBuffer, storageKey, "video/mp4");
 
-    // Generate and upload .srt subtitles synchronized with scenes
+    // Generate and upload .srt and .vtt subtitles synchronized with scenes
     let subtitlesUrl = null;
+    let vttUrl = null;
     try {
       let currentSrtTime = 0;
       const srtBlocks = [];
+      const vttBlocks = ["WEBVTT\n"];
       scenesToRender.forEach((scene, i) => {
         const startTime = currentSrtTime;
         const endTime = currentSrtTime + scene.duration;
         currentSrtTime = endTime;
         const text = scene.captionText || `Scene ${scene.sceneNumber}`;
         srtBlocks.push(`${i + 1}\n${formatSrtTime(startTime)} --> ${formatSrtTime(endTime)}\n${text}\n`);
+        vttBlocks.push(`${i + 1}\n${formatVttTime(startTime)} --> ${formatVttTime(endTime)}\n${text}\n`);
       });
 
       const srtContent = srtBlocks.join("\n");
@@ -443,8 +457,19 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
         category: "renders",
         filename: srtFilename
       });
-      subtitlesUrl = await uploadAssetBuffer(Buffer.from(srtContent, "utf-8"), srtStorageKey, "text/plain");
-      console.log(`[Video Worker] Uploaded synchronized SRT subtitles to ${subtitlesUrl}`);
+      subtitlesUrl = await uploadAssetBuffer(Buffer.from(srtContent, "utf-8"), srtStorageKey, "text/plain; charset=utf-8");
+
+      const vttContent = vttBlocks.join("\n");
+      const vttFilename = `subtitles_${timestamp}.vtt`;
+      const vttStorageKey = buildStoryStorageKey({
+        projectId,
+        title: projectDoc?.title || "",
+        category: "renders",
+        filename: vttFilename
+      });
+      vttUrl = await uploadAssetBuffer(Buffer.from(vttContent, "utf-8"), vttStorageKey, "text/vtt; charset=utf-8");
+
+      console.log(`[Video Worker] Uploaded synchronized subtitles: SRT=${subtitlesUrl}, VTT=${vttUrl}`);
     } catch (srtErr) {
       console.warn("[Video Worker] Subtitle upload failed (non-critical):", srtErr.message);
     }
@@ -465,6 +490,7 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       preset: presetKey,
       language: effectiveLanguage,
       subtitlesUrl: subtitlesUrl || undefined,
+      vttUrl: vttUrl || undefined,
       fileSizeBytes: finalVideoBuffer.length
     });
 

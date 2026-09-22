@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { api } from "../api.js";
+import { api, API_BASE } from "../api.js";
 import { Navbar } from "../components/Navbar.jsx";
 import { EventSwitcherModal } from "../components/EventSwitcherModal.jsx";
 
@@ -1706,17 +1706,26 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                           <span className="bg-purple-100 text-purple-800 font-black text-xs px-2.5 py-1 rounded-full border border-purple-300">
                             🌐 {getLanguageShort(activeProject.activeVideoId.language || activeProject.language)}
                           </span>
-                          {activeProject.activeVideoId.subtitlesUrl && (
-                            <a
-                              href={activeProject.activeVideoId.subtitlesUrl}
-                              download={`subtitles_${activeProject.activeVideoId.language || "track"}.srt`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="bg-purple-900 hover:bg-purple-800 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow inline-flex items-center gap-1.5 transition"
-                            >
-                              <span>💬</span> Subtitles (.srt)
-                            </a>
-                          )}
+                          <a
+                            href={activeProject.activeVideoId.subtitlesUrl || `${API_BASE}/api/story-video/projects/${activeProject._id}/subtitles.srt`}
+                            download={`subtitles_${activeProject.activeVideoId.language || activeProject.language || "track"}.srt`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="bg-purple-900 hover:bg-purple-800 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow inline-flex items-center gap-1.5 transition"
+                            title="Download SRT subtitle file"
+                          >
+                            <span>💬</span> Subtitles (.srt)
+                          </a>
+                          <a
+                            href={activeProject.activeVideoId.vttUrl || `${API_BASE}/api/story-video/projects/${activeProject._id}/subtitles.vtt`}
+                            download={`subtitles_${activeProject.activeVideoId.language || activeProject.language || "track"}.vtt`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="bg-indigo-900 hover:bg-indigo-800 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow inline-flex items-center gap-1.5 transition"
+                            title="Download WebVTT subtitle file"
+                          >
+                            <span>📝</span> Subtitles (.vtt)
+                          </a>
                           <a
                             href={activeProject.activeVideoId.videoUrl}
                             download={`event_video_${activeProject.activeVideoId.preset || "final"}.mp4`}
@@ -1737,15 +1746,13 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                           className="max-h-[500px] w-auto max-w-full rounded-xl shadow-xl border border-slate-300"
                         >
                           <source src={activeProject.activeVideoId.videoUrl} type="video/mp4" />
-                          {activeProject.activeVideoId.subtitlesUrl && (
-                            <track
-                              kind="subtitles"
-                              src={activeProject.activeVideoId.subtitlesUrl}
-                              srcLang={activeProject.activeVideoId.language || "en"}
-                              label={`${getLanguageShort(activeProject.activeVideoId.language)} Subtitles`}
-                              default
-                            />
-                          )}
+                          <track
+                            kind="subtitles"
+                            src={activeProject.activeVideoId.vttUrl || `${API_BASE}/api/story-video/projects/${activeProject._id}/subtitles.vtt`}
+                            srcLang={activeProject.activeVideoId.language || activeProject.language || "en"}
+                            label={`${getLanguageShort(activeProject.activeVideoId.language || activeProject.language)} Subtitles`}
+                            default
+                          />
                           Your browser does not support the video tag.
                         </video>
                       </div>

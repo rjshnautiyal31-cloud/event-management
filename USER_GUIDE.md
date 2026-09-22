@@ -232,10 +232,13 @@ Switch to **Tab 5: Render & Video**:
    - 📟 **Tablet Display (4:3)**: `1440x1080` (4:3 ratio, 4500 kb/s) — iPads, POS terminals, and tablet kiosks.
    - 🔲 **Social Square (1:1)**: `1080x1080` (1:1 square, 4000 kb/s) — Instagram feed posts and LinkedIn carousels.
 2. Click **"Start Video Render"**:
-   - A background FFmpeg worker stitches the video segments, synchronizes the song audio, burns multilingual subtitles, and monitors progress in real time (0% to 100%).
-3. **Playback & Download**:
-   - Play the finished high-definition video directly in the browser player.
-   - Click **"Download Video (MP4)"** to save the finished MP4 file locally.
+   - A background FFmpeg worker stitches the video segments, synchronizes the song audio, generates synchronized subtitles in both **SubRip (.srt)** and **WebVTT (.vtt)** formats, and monitors progress in real time (0% to 100%).
+3. **Playback, Subtitles & Download**:
+   - **Embedded Player Closed Captions (CC)**: Subtitles are natively embedded inside the HTML5 video player via compliant WebVTT (`.vtt`). Users can toggle subtitles on/off and configure captions directly using the player's embedded CC menu.
+   - **Download Options**:
+     - Click **`⬇️ Download Video`** to download the finished MP4 video file.
+     - Click **`💬 Subtitles (.srt)`** to download the standard SRT subtitle file for video players like VLC, QuickTime, Premiere, and CapCut.
+     - Click **`📝 Subtitles (.vtt)`** to download the WebVTT subtitle file for web platforms and YouTube.
 
 ---
 

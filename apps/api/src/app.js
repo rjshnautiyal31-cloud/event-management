@@ -12,8 +12,16 @@ import { swaggerSpec } from "./config/swagger.js";
 export const app = express();
 
 app.use(cors());
-app.use(express.json({ limit: "2mb" }));
-app.use("/uploads", express.static("uploads"));
+app.use("/uploads", cors(), express.static("uploads", {
+  setHeaders: (res, filePath) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (filePath.endsWith(".vtt")) {
+      res.setHeader("Content-Type", "text/vtt; charset=utf-8");
+    } else if (filePath.endsWith(".srt")) {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    }
+  }
+}));
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });

@@ -31,13 +31,16 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
   - **🎨 Individual Scene AI Frame Regeneration**: Re-paint AI visual frames for specific scenes without regenerating the whole project.
   - **✨ Per-Scene Gemini Omni Video**: Generate or re-generate 5s motion video clips for individual scenes or batch-render all scenes at once.
   - **Source Media Reassignment**: Assign uploaded event photos/videos or AI frames on a per-scene basis.
-- **Phase 5: Multi-Device Resolution Video Rendering**:
-  - Stitches scene clips, vocal audio track, and burned subtitles into high-definition MP4 videos with 5 customizable display presets:
+- **Phase 5: Multi-Device Resolution Video Rendering & Synchronized Subtitles**:
+  - Stitches scene clips and vocal audio track into high-definition MP4 videos with 5 customizable display presets:
     - 🖥️ **Desktop Full HD (1080p)**: `1920x1080`, 16:9, 6000k bitrate.
     - 💻 **Desktop HD (720p)**: `1280x720`, 16:9, 3500k bitrate.
     - 📱 **Mobile Portrait (9:16)**: `1080x1920`, 9:16 for Reels, TikTok & Shorts.
     - 📟 **Tablet Display (4:3)**: `1440x1080`, 4:3 for iPad and tablets.
     - 🔲 **Social Square (1:1)**: `1080x1080`, 1:1 for Instagram and feed posts.
+  - **💬 Dual-Format Subtitles & Embedded Player Closed Captions (CC)**:
+    - **Native HTML5 WebVTT Track (`.vtt`)**: Seamless browser `<track>` integration with full W3C WebVTT standard compliance, controlled directly from the video player's embedded CC menu.
+    - **Dual Subtitle Downloads**: One-click downloads for both `.srt` (for VLC, Premiere, DaVinci, CapCut) and `.vtt` (for web video & YouTube).
 - **Render Free Tier Optimized & Pluggable Storage**:
   - Automatically limits FFmpeg to single-threaded low-memory streaming (`-threads 1`, `-preset veryfast`, `-bufsize 512k`) on Render Free Tier to stay safely within 512 MB RAM limits.
   - Universal multi-cloud storage adapter supporting **Local disk**, **AWS S3**, **Cloudflare R2** (zero egress fees), and **Google Cloud Storage (GCS)**.

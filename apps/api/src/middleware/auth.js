@@ -5,7 +5,7 @@ import { Event } from "../models/Event.js";
 
 export function requireAuth(req, res, next) {
   const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.substring(7) : null;
+  const token = header.startsWith("Bearer ") ? header.substring(7) : (req.query?.token || null);
 
   if (!token) {
     return res.status(401).json({ message: "Missing auth token" });

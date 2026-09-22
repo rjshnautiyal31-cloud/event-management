@@ -20,7 +20,8 @@ function guessMimeType(filename) {
     case ".png": return "image/png";
     case ".gif": return "image/gif";
     case ".webp": return "image/webp";
-    case ".srt": return "text/plain";
+    case ".vtt": return "text/vtt; charset=utf-8";
+    case ".srt": return "text/plain; charset=utf-8";
     case ".json": return "application/json";
     default: return "application/octet-stream";
   }

@@ -13,6 +13,7 @@ const storyboardSchema = new mongoose.Schema(
         captionText: { type: String, default: "" },
         lyricSnippet: { type: String, default: "" },
         visualPrompt: { type: String, default: "" },
+        characters: [{ type: String }],
         transitionEffect: { type: String, default: "fade" }
       }
     ]

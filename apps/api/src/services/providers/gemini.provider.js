@@ -141,7 +141,15 @@ Output only the formatted song lyrics with section headers like [Verse 1], [Chor
 }
 
 // 3. Generate Synchronized Chronological Storyboard from Song Lyrics & Duration
-export async function generateStoryboardFromLyrics({ storyContext = "", lyrics = "", totalDurationSeconds = 30, targetSceneDuration = 6, language = "en" }) {
+export async function generateStoryboardFromLyrics({
+  storyContext = "",
+  lyrics = "",
+  totalDurationSeconds = 30,
+  targetSceneDuration = 6,
+  language = "en",
+  characters = [],
+  directorGuidelines = ""
+}) {
   const clientInfo = getGeminiClient();
   const langConfig = getLanguageConfig(language);
 
@@ -153,16 +161,35 @@ export async function generateStoryboardFromLyrics({ storyContext = "", lyrics =
     endTimeSeconds: i === fallbackSceneCount - 1 ? totalDurationSeconds : (i + 1) * fallbackSceneDuration,
     durationSeconds: i === fallbackSceneCount - 1 ? totalDurationSeconds - (i * fallbackSceneDuration) : fallbackSceneDuration,
     lyricSnippet: `Part ${i + 1}`,
-    visualIdea: `Cinematic wide angle shot illustrating scene ${i + 1}, photorealistic 16:9, dramatic lighting`
+    visualIdea: `Cinematic wide angle shot illustrating scene ${i + 1}, photorealistic 16:9, dramatic lighting`,
+    characters: []
   }));
 
   if (!clientInfo || !lyrics) return fallbackScenes;
 
   try {
+    let promptCharactersSection = "";
+    if (Array.isArray(characters) && characters.length > 0) {
+      const charList = characters
+        .filter(c => c && c.name)
+        .map(c => `- ${c.name}${c.role ? ` (${c.role})` : ""}: ${c.visualDescription || "Featured subject"}`)
+        .join("\n");
+      if (charList) {
+        promptCharactersSection = `\nCAST / KEY CHARACTERS TO FEATURE:\n${charList}\nWhen any of these characters are present in a scene, weave their specific visual details (attire, physical traits, hairstyle, accessories) into the visualIdea prompt so that image and video generation models render them consistently across scenes!\n`;
+      }
+    }
+
+    let promptGuidelinesSection = "";
+    if (directorGuidelines && directorGuidelines.trim()) {
+      promptGuidelinesSection = `\nDIRECTOR GUIDELINES & MUST-HAVE SCENES:\n"${directorGuidelines.trim()}"\nIncorporate these specific requested moments, actions, and settings into the visual progression across the scenes!\n`;
+    }
+
     const prompt = `You are an expert music video director.
 Total Audio Song Duration: ${totalDurationSeconds} seconds.
 Language: ${langConfig.name} (${langConfig.nativeName}).
 Story context: "${storyContext.slice(0, 500)}"
+${promptCharactersSection}
+${promptGuidelinesSection}
 Song lyrics (in ${langConfig.name}):
 """
 ${lyrics}
@@ -172,9 +199,10 @@ Create a chronological sequence of distinct visual scenes synchronized with the 
 1. Divide the entire song timeline (${totalDurationSeconds} seconds) into sequential, non-overlapping scenes.
 2. Each scene should be between 5 and 7 seconds long (matching standard AI video clips of ~5-6s duration, so video clips never need to repeat!).
 3. Assign the exact matching lyric lines (lyricSnippet) in ${langConfig.name} sung during that time window to each scene.
-4. For every scene, write a rich, unique, non-repetitive visual prompt (visualIdea in English) for AI video/image generation (16:9 widescreen, photorealistic cinematic camera movement, specific lighting and environment reflecting the emotion of those lyrics).
-5. Absolutely avoid repeating actions or visual settings across scenes. Each scene must advance the visual story.
-6. The first scene must start at startTimeSeconds = 0, and the last scene must end at endTimeSeconds = ${totalDurationSeconds}.
+4. For every scene, write a rich, unique, non-repetitive visual prompt (visualIdea in English) for AI video/image generation (16:9 widescreen, photorealistic cinematic camera movement, specific lighting, environment reflecting the emotion of those lyrics, and explicit visual appearance of any featured characters).
+5. If characters from the cast appear, specify their names in the "characters" array for that scene.
+6. Absolutely avoid repeating actions or visual settings across scenes. Each scene must advance the visual story.
+7. The first scene must start at startTimeSeconds = 0, and the last scene must end at endTimeSeconds = ${totalDurationSeconds}.
 
 Return a JSON array of scenes.`;
 
@@ -193,7 +221,8 @@ Return a JSON array of scenes.`;
               endTimeSeconds: { type: Type.NUMBER },
               durationSeconds: { type: Type.NUMBER },
               lyricSnippet: { type: Type.STRING },
-              visualIdea: { type: Type.STRING }
+              visualIdea: { type: Type.STRING },
+              characters: { type: Type.ARRAY, items: { type: Type.STRING } }
             },
             required: ["sceneNumber", "startTimeSeconds", "endTimeSeconds", "durationSeconds", "lyricSnippet", "visualIdea"]
           }

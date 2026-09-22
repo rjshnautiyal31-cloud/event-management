@@ -56,6 +56,28 @@ export function ProjectStudioPage({ auth, token: propToken }) {
   const [generatingVeoSceneIdx, setGeneratingVeoSceneIdx] = useState(null);
   const [generatingAllVeo, setGeneratingAllVeo] = useState(false);
 
+  // Characters & Director Guidelines State (Creation modal)
+  const [newCharacters, setNewCharacters] = useState([]);
+  const [newCharName, setNewCharName] = useState("");
+  const [newCharRole, setNewCharRole] = useState("");
+  const [newCharDesc, setNewCharDesc] = useState("");
+  const [newDirectorGuidelines, setNewDirectorGuidelines] = useState("");
+  const [showModalAddChar, setShowModalAddChar] = useState(false);
+
+  // Tab 1 Active Project Characters & Guidelines
+  const [projectCharacters, setProjectCharacters] = useState([]);
+  const [tabCharName, setTabCharName] = useState("");
+  const [tabCharRole, setTabCharRole] = useState("");
+  const [tabCharDesc, setTabCharDesc] = useState("");
+  const [projectDirectorGuidelines, setProjectDirectorGuidelines] = useState("");
+  const [savingCastGuidelines, setSavingCastGuidelines] = useState(false);
+
+  // Tab 4 Storyboard Scene Edit State
+  const [editingSceneIdx, setEditingSceneIdx] = useState(null);
+  const [sceneDraftPrompts, setSceneDraftPrompts] = useState({});
+  const [generatingImageSceneIdx, setGeneratingImageSceneIdx] = useState(null);
+  const [updatingSceneIdx, setUpdatingSceneIdx] = useState(null);
+
   // Media State
   const [mediaItems, setMediaItems] = useState([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
@@ -134,6 +156,15 @@ export function ProjectStudioPage({ auth, token: propToken }) {
       }
       if (activeProject.customVoiceId) {
         setCustomVoiceId(activeProject.customVoiceId);
+      }
+      setProjectCharacters(Array.isArray(activeProject.characters) ? activeProject.characters : []);
+      setProjectDirectorGuidelines(activeProject.directorGuidelines || "");
+      if (activeProject.activeStoryboardId?.scenes) {
+        const drafts = {};
+        activeProject.activeStoryboardId.scenes.forEach((s, idx) => {
+          drafts[idx] = s.visualPrompt || s.captionText || "";
+        });
+        setSceneDraftPrompts(drafts);
       }
     }
   }, [activeProject]);
@@ -219,13 +250,17 @@ export function ProjectStudioPage({ auth, token: propToken }) {
           eventId: selectedEventId,
           title: newTitle,
           storyText: newStory,
-          language: newLanguage
+          language: newLanguage,
+          characters: newCharacters,
+          directorGuidelines: newDirectorGuidelines
         }
       });
-      setSuccess("Story Project created for Event successfully!");
+      setSuccess("Story Project created with Cast & Directives successfully!");
       setNewTitle("");
       setNewTitleStory("");
       setNewLanguage("en");
+      setNewCharacters([]);
+      setNewDirectorGuidelines("");
       setShowCreateModal(false);
       await loadProjects(selectedEventId);
       setActiveProject(project);
@@ -233,6 +268,159 @@ export function ProjectStudioPage({ auth, token: propToken }) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleAddTabCharacter(e) {
+    e?.preventDefault();
+    if (!tabCharName.trim()) return;
+    const newChar = {
+      name: tabCharName.trim(),
+      role: tabCharRole.trim(),
+      visualDescription: tabCharDesc.trim()
+    };
+    const updated = [...projectCharacters, newChar];
+    setProjectCharacters(updated);
+    setTabCharName("");
+    setTabCharRole("");
+    setTabCharDesc("");
+
+    if (activeProject?._id) {
+      try {
+        setSavingCastGuidelines(true);
+        await api(`/api/story-video/projects/${activeProject._id}`, {
+          token,
+          method: "PATCH",
+          body: { characters: updated }
+        });
+        setActiveProject(prev => prev ? { ...prev, characters: updated } : prev);
+        setSuccess(`Added "${newChar.name}" to the project cast!`);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setSavingCastGuidelines(false);
+      }
+    }
+  }
+
+  async function handleRemoveTabCharacter(idx) {
+    const updated = projectCharacters.filter((_, i) => i !== idx);
+    setProjectCharacters(updated);
+
+    if (activeProject?._id) {
+      try {
+        setSavingCastGuidelines(true);
+        await api(`/api/story-video/projects/${activeProject._id}`, {
+          token,
+          method: "PATCH",
+          body: { characters: updated }
+        });
+        setActiveProject(prev => prev ? { ...prev, characters: updated } : prev);
+        setSuccess("Character removed from project cast.");
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setSavingCastGuidelines(false);
+      }
+    }
+  }
+
+  async function handleSaveGuidelines() {
+    if (!activeProject?._id) return;
+    try {
+      setSavingCastGuidelines(true);
+      await api(`/api/story-video/projects/${activeProject._id}`, {
+        token,
+        method: "PATCH",
+        body: { directorGuidelines: projectDirectorGuidelines }
+      });
+      setActiveProject(prev => prev ? { ...prev, directorGuidelines: projectDirectorGuidelines } : prev);
+      setSuccess("Director guidelines saved successfully!");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingCastGuidelines(false);
+    }
+  }
+
+  async function handleSaveScenePrompt(sceneIdx) {
+    if (!activeProject?._id) return;
+    setUpdatingSceneIdx(sceneIdx);
+    setError("");
+    const newPrompt = sceneDraftPrompts[sceneIdx] ?? "";
+    try {
+      await api(`/api/story-video/projects/${activeProject._id}/scenes/${sceneIdx}`, {
+        token,
+        method: "PATCH",
+        body: { visualPrompt: newPrompt }
+      });
+      setSuccess(`Scene ${sceneIdx + 1} visual prompt updated!`);
+      setEditingSceneIdx(null);
+      const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
+      setActiveProject(updated);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUpdatingSceneIdx(null);
+    }
+  }
+
+  async function handleToggleSceneCharacter(sceneIdx, charName) {
+    if (!activeProject?._id || !activeProject.activeStoryboardId?.scenes) return;
+    const scene = activeProject.activeStoryboardId.scenes[sceneIdx];
+    if (!scene) return;
+    const currentChars = Array.isArray(scene.characters) ? [...scene.characters] : [];
+    const hasChar = currentChars.includes(charName);
+    const updatedChars = hasChar ? currentChars.filter(c => c !== charName) : [...currentChars, charName];
+
+    try {
+      await api(`/api/story-video/projects/${activeProject._id}/scenes/${sceneIdx}`, {
+        token,
+        method: "PATCH",
+        body: { characters: updatedChars }
+      });
+      const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
+      setActiveProject(updated);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleAssignSceneMedia(sceneIdx, mediaId) {
+    if (!activeProject?._id) return;
+    try {
+      await api(`/api/story-video/projects/${activeProject._id}/scenes/${sceneIdx}`, {
+        token,
+        method: "PATCH",
+        body: { mediaId: mediaId || null }
+      });
+      setSuccess(`Scene ${sceneIdx + 1} media updated!`);
+      const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
+      setActiveProject(updated);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function handleGenerateSceneImage(sceneIdx, prompt) {
+    if (!activeProject?._id) return;
+    setGeneratingImageSceneIdx(sceneIdx);
+    setError("");
+    setSuccess(`🎨 Generating AI image frame for Scene ${sceneIdx + 1}...`);
+    try {
+      await api(`/api/story-video/projects/${activeProject._id}/scenes/${sceneIdx}/image`, {
+        token,
+        method: "POST",
+        body: { prompt }
+      });
+      setSuccess(`🎉 New AI image frame generated for Scene ${sceneIdx + 1}!`);
+      const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
+      setActiveProject(updated);
+      await loadMediaItems(activeProject._id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGeneratingImageSceneIdx(null);
     }
   }
 
@@ -669,6 +857,139 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                       </div>
                     </div>
                   )}
+
+                  {/* Level 1 Control: Cast & Characters (Visual Consistency Anchor) */}
+                  <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-[#0A2D59] text-base flex items-center gap-1.5">
+                            <span>👥</span> Cast & Characters (Visual Consistency)
+                          </h4>
+                          <span className="text-xs font-bold bg-indigo-100 text-indigo-800 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                            {projectCharacters.length} {projectCharacters.length === 1 ? "Character" : "Characters"}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Anchor key people with specific physical appearance and attire. Gemini will inject these descriptions into every scene prompt featuring them, ensuring face and outfit consistency throughout your video.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Characters List */}
+                    {projectCharacters.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {projectCharacters.map((c, idx) => (
+                          <div key={idx} className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col justify-between space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-full bg-[#0A2D59] text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                                  {c.name ? c.name.charAt(0).toUpperCase() : "👤"}
+                                </div>
+                                <div>
+                                  <div className="text-sm font-bold text-slate-900 leading-tight">{c.name}</div>
+                                  {c.role && <div className="text-[11px] font-semibold text-indigo-600">{c.role}</div>}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveTabCharacter(idx)}
+                                className="text-slate-400 hover:text-red-600 text-xs p-1 rounded hover:bg-slate-200 transition"
+                                title="Remove character"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                            {c.visualDescription && (
+                              <p className="text-xs text-slate-600 bg-white p-2 rounded-lg border border-slate-200 italic">
+                                "{c.visualDescription}"
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-4 text-center text-xs text-slate-500">
+                        No characters added yet. Add key people below (e.g. bride, groom, speakers, VIPs, birthday child) so AI keeps their appearance consistent.
+                      </div>
+                    )}
+
+                    {/* Add Character Form */}
+                    <form onSubmit={handleAddTabCharacter} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                      <span className="text-xs font-bold text-slate-700 block">+ Add Character to Cast:</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-600 block mb-1">Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Priya"
+                            value={tabCharName}
+                            onChange={(e) => setTabCharName(e.target.value)}
+                            className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white focus:ring-1 focus:ring-[#0A2D59]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-600 block mb-1">Role in Event</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Bride / Keynote Speaker"
+                            value={tabCharRole}
+                            onChange={(e) => setTabCharRole(e.target.value)}
+                            className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white focus:ring-1 focus:ring-[#0A2D59]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-600 block mb-1">Visual Appearance & Attire</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 28yo woman in red embroidered lehenga, gold jewelry"
+                            value={tabCharDesc}
+                            onChange={(e) => setTabCharDesc(e.target.value)}
+                            className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-xs bg-white focus:ring-1 focus:ring-[#0A2D59]"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="submit"
+                          disabled={savingCastGuidelines || !tabCharName.trim()}
+                          className="bg-[#0A2D59] hover:bg-slate-800 text-white font-bold px-4 py-1.5 rounded-lg text-xs shadow transition disabled:opacity-50"
+                        >
+                          {savingCastGuidelines ? "Saving..." : "+ Add Character to Cast"}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Level 1 Control: Director Guidelines & Must-Have Scenes */}
+                  <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-[#0A2D59] text-base flex items-center gap-1.5">
+                          <span>🎬</span> Director Guidelines & Must-Have Scenes
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Specify required scenes, key milestones, or specific camera actions you want Gemini to prioritize when generating the synchronized storyboard.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSaveGuidelines}
+                        disabled={savingCastGuidelines}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-1.5 rounded-lg text-xs shadow transition disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {savingCastGuidelines ? "Saving..." : "💾 Save Guidelines"}
+                      </button>
+                    </div>
+
+                    <textarea
+                      rows={3}
+                      value={projectDirectorGuidelines}
+                      onChange={(e) => setProjectDirectorGuidelines(e.target.value)}
+                      placeholder="e.g. 1. Grand welcome and arrival. 2. Stage garland exchange. 3. Family group toast with champagne. 4. Lantern lighting at dusk."
+                      className="w-full border border-slate-300 rounded-xl p-3 text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#0A2D59] transition"
+                    />
+                  </div>
                 </div>
               )}
 
@@ -1011,7 +1332,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                           return (
                             <div key={idx} className="bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between">
                               {media ? (
-                                <div className="h-44 bg-slate-200 overflow-hidden relative">
+                                <div className="h-44 bg-slate-200 overflow-hidden relative group">
                                   {isVideoMedia ? (
                                     <video src={media.fileUrl} className="w-full h-full object-cover" muted loop autoPlay controls />
                                   ) : (
@@ -1030,9 +1351,11 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                                   Scene {scene.sceneNumber} Frame
                                 </div>
                               )}
+
                               <div className="p-3.5 space-y-2.5">
+                                {/* Song Lyrics */}
                                 {scene.lyricSnippet && (
-                                  <div className="bg-indigo-50/80 border border-indigo-200/70 p-2.5 rounded-xl">
+                                  <div className="bg-indigo-50/80 border border-indigo-200/70 p-2 rounded-xl">
                                     <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider block flex items-center gap-1">
                                       <span>🎵</span> Song Lyrics
                                     </span>
@@ -1040,42 +1363,169 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                                   </div>
                                 )}
 
+                                {/* Characters in Scene */}
+                                {projectCharacters.length > 0 && (
+                                  <div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                                      👥 Cast in Scene:
+                                    </span>
+                                    <div className="flex flex-wrap gap-1">
+                                      {projectCharacters.map((c, cIdx) => {
+                                        const isTagged = scene.characters?.includes(c.name);
+                                        return (
+                                          <button
+                                            key={cIdx}
+                                            type="button"
+                                            onClick={() => handleToggleSceneCharacter(idx, c.name)}
+                                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition flex items-center gap-1 border ${
+                                              isTagged
+                                                ? "bg-emerald-700 text-white border-emerald-800 shadow-sm"
+                                                : "bg-white text-slate-600 border-slate-300 hover:bg-slate-100"
+                                            }`}
+                                            title={`Toggle ${c.name} in this scene`}
+                                          >
+                                            <span>{isTagged ? "✓" : "+"}</span> {c.name}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Visual Prompt / Action (Editable) */}
                                 <div>
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">🎬 Visual Action</span>
-                                  <p className="text-xs text-slate-700 line-clamp-2 mt-0.5">{scene.visualPrompt || scene.captionText}</p>
+                                  <div className="flex items-center justify-between mb-0.5">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">🎬 Visual Action / Prompt</span>
+                                    {editingSceneIdx !== idx && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingSceneIdx(idx);
+                                          if (sceneDraftPrompts[idx] === undefined) {
+                                            setSceneDraftPrompts(prev => ({ ...prev, [idx]: scene.visualPrompt || scene.captionText || "" }));
+                                          }
+                                        }}
+                                        className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800"
+                                      >
+                                        ✏️ Edit Prompt
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {editingSceneIdx === idx ? (
+                                    <div className="space-y-1.5 pt-0.5">
+                                      <textarea
+                                        rows={3}
+                                        value={sceneDraftPrompts[idx] !== undefined ? sceneDraftPrompts[idx] : (scene.visualPrompt || scene.captionText || "")}
+                                        onChange={(e) => setSceneDraftPrompts(prev => ({ ...prev, [idx]: e.target.value }))}
+                                        className="w-full border border-indigo-300 rounded-lg p-2 text-xs bg-white focus:ring-1 focus:ring-indigo-500 shadow-inner"
+                                        placeholder="Describe the visual action, camera motion, and character behavior for this scene..."
+                                      />
+                                      {projectCharacters.length > 0 && (
+                                        <div className="flex flex-wrap items-center gap-1">
+                                          <span className="text-[10px] text-slate-400 font-semibold">Quick insert:</span>
+                                          {projectCharacters.map((c, cIdx) => (
+                                            <button
+                                              key={cIdx}
+                                              type="button"
+                                              onClick={() => {
+                                                const desc = c.visualDescription ? `${c.name} (${c.visualDescription})` : c.name;
+                                                setSceneDraftPrompts(prev => {
+                                                  const cur = prev[idx] ?? (scene.visualPrompt || scene.captionText || "");
+                                                  return { ...prev, [idx]: cur ? `${cur}, featuring ${desc}` : desc };
+                                                });
+                                              }}
+                                              className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-700 px-1.5 py-0.5 rounded font-medium"
+                                            >
+                                              +{c.name}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      )}
+                                      <div className="flex justify-end gap-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingSceneIdx(null)}
+                                          className="text-[10px] font-bold text-slate-500 px-2 py-1 rounded hover:bg-slate-200"
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSaveScenePrompt(idx)}
+                                          disabled={updatingSceneIdx === idx}
+                                          className="text-[10px] font-bold bg-[#0A2D59] hover:bg-slate-800 text-white px-2.5 py-1 rounded-md shadow-sm transition"
+                                        >
+                                          {updatingSceneIdx === idx ? "Saving..." : "Save Prompt"}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-slate-700 line-clamp-3 bg-white p-2 rounded-lg border border-slate-200">
+                                      {sceneDraftPrompts[idx] || scene.visualPrompt || scene.captionText}
+                                    </p>
+                                  )}
                                 </div>
 
-                                {isVideoMedia ? (
-                                  <div className="py-1 px-2.5 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between text-xs text-blue-800 font-semibold">
-                                    <span className="flex items-center gap-1">
-                                      <span>✨</span> Gemini Omni Video Active
-                                    </span>
-                                    <button
-                                      onClick={() => handleGenerateVeoScene(idx, scene.visualPrompt || scene.captionText)}
-                                      disabled={generatingVeoSceneIdx === idx}
-                                      className="text-[11px] text-blue-600 hover:text-blue-900 underline font-bold"
+                                {/* Media Source Selector (if uploaded media exists) */}
+                                {mediaItems.length > 0 && (
+                                  <div className="pt-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Source Visual Media:</label>
+                                    <select
+                                      value={scene.mediaId?._id || scene.mediaId || ""}
+                                      onChange={(e) => handleAssignSceneMedia(idx, e.target.value)}
+                                      className="w-full border border-slate-300 rounded-lg px-2 py-1 text-xs bg-white text-slate-700 font-medium"
                                     >
-                                      {generatingVeoSceneIdx === idx ? "Rendering..." : "Regenerate"}
-                                    </button>
+                                      <option value="">AI Frame / Default Media</option>
+                                      {mediaItems.map((m, mIdx) => (
+                                        <option key={m._id || mIdx} value={m._id}>
+                                          {m.originalFilename || `Media #${mIdx + 1}`} ({m.mediaType === "video" ? "🎬 Video" : "📷 Photo"})
+                                        </option>
+                                      ))}
+                                    </select>
                                   </div>
-                                ) : (
+                                )}
+
+                                {/* Action Generation Buttons */}
+                                <div className="grid grid-cols-2 gap-2 pt-1">
                                   <button
-                                    onClick={() => handleGenerateVeoScene(idx, scene.visualPrompt || scene.captionText)}
-                                    disabled={generatingVeoSceneIdx === idx || generatingAllVeo}
-                                    className="w-full bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white font-bold py-1.5 px-3 rounded-lg text-xs shadow-sm flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                                    type="button"
+                                    onClick={() => handleGenerateSceneImage(idx, sceneDraftPrompts[idx] || scene.visualPrompt || scene.captionText)}
+                                    disabled={generatingImageSceneIdx === idx || generatingVeoSceneIdx === idx}
+                                    className="bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold py-1.5 px-2 rounded-lg text-[11px] shadow-sm flex items-center justify-center gap-1 transition disabled:opacity-50"
+                                  >
+                                    {generatingImageSceneIdx === idx ? (
+                                      <>
+                                        <span className="w-3 h-3 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></span>
+                                        <span>Painting...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>🎨</span>
+                                        <span>Regen Image</span>
+                                      </>
+                                    )}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleGenerateVeoScene(idx, sceneDraftPrompts[idx] || scene.visualPrompt || scene.captionText)}
+                                    disabled={generatingVeoSceneIdx === idx || generatingAllVeo || generatingImageSceneIdx === idx}
+                                    className="bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white font-bold py-1.5 px-2 rounded-lg text-[11px] shadow-sm flex items-center justify-center gap-1 transition disabled:opacity-50"
                                   >
                                     {generatingVeoSceneIdx === idx ? (
                                       <>
                                         <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                                        Generating Omni Video...
+                                        <span>Rendering...</span>
                                       </>
                                     ) : (
                                       <>
-                                        <span>✨</span> Convert to Gemini Omni Video
+                                        <span>✨</span>
+                                        <span>{isVideoMedia ? "Regen Video" : "Omni Video"}</span>
                                       </>
                                     )}
                                   </button>
-                                )}
+                                </div>
                               </div>
                             </div>
                           );
@@ -1355,11 +1805,103 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                 <label className="block text-xs font-bold text-slate-700 mb-1">Story Narrative / Event Memories</label>
                 <textarea
                   required
-                  rows={5}
+                  rows={4}
                   placeholder="Type or paste the story, speech, or summary of this event..."
                   value={newStory}
                   onChange={(e) => setNewTitleStory(e.target.value)}
                   className="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A2D59]"
+                />
+              </div>
+
+              {/* Cast & Characters (Visual Consistency) */}
+              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                      <span>👥</span> Cast & Characters (Optional)
+                    </span>
+                    <p className="text-[11px] text-slate-500">Helps AI render consistent faces & attire across all video scenes.</p>
+                  </div>
+                  {newCharacters.length > 0 && (
+                    <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                      {newCharacters.length} added
+                    </span>
+                  )}
+                </div>
+
+                {newCharacters.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {newCharacters.map((c, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 bg-white border border-slate-300 text-slate-800 text-[11px] font-semibold px-2.5 py-1 rounded-lg shadow-sm">
+                        <span>👤 {c.name}</span>
+                        {c.role && <span className="text-slate-400 text-[10px]">({c.role})</span>}
+                        <button
+                          type="button"
+                          onClick={() => setNewCharacters(prev => prev.filter((_, idx) => idx !== i))}
+                          className="text-slate-400 hover:text-red-500 text-xs ml-1 font-bold"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Name (e.g. Rahul)"
+                    value={newCharName}
+                    onChange={(e) => setNewCharName(e.target.value)}
+                    className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-1 focus:ring-[#0A2D59]"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Role (e.g. Groom)"
+                    value={newCharRole}
+                    onChange={(e) => setNewCharRole(e.target.value)}
+                    className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-1 focus:ring-[#0A2D59]"
+                  />
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      placeholder="Appearance / Attire"
+                      value={newCharDesc}
+                      onChange={(e) => setNewCharDesc(e.target.value)}
+                      className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-1 focus:ring-[#0A2D59] flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!newCharName.trim()) return;
+                        setNewCharacters(prev => [...prev, {
+                          name: newCharName.trim(),
+                          role: newCharRole.trim(),
+                          visualDescription: newCharDesc.trim()
+                        }]);
+                        setNewCharName("");
+                        setNewCharRole("");
+                        setNewCharDesc("");
+                      }}
+                      className="bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold px-2.5 py-1.5 rounded-lg whitespace-nowrap"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Director Guidelines & Must-Have Scenes */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                  <span>🎬</span> Director Guidelines & Must-Have Scenes (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Include stage garland exchange, grand cake cutting, and family toast..."
+                  value={newDirectorGuidelines}
+                  onChange={(e) => setNewDirectorGuidelines(e.target.value)}
+                  className="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-[#0A2D59]"
                 />
               </div>
 

@@ -50,7 +50,7 @@ storyVideoRouter.get("/projects", async (req, res, next) => {
 // 2. Create a new AI Story Project for a specific Event
 storyVideoRouter.post("/projects", requireEventAccess(["event_admin"]), async (req, res, next) => {
   try {
-    const { eventId, title, storyText, description, language } = req.body;
+    const { eventId, title, storyText, description, language, characters, directorGuidelines } = req.body;
     if (!eventId || !title || !storyText) {
       return res.status(400).json({ message: "eventId, title, and story text are required" });
     }
@@ -62,6 +62,8 @@ storyVideoRouter.post("/projects", requireEventAccess(["event_admin"]), async (r
       description: description || "",
       storyText,
       language: language || "en",
+      characters: Array.isArray(characters) ? characters : [],
+      directorGuidelines: directorGuidelines || "",
       status: "draft"
     });
 
@@ -86,7 +88,7 @@ storyVideoRouter.get("/projects/:id", async (req, res, next) => {
   }
 });
 
-// Update Project settings / language
+// Update Project settings / language / characters / guidelines
 storyVideoRouter.patch("/projects/:id", async (req, res, next) => {
   try {
     const project = await Project.findById(req.params.id);
@@ -94,7 +96,18 @@ storyVideoRouter.patch("/projects/:id", async (req, res, next) => {
       return res.status(404).json({ message: "Project not found" });
     }
 
-    const { language, title, description, storyText, voiceType, customVoicePrompt, customVoiceId } = req.body;
+    const {
+      language,
+      title,
+      description,
+      storyText,
+      voiceType,
+      customVoicePrompt,
+      customVoiceId,
+      characters,
+      directorGuidelines
+    } = req.body;
+
     if (language !== undefined) project.language = language;
     if (title !== undefined) project.title = title;
     if (description !== undefined) project.description = description;
@@ -102,6 +115,8 @@ storyVideoRouter.patch("/projects/:id", async (req, res, next) => {
     if (voiceType !== undefined) project.voiceType = voiceType;
     if (customVoicePrompt !== undefined) project.customVoicePrompt = customVoicePrompt;
     if (customVoiceId !== undefined) project.customVoiceId = customVoiceId;
+    if (characters !== undefined) project.characters = characters;
+    if (directorGuidelines !== undefined) project.directorGuidelines = directorGuidelines;
 
     await project.save();
     res.json(project);
@@ -298,15 +313,17 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
     const mediaItems = await Media.find({ projectId: project._id }).sort({ createdAt: 1 });
     const totalSongDuration = project.activeSongId.durationSeconds || 30;
     const lyrics = project.activeSongId.lyrics || "";
-    const storyContext = project.summary || project.title || "";
+    const storyContext = project.storyText || project.activeStoryAnalysisId?.summary || project.description || project.title || "";
 
-    console.log(`[API Storyboard] Generating synchronized storyboard from lyrics (${totalSongDuration}s, ~${targetSceneDuration}s/scene, lang=${project.language || project.activeSongId.language || "en"})...`);
+    console.log(`[API Storyboard] Generating synchronized storyboard from lyrics (${totalSongDuration}s, ~${targetSceneDuration}s/scene, lang=${project.language || project.activeSongId.language || "en"}, characters=${project.characters?.length || 0})...`);
     const generatedScenes = await generateStoryboardFromLyrics({
       storyContext,
       lyrics,
       totalDurationSeconds: totalSongDuration,
       targetSceneDuration: Number(targetSceneDuration) || 6,
-      language: project.language || project.activeSongId.language || "en"
+      language: project.language || project.activeSongId.language || "en",
+      characters: project.characters || [],
+      directorGuidelines: project.directorGuidelines || ""
     });
 
     console.log(`[API Storyboard] Generated ${generatedScenes.length} synchronized scenes matching song lyrics.`);
@@ -345,6 +362,7 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
         captionText: sceneItem.lyricSnippet || sceneItem.visualIdea || `Scene ${index + 1}`,
         lyricSnippet: sceneItem.lyricSnippet || "",
         visualPrompt: sceneItem.visualIdea || "",
+        characters: sceneItem.characters || [],
         transitionEffect: "fade"
       });
     }
@@ -387,6 +405,9 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/veo", async (req, res, n
     }
 
     const promptText = req.body.prompt || scene.visualPrompt || scene.captionText || "Cinematic celebratory scene with lively motion and atmospheric lighting";
+    if (req.body.prompt) {
+      scene.visualPrompt = req.body.prompt;
+    }
     const sourceImageUrl = scene.mediaId?.fileUrl || null;
 
     console.log(`[API Story Video] Generating Gemini Omni 1.1 Flash video clip for Scene ${scene.sceneNumber}: "${promptText.slice(0, 60)}..."`);
@@ -416,7 +437,12 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/veo", async (req, res, n
     scene.mediaId = mediaDoc._id;
     await Storyboard.updateOne(
       { _id: storyboard._id, "scenes.sceneNumber": scene.sceneNumber },
-      { $set: { "scenes.$.mediaId": mediaDoc._id } }
+      {
+        $set: {
+          "scenes.$.mediaId": mediaDoc._id,
+          "scenes.$.visualPrompt": scene.visualPrompt
+        }
+      }
     );
 
     res.json({
@@ -424,6 +450,123 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/veo", async (req, res, n
       sceneNumber: scene.sceneNumber,
       media: mediaDoc,
       videoUrl
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 8c. Update an Individual Scene (visual prompt, caption, characters, mediaId)
+storyVideoRouter.patch("/projects/:id/scenes/:sceneIndex", async (req, res, next) => {
+  try {
+    const { id, sceneIndex } = req.params;
+    const { visualPrompt, captionText, characters, mediaId } = req.body;
+    const project = await Project.findById(id).populate("activeStoryboardId");
+    if (!project || !project.activeStoryboardId) {
+      return res.status(400).json({ message: "Project must have a storyboard generated first" });
+    }
+
+    const idx = parseInt(sceneIndex, 10);
+    const storyboard = project.activeStoryboardId;
+    const scene = storyboard.scenes[idx];
+    if (!scene) {
+      return res.status(404).json({ message: `Scene at index ${sceneIndex} not found` });
+    }
+
+    const updateFields = {};
+    if (visualPrompt !== undefined) {
+      scene.visualPrompt = visualPrompt;
+      updateFields["scenes.$.visualPrompt"] = visualPrompt;
+    }
+    if (captionText !== undefined) {
+      scene.captionText = captionText;
+      updateFields["scenes.$.captionText"] = captionText;
+    }
+    if (characters !== undefined) {
+      scene.characters = characters;
+      updateFields["scenes.$.characters"] = characters;
+    }
+    if (mediaId !== undefined) {
+      scene.mediaId = mediaId || null;
+      updateFields["scenes.$.mediaId"] = mediaId || null;
+    }
+
+    if (Object.keys(updateFields).length > 0) {
+      await Storyboard.updateOne(
+        { _id: storyboard._id, "scenes.sceneNumber": scene.sceneNumber },
+        { $set: updateFields }
+      );
+    }
+
+    res.json({
+      message: "Scene updated successfully",
+      scene
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 8d. Generate / Regenerate AI Image Frame for an Individual Scene
+storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/image", async (req, res, next) => {
+  try {
+    const { id, sceneIndex } = req.params;
+    const project = await Project.findById(id).populate({
+      path: "activeStoryboardId",
+      populate: { path: "scenes.mediaId" }
+    });
+
+    if (!project || !project.activeStoryboardId) {
+      return res.status(400).json({ message: "Project must have a storyboard generated first" });
+    }
+
+    const idx = parseInt(sceneIndex, 10);
+    const storyboard = project.activeStoryboardId;
+    const scene = storyboard.scenes[idx];
+    if (!scene) {
+      return res.status(404).json({ message: `Scene at index ${sceneIndex} not found` });
+    }
+
+    const promptText = req.body.prompt || scene.visualPrompt || scene.captionText || "Cinematic celebration scene";
+    if (req.body.prompt && req.body.prompt !== scene.visualPrompt) {
+      scene.visualPrompt = req.body.prompt;
+    }
+
+    console.log(`[API Scene Image] Generating AI frame for Scene ${scene.sceneNumber}: "${promptText.slice(0, 60)}..."`);
+    const generatedImageUrl = await generateSceneImageWithGemini(promptText, {
+      projectId: project._id,
+      title: project.title,
+      sceneNumber: scene.sceneNumber
+    });
+
+    if (!generatedImageUrl) {
+      return res.status(500).json({ message: "Unable to generate image frame for this scene" });
+    }
+
+    const mediaDoc = await Media.create({
+      projectId: project._id,
+      fileUrl: generatedImageUrl,
+      mediaType: "image",
+      originalFilename: `scene_frame_${scene.sceneNumber}.jpg`,
+      caption: promptText
+    });
+
+    scene.mediaId = mediaDoc._id;
+    await Storyboard.updateOne(
+      { _id: storyboard._id, "scenes.sceneNumber": scene.sceneNumber },
+      {
+        $set: {
+          "scenes.$.mediaId": mediaDoc._id,
+          "scenes.$.visualPrompt": scene.visualPrompt
+        }
+      }
+    );
+
+    res.json({
+      message: "Scene image frame generated successfully",
+      sceneNumber: scene.sceneNumber,
+      media: mediaDoc,
+      imageUrl: generatedImageUrl
     });
   } catch (err) {
     next(err);

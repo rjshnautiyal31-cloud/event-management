@@ -17,6 +17,15 @@ const projectSchema = new mongoose.Schema(
     voiceType: { type: String, default: "female" },
     customVoicePrompt: { type: String, default: "" },
     customVoiceId: { type: String, default: "" },
+    characters: [
+      {
+        name: { type: String, required: true },
+        role: { type: String, default: "" },
+        visualDescription: { type: String, default: "" },
+        referenceMediaId: { type: mongoose.Schema.Types.ObjectId, ref: "Media" }
+      }
+    ],
+    directorGuidelines: { type: String, default: "" },
     activeStoryAnalysisId: { type: mongoose.Schema.Types.ObjectId, ref: "StoryAnalysis" },
     activeSongId: { type: mongoose.Schema.Types.ObjectId, ref: "Song" },
     activeStoryboardId: { type: mongoose.Schema.Types.ObjectId, ref: "Storyboard" },

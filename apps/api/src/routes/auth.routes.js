@@ -38,7 +38,7 @@ export const authRouter = express.Router();
  *       409: { description: User already exists }
  */
 authRouter.post("/setup-admin", async (req, res) => {
-  const { setupKey, name, email, password } = req.body;
+  const { setupKey, name, email, password } = req.body || {};
 
   if (setupKey !== env.adminSetupKey) {
     return res.status(403).json({ message: "Invalid setup key" });
@@ -81,7 +81,11 @@ authRouter.post("/setup-admin", async (req, res) => {
  *       401: { description: Invalid credentials }
  */
 authRouter.post("/login", async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body || {};
+
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email and password are required" });
+  }
   const user = await User.findOne({ email: String(email).toLowerCase() }).populate("assignedGateId");
 
   if (!user) {
@@ -223,7 +227,7 @@ authRouter.get("/staff", requireAuth, requireRole("admin"), async (req, res) => 
 authRouter.post("/staff", requireAuth, requireRole("admin"), async (req, res) => {
   const currentRole = req.user.role;
   const currentUserId = req.user.id || req.user.sub;
-  const { name, email, password, role, assignedGateId } = req.body;
+  const { name, email, password, role, assignedGateId } = req.body || {};
   const normalizedEmail = String(email || "").toLowerCase();
 
   if (!name || !normalizedEmail || !password) {
@@ -293,7 +297,7 @@ authRouter.post("/staff", requireAuth, requireRole("admin"), async (req, res) =>
 authRouter.put("/staff/:userId", requireAuth, requireRole("admin"), async (req, res) => {
   const currentRole = req.user.role;
   const currentUserId = req.user.id || req.user.sub;
-  const { name, email, role, assignedGateId } = req.body;
+  const { name, email, role, assignedGateId } = req.body || {};
 
   try {
     const user = await User.findById(req.params.userId);

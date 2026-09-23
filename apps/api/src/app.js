@@ -12,6 +12,8 @@ import { swaggerSpec } from "./config/swagger.js";
 export const app = express();
 
 app.use(cors());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use("/uploads", cors(), express.static("uploads", {
   setHeaders: (res, filePath) => {
     res.setHeader("Access-Control-Allow-Origin", "*");

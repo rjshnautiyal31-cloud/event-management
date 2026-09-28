@@ -1249,9 +1249,21 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                       );
                     })}
                     {mediaItems.length === 0 && (
-                      <div className="col-span-full text-center py-12 border-2 border-dashed border-emerald-200 bg-emerald-50/50 rounded-2xl text-emerald-800 text-xs font-medium space-y-1">
-                        <p className="font-bold text-sm">✨ Pure AI Scene Generation Mode Active</p>
-                        <p className="text-slate-600">No media uploaded. When you click <strong>"Generate Scene Storyboard"</strong>, Google Gemini AI will generate 16:9 photorealistic visual scenes for every moment!</p>
+                      <div className="col-span-full text-center py-10 px-4 border-2 border-dashed border-emerald-200 bg-emerald-50/50 rounded-2xl text-emerald-800 text-xs font-medium space-y-3">
+                        <div className="space-y-1">
+                          <p className="font-bold text-sm">✨ Pure AI Scene Generation Mode Active</p>
+                          <p className="text-slate-600 max-w-xl mx-auto">
+                            No media uploaded. In Tab 4, click <strong className="text-emerald-900">"🎵 Sync Storyboard with Song Lyrics"</strong>, and Google Gemini AI will automatically generate 16:9 photorealistic visual scenes for every moment!
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab("storyboard")}
+                          className="inline-flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2 rounded-xl text-xs shadow transition"
+                        >
+                          <span>🎵</span>
+                          <span>Proceed to Tab 4 (Sync Storyboard)</span>
+                        </button>
                       </div>
                     )}
                   </div>

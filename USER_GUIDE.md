@@ -196,49 +196,172 @@ Switch to **Tab 2: AI Lyrics & Audio**:
 
 ---
 
-### Stage 3: Event Photos & Pure AI Motion Video Generation
-Switch to **Tab 3: Media Gallery**:
-1. **Uploading Real Event Media**:
-   - Upload real event photos (`.jpg`, `.png`, `.webp`) or video clips (`.mp4`, `.mov`).
-   - Assets are securely stored in your chosen storage backend (Cloudflare R2, Google Cloud Storage, AWS S3, or Local).
-2. **Pure AI Cinematic Scene Mode**:
-   - If no photos are uploaded (or if you click **"Clear All Media"**), the engine switches to **Pure AI Mode**.
-   - It generates 16:9 photorealistic visual scenes for every moment without requiring any manual uploads.
+### 9.2 Production Modes: Standard Cinematic Mode vs. Ultra Motion Mode
+The studio supports two distinct rendering and visual paradigms:
+
+| Feature | Standard Cinematic Mode | Ultra Motion Mode |
+| :--- | :--- | :--- |
+| **Visual Source** | High-definition **Google Imagen 3** keyframes | Generative video clips (**Google Gemini Omni 1.1 Flash / Veo 2 / Replicate SVD**) |
+| **Scene Motion** | Camera pan & zoom (Ken Burns), crossfades, rhythmic cuts | Generative physical motion (e.g. dancing crowds, flowing fabrics, fireworks) |
+| **Character Consistency** | **High & Stable**: Faces, attire, and lighting remain sharp and cohesive | **Variable**: Faces and hands can morph or warp between diffusion frames |
+| **Cost per 3-Min Video** | **<$1.00** (highly economical, 95%+ margin) | **~$3.50 – $7.50+** (GPU-intensive) |
+| **Render Time** | **30 to 90 seconds** on standard CPU | **5 to 15 minutes** (cloud GPU prediction queues) |
+| **Commercial Reliability** | **99.9%** (never crashes, no GPU timeouts) | Can timeout on third-party GPU clusters |
+| **When to Use** | Commercial event promos, wedding photo montages, high-volume SaaS | Ultra-cinematic, futuristic, or fantasy video clips |
 
 ---
 
-### Stage 4: Lyric-Synchronized Storyboard & Granular Scene Editor (Level 2 Control)
+### Stage 1: Story Narrative, Cast Bible & Director Directives (Level 1 Control)
+1. Select an existing story project or click **"+ New Story Project"**.
+2. **Story Narrative**: Enter raw event memories, speeches, or summaries.
+3. **👥 Cast & Characters Consistency Guide (Visual Bible)**:
+   - Define the key individuals in your story (*Rahul, Priya, Keynote Speaker, Birthday Star*).
+   - Provide their **Role in Event** and specific **Visual Appearance & Attire** (e.g. *30yo Indian man with short black hair, wearing a cream silk sherwani with red turban*).
+   - **Why This Matters**: Generative AI models often change character faces and clothes between clips. By defining your cast here, Gemini systematically injects these visual descriptors into every scene featuring that character, preserving visual identity throughout the entire video.
+4. **🎬 Director Guidelines & Must-Have Scenes**:
+   - Provide directives for specific moments you want featured (e.g. *1. Grand welcome. 2. Stage garland exchange. 3. Family champagne toast. 4. Lantern lighting at dusk.*).
+   - Gemini prioritizes these moments when laying out the chronological timeline.
+5. Click **"Analyze Story Narrative"** to generate an executive summary, emotional arc, and thematic tags.
+
+---
+
+### Stage 2: AI Song Lyrics, Vocal Voice Selection & Duration Control
+Switch to **Tab 2: AI Lyrics & Audio**:
+1. **Music Engine**:
+   - 🌟 **Google DeepMind Lyria 3 Pro** (`lyria-3-pro-preview`): State-of-the-art vocal composition and acoustic production.
+   - 🎵 **ElevenLabs Music Synthesis**: Polished studio pop, acoustic, and electronic production.
+   - 🎸 **Suno AI**: Melodic song synthesis.
+   - 🔊 **Google Cloud Neural2 TTS**: High-fidelity speech synthesis over rhythmically synchronized backing beats.
+2. **Vocal Voice Selection**:
+   - 👩 **Female Vocalist**: Emotive soprano / alto lead vocals.
+   - 👨 **Male Vocalist**: Warm tenor / baritone lead vocals.
+   - 👥 **Duet / Harmonized Ensemble**: Harmonious dual vocal arrangement.
+   - 🎙️ **Custom Vocal Persona**: Freely type any vocal style (e.g., *husky delta blues singer*, *ethereal operatic choir*, *energetic K-pop vocalist*).
+3. **Musical Style / Genre**:
+   - 🎸 Acoustic / Folk • 🎹 Cinematic Orchestral • 🎤 Pop / Uplifting • ⚡ Epic Rock • 🥁 Lo-Fi Chill • 🎷 Jazz / Soul • 🪕 Traditional / Cultural.
+4. **Audio Song Duration Control**:
+   - Choose between **15s, 30s, 45s, 60s, 90s, 120s, up to 180s (3 full minutes)**.
+   - The AI writes structured lyrics (*Verses, Chorus, Bridge, Outro*) tailored to fill the target time window.
+5. Click **"Generate AI Song & Vocals"**:
+   - Includes automatic retry if a model is temporarily rate-limited.
+   - **Transparent Fallback Badges**: The player clearly displays which engine produced the audio track (e.g. `🌟 DeepMind Lyria 3 Pro` or `🔊 Neural2 TTS + Rhythm Synth`) so you are always aware of the active provider.
+
+---
+
+### Stage 3: Media Gallery — Pure AI Mode vs. Personal Event Media
+Switch to **Tab 3: Photos & Media**:
+
+The studio handles two distinct source media paths:
+
+#### Path A: 100% Pure AI Mode (Zero Uploads)
+- **No Uploads Required**: If you do not upload any photos or videos, the system automatically activates **Pure AI Scene Generation Mode**.
+- In this mode, Google Gemini AI and Google Imagen 3 generate 16:9 photorealistic visual scenes for every moment based purely on your narrative, Cast Bible, and song lyrics.
+- **Next Step**: Click the quick shortcut button **"Proceed to Tab 4 (Sync Storyboard)"** or navigate directly to Tab 4.
+
+#### Path B: Personal Event Montage Mode (User-Uploaded Media)
+- **Supported Formats**:
+  - **Photos**: `.jpg`, `.jpeg`, `.png`, `.webp` (wedding photography, candid event photos, portraits).
+  - **Videos**: `.mp4`, `.mov`, `.webm` (mobile video snippets, stage recordings, drone footage).
+- **Asset Management**:
+  - Uploaded files are displayed in a responsive gallery with preview thumbnails, filenames, and format badges (`📷 Photo` or `🎬 Video`).
+  - Delete individual files with the trash can icon (`🗑️`), or click **"Clear All Media"** to immediately switch back to Pure AI Mode.
+  - Assets are stored securely in your active cloud storage backend (Cloudflare R2, Google Cloud Storage, or AWS S3).
+
+---
+
+### Stage 4: Lyric-Synchronized Storyboard & Dual Modes in Action (Level 2 Control)
 Switch to **Tab 4: Timeline & Storyboard**:
-1. Click **"🎵 Sync Storyboard with Song Lyrics"**:
-   - The engine analyzes the actual generated audio duration (e.g. 30s = 5 scenes of ~6s each; 180s = 30 scenes of ~6s each).
-   - Natural 5–6s scene cuts are created to match AI video clip lengths, ensuring video clips never need to freeze or loop.
-   - Gemini maps specific lyric lines and tags featured characters in each scene.
-2. **Granular Scene-by-Scene Controls**:
+
+1. **Triggering Scene Synchronization**:
+   - Click **`🎵 Sync Storyboard with Song Lyrics`** (the dark navy button at the top right).
+   - *(Note: This is the button referenced in Tab 3's Pure AI helper banner).*
+   - **How Scene Calculation Works**:
+     - The engine inspects your generated audio track's actual duration (e.g. 30s = ~5 scenes of 6s each; 60s = ~10 scenes; 180s = ~30 scenes).
+     - It creates non-overlapping, chronological 5–6s scene cuts matching AI video clip lengths so visual clips never need to freeze or loop.
+     - Gemini maps specific sung lyric lines (`lyricSnippet`) to each scene timecode.
+
+2. **Automatic Round-Robin Media Distribution (When Media is Uploaded)**:
+   - If you uploaded photos or video clips in Tab 3, the engine automatically distributes them sequentially across all scenes in a round-robin pattern (`mediaItems[index % mediaItems.length]`).
+   - For example, if you upload 6 photos for a 10-scene song, scenes 1–6 receive photos 1–6, and scenes 7–10 loop smoothly.
+
+3. **Granular Scene-by-Scene Customization**:
+   - **Source Visual Media Dropdown**: If uploaded media exists, each scene card displays a **Source Visual Media** dropdown. You can reassign any specific uploaded photo or video clip to that scene, or select `"AI Frame / Default Media"` to use an AI-generated image instead.
    - **👥 Scene Cast Tagging**: View characters assigned to each scene. Click cast pills (e.g. `✓ Rahul` / `+ Priya`) to toggle characters into or out of any scene.
    - **✏️ Interactive Visual Action / Prompt Editor**: Click **"✏️ Edit Prompt"** to edit the scene's visual action, camera angle, and environment. Use the **`+Name` Quick-Insert** buttons to instantly append that character's detailed physical traits to your prompt. Click **"Save Prompt"** to save changes immediately.
-   - **🎨 Regenerate AI Image Frame**: Click **"🎨 Regen Image"** to generate a fresh high-resolution AI image frame for that specific scene using the updated prompt.
-   - **✨ Convert to Gemini Omni Video / Regenerate Video**: Click **"✨ Convert to Gemini Omni Video"** to render a realistic 5-second 16:9 motion video clip using **Google Gemini Omni 1.1 Flash** (`gemini-omni-1.1-flash-preview`).
-   - **✨ Batch Generation**: Click **"Generate Gemini Omni Video Clips (All Scenes)"** in the top action bar to batch-render motion clips for the entire storyboard.
-   - **Source Media Reassignment**: If you have uploaded media in your gallery, use the **Source Visual Media** dropdown on any scene card to assign a specific uploaded photo or video clip instead of the AI frame.
+   - **🎨 Regenerate AI Image Frame (Standard Cinematic Mode)**: Click **"🎨 Regen Image"** to render a fresh high-resolution AI image frame using Google Imagen 3.
+   - **✨ Image-to-Video Animation on User Photos (Gemini Omni / Veo)**:
+     - When an uploaded photo is assigned to a scene, clicking **"✨ Omni Video"** feeds the **user's real photo** directly into Google Gemini Omni 1.1 Flash / Veo!
+     - The AI animates the real photo into a fluid 5-second motion video clip, preserving the real people and setting.
+   - **✨ Batch Ultra Motion Generation**: Click **"Generate Gemini Omni Video Clips (All Scenes)"** in the top action bar to batch-generate generative video clips across all scenes at once.
 
 ---
 
-### Stage 5: Multi-Device Resolution Video Rendering & Download
-Switch to **Tab 5: Render & Video**:
-1. Choose your target **Display & Resolution Preset**:
-   - 🖥️ **Desktop Full HD (1080p)**: `1920x1080` (16:9 widescreen, 6000 kb/s) — Big screens, YouTube, and event presentations.
-   - 💻 **Desktop HD (720p)**: `1280x720` (16:9 standard HD, 3500 kb/s) — Balanced rendering speed for web streaming.
-   - 📱 **Mobile Portrait (9:16)**: `1080x1920` (9:16 vertical, 4500 kb/s) — Optimized for TikTok, Instagram Reels, and YouTube Shorts.
-   - 📟 **Tablet Display (4:3)**: `1440x1080` (4:3 ratio, 4500 kb/s) — iPads, POS terminals, and tablet kiosks.
-   - 🔲 **Social Square (1:1)**: `1080x1080` (1:1 square, 4000 kb/s) — Instagram feed posts and LinkedIn carousels.
-2. Click **"Start Video Render"**:
-   - A background FFmpeg worker stitches the video segments, synchronizes the song audio, generates synchronized subtitles in both **SubRip (.srt)** and **WebVTT (.vtt)** formats, and monitors progress in real time (0% to 100%).
+### Stage 5: Multi-Device Resolution Video Rendering & Subtitle Synchronization
+Switch to **Tab 5: Render & Video Player**:
+
+1. **Choose Your Target Display Preset**:
+   - 🖥️ **Desktop Full HD (1080p)**: `1920x1080` (16:9 widescreen, 6000 kb/s) — Projectors, TVs, YouTube, and corporate galas.
+   - 💻 **Desktop HD (720p)**: `1280x720` (16:9 standard HD, 3500 kb/s) — Quick web previews and bandwidth-friendly exports.
+   - 📱 **Mobile Portrait (9:16)**: `1080x1920` (9:16 vertical, 4500 kb/s) — Instagram Reels, TikTok, and YouTube Shorts.
+   - 📟 **Tablet Display (4:3)**: `1440x1080` (4:3 ratio, 4500 kb/s) — iPads, POS terminals, and digital welcome kiosks.
+   - 🔲 **Social Square (1:1)**: `1080x1080` (1:1 square, 4000 kb/s) — Instagram feeds and LinkedIn carousels.
+
+2. **FFmpeg Multi-Media Rendering Engine**:
+   When you click **"Start Video Render"**, the background worker intelligently handles every scene based on its media type:
+   - **For Still Images (Standard Cinematic Mode)**:
+     - Loops the image for the exact scene duration.
+     - Scales and letterboxes/pads the image to the target aspect ratio (`scale=...:force_original_aspect_ratio=decrease,pad=...`).
+     - Uses ultrafast stream assembly to stay strictly within low-memory cloud limits (Render free tier / Cloud Run).
+   - **For Uploaded Real Video Clips**:
+     - Automatically loops or trims the video clip to match the scene's exact duration window.
+     - Strips or ducks original noisy microphone audio so only the studio-mixed song and vocals play.
+   - **Audio Master & Subtitle Alignment**:
+     - Mixes the complete master song audio track.
+     - Generates both SubRip (`.srt`) and WebVTT (`.vtt`) time-coded subtitle files.
+
 3. **Playback, Subtitles & Download**:
-   - **Embedded Player Closed Captions (CC)**: Subtitles are natively embedded inside the HTML5 video player via compliant WebVTT (`.vtt`). Users can toggle subtitles on/off and configure captions directly using the player's embedded CC menu.
+   - **Embedded Player Closed Captions (CC)**: Subtitles are natively embedded inside the HTML5 video player via compliant WebVTT (`.vtt`). Users can toggle subtitles on/off and configure captions directly using the player's embedded CC menu without external overlay clutter.
    - **Download Options**:
      - Click **`⬇️ Download Video`** to download the finished MP4 video file.
      - Click **`💬 Subtitles (.srt)`** to download the standard SRT subtitle file for video players like VLC, QuickTime, Premiere, and CapCut.
      - Click **`📝 Subtitles (.vtt)`** to download the WebVTT subtitle file for web platforms and YouTube.
+
+---
+
+### 9.3 End-to-End Walkthrough Example (Standard Cinematic Mode)
+
+Here is a practical reference example you can follow step-by-step in the Studio:
+
+#### 1. Tab 1: Story Narrative
+- **Project Title**: `Aarav & Maya: The Royal Udaipur Wedding`
+- **Language**: English (or Hindi, Spanish, etc.)
+- **Target Duration**: 60 Seconds
+- **Story Narrative**:
+  > *"Maya and Aarav celebrated their destination wedding at the Lake Palace in Udaipur. Surrounded by marble arches and glowing lanterns at sunset, family and lifelong friends gathered from across the world. The festivities featured a joyful Sangeet dance night, an emotional pheras ceremony with flower petal showers, and an unforgettable starlit celebration with sparklers by the palace fountain."*
+- Click **"Analyze Story Narrative"**.
+
+#### 2. Tab 2: Song Lyrics & Audio
+- **Music Genre**: Acoustic Pop (or Cinematic)
+- **Vocal Style**: Duet (or Female / Male)
+- Click **"Generate Structured Lyrics"** to inspect verses and chorus.
+- Click **"Generate AI Song & Vocals"** to produce the 60-second synchronized musical track.
+
+#### 3. Tab 3: Cast Bible & Director Guidelines
+- **Character 1**: `Maya (Bride)` — *South Asian woman in late 20s, radiant smile, crimson red silk lehenga with gold embroidery, jasmine flowers in hair.*
+- **Character 2**: `Aarav (Groom)` — *South Asian man in late 20s, cream ivory sherwani with mandarin collar.*
+- **Director Directives**: *Maintain warm golden-hour lighting; progression from venue arrival -> sunset vows -> joyful dancing -> night sparkler send-off.*
+
+#### 4. Tab 4: Storyboard & Scenes (Activating Standard Cinematic Mode)
+- Click **`🎵 Sync Storyboard with Song Lyrics`**.
+- The engine creates ~10 sequential 6-second scenes matching the lyrics.
+- If in **Pure AI Mode**, click **`🎨 Regen Image`** on scene cards to render high-resolution Google Imagen 3 frames.
+- If in **User Media Mode**, select your uploaded photos from the **`Source Visual Media:`** dropdown on each scene card.
+- **Staying in Standard Cinematic Mode**: Do not click *"Generate Gemini Omni Video Clips"*. Leaving scenes as high-resolution photo frames activates Standard Cinematic Mode.
+
+#### 5. Tab 5: Render & Video Player
+- Select **Desktop Full HD (1080p)** or **Mobile Portrait (9:16)**.
+- Click **"Start Video Render"**.
+- FFmpeg animates the frames, stitches scenes, mixes the 60s duet song, and embeds WebVTT Closed Captions into the HTML5 video player.
 
 ---
 

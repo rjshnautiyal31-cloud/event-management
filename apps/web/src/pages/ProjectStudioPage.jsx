@@ -55,6 +55,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
   const [customVoiceId, setCustomVoiceId] = useState("");
   const [generatingVeoSceneIdx, setGeneratingVeoSceneIdx] = useState(null);
   const [generatingAllVeo, setGeneratingAllVeo] = useState(false);
+  const [generatingAllImages, setGeneratingAllImages] = useState(false);
 
   // Characters & Director Guidelines State (Creation modal)
   const [newCharacters, setNewCharacters] = useState([]);
@@ -540,6 +541,28 @@ export function ProjectStudioPage({ auth, token: propToken }) {
       setError(err.message);
     } finally {
       setGeneratingAllVeo(false);
+    }
+  }
+
+  async function handleGenerateAllImages(overwrite = false) {
+    if (!activeProject) return;
+    setGeneratingAllImages(true);
+    setError("");
+    setSuccess("🎨 Synthesizing Google AI high-definition scene frames for storyboard (~5-10s per scene)...");
+    try {
+      const res = await api(`/api/story-video/projects/${activeProject._id}/scenes/generate-all-images`, {
+        token,
+        method: "POST",
+        body: { overwrite }
+      });
+      setSuccess(`🎉 ${res.message || "Google AI scene images generated successfully!"}`);
+      const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
+      setActiveProject(updated);
+      await loadMediaItems(activeProject._id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGeneratingAllImages(false);
     }
   }
 
@@ -1291,7 +1314,25 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                         Each scene is synchronized to the song lyrics with natural 5-6s cuts matching AI motion video duration so clips never repeat.
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => handleGenerateAllImages(true)}
+                        disabled={generatingAllImages || loading || !activeProject.activeStoryboardId}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs shadow flex items-center gap-1.5 transition disabled:opacity-50"
+                        title="Synthesize 100% watermark-free Google AI images for all scenes (Standard Cinematic Mode)"
+                      >
+                        {generatingAllImages ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                            Generating AI Images...
+                          </>
+                        ) : (
+                          <>
+                            <span>🎨</span>
+                            Generate Google AI Images (All Scenes)
+                          </>
+                        )}
+                      </button>
                       <button
                         onClick={handleGenerateAllVeo}
                         disabled={generatingAllVeo || loading || !activeProject.activeStoryboardId}

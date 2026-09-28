@@ -244,12 +244,47 @@ Return a JSON array of scenes.`;
   }
 }
 
-// 4. Generate Cinematic Visual Scene Images using Gemini Imagen 3 with Free AI Fallback
+// 4. Generate Cinematic Visual Scene Images using Google AI with High-Resolution Fallback
 export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
   const { projectId, title = "", sceneNumber = 1 } = (typeof options === "object" && options !== null) ? options : {};
-  const ai = getGeminiClient();
+  const clientInfo = getGeminiClient();
 
-  if (ai) {
+  if (clientInfo?.ai) {
+    const { ai } = clientInfo;
+
+    // 1. Primary: Google Gemini Flash Image (Vertex AI native multimodal image generation)
+    try {
+      console.log(`[Google AI Image] Generating high-definition 16:9 scene frame with gemini-2.5-flash-image for Scene ${sceneNumber}...`);
+      const enhancedPrompt = `A photorealistic 16:9 widescreen cinematic shot, 8k resolution, professional photography, natural lighting: ${visualPrompt}`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash-image",
+        contents: enhancedPrompt
+      });
+
+      const parts = response.candidates?.[0]?.content?.parts || [];
+      for (const part of parts) {
+        if (part.inlineData?.data) {
+          const mimeType = part.inlineData.mimeType || "image/png";
+          const ext = mimeType.includes("png") ? "png" : "jpg";
+          const filename = `scene_${sceneNumber}_frame_${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
+          const buffer = Buffer.from(part.inlineData.data, "base64");
+          const storageKey = buildStoryStorageKey({
+            projectId,
+            title,
+            category: "scenes/frames",
+            filename
+          });
+          const uploadedUrl = await uploadAssetBuffer(buffer, storageKey, mimeType);
+          console.log(`[Google AI Image] Successfully generated pristine scene frame (${buffer.length} bytes): ${uploadedUrl}`);
+          return uploadedUrl;
+        }
+      }
+    } catch (err) {
+      console.warn(`[Google AI Image] gemini-2.5-flash-image failed (${err.message}), trying Imagen fallback...`);
+    }
+
+    // 2. Secondary: Google Imagen 3 via generateImages (if publisher model is enabled)
     try {
       console.log(`[Gemini Imagen 3] Generating 16:9 scene image for prompt: "${visualPrompt.slice(0, 80)}..."`);
 
@@ -273,21 +308,28 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
           category: "scenes/frames",
           filename
         });
-        return await uploadAssetBuffer(buffer, storageKey, "image/jpeg");
+        const uploadedUrl = await uploadAssetBuffer(buffer, storageKey, "image/jpeg");
+        console.log(`[Gemini Imagen 3] Successfully generated Imagen 3 frame: ${uploadedUrl}`);
+        return uploadedUrl;
       }
     } catch (err) {
-      console.warn("Gemini Imagen 3 direct generation unconfigured/failed, utilizing high-res AI generator:", err.message);
+      console.warn("[Gemini Imagen 3] Imagen direct generation failed:", err.message);
     }
   }
 
-  // High-Resolution 16:9 AI Scene Generation Fallback
+  // 3. Fallback: High-Definition Watermark-Free AI Image Generator
   try {
-    const cleanPrompt = encodeURIComponent(visualPrompt.slice(0, 200));
+    const cleanPrompt = encodeURIComponent(visualPrompt.slice(0, 250));
     const seed = Math.floor(Math.random() * 100000);
-    const aiImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1280&height=720&nologo=true&seed=${seed}`;
+    // Request full 1920x1080 resolution with Flux model, nologo=true, and private=true to prevent blurry/watermarked Sana outputs
+    const aiImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1920&height=1080&model=flux&nologo=true&private=true&enhance=false&seed=${seed}`;
 
-    console.log(`[AI Image Generator] Fetching high-definition 1280x720 scene frame for prompt: "${visualPrompt.slice(0, 60)}..."`);
-    const res = await fetch(aiImageUrl);
+    console.log(`[AI Image Generator] Fetching high-definition 1920x1080 scene frame (seed=${seed})...`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+    const res = await fetch(aiImageUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
 
     if (res.ok) {
       const arrayBuffer = await res.arrayBuffer();

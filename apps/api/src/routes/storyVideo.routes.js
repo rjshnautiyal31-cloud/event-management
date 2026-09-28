@@ -673,6 +673,77 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/image", async (req, res,
   }
 });
 
+// 8e. Generate High-Definition Google AI Images for ALL Scenes (or missing scenes)
+storyVideoRouter.post("/projects/:id/scenes/generate-all-images", async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { overwrite = false } = req.body || {};
+    const project = await Project.findById(id).populate({
+      path: "activeStoryboardId",
+      populate: { path: "scenes.mediaId" }
+    });
+
+    if (!project || !project.activeStoryboardId) {
+      return res.status(400).json({ message: "Project must have a storyboard generated first" });
+    }
+
+    const storyboard = project.activeStoryboardId;
+    let generatedCount = 0;
+
+    for (let idx = 0; idx < storyboard.scenes.length; idx++) {
+      const scene = storyboard.scenes[idx];
+      // Skip if scene already has an image and overwrite is not true
+      if (scene.mediaId && !overwrite) {
+        continue;
+      }
+
+      const promptText = scene.visualPrompt || scene.captionText || `Cinematic moment ${scene.sceneNumber}`;
+      console.log(`[API Generate All Images] Generating scene ${scene.sceneNumber}/${storyboard.scenes.length}: "${promptText.slice(0, 50)}..."`);
+
+      const generatedImageUrl = await generateSceneImageWithGemini(promptText, {
+        projectId: project._id,
+        title: project.title,
+        sceneNumber: scene.sceneNumber
+      });
+
+      if (generatedImageUrl) {
+        const mimeType = generatedImageUrl.endsWith(".png") ? "image/png" : "image/jpeg";
+        const mediaDoc = await Media.create({
+          projectId: project._id,
+          fileUrl: generatedImageUrl,
+          mediaType: "image",
+          originalFilename: `scene_frame_${scene.sceneNumber}.${mimeType.includes("png") ? "png" : "jpg"}`,
+          caption: promptText
+        });
+
+        scene.mediaId = mediaDoc._id;
+        await Storyboard.updateOne(
+          { _id: storyboard._id, "scenes.sceneNumber": scene.sceneNumber },
+          {
+            $set: {
+              "scenes.$.mediaId": mediaDoc._id
+            }
+          }
+        );
+        generatedCount++;
+      }
+    }
+
+    const refreshed = await Project.findById(id).populate({
+      path: "activeStoryboardId",
+      populate: { path: "scenes.mediaId" }
+    });
+
+    res.json({
+      message: `Successfully generated Google AI images for ${generatedCount} scene(s)`,
+      generatedCount,
+      storyboard: refreshed.activeStoryboardId
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // 8c. Generate Google Gemini Omni 1.1 AI Motion Video Clips for All Scenes
 storyVideoRouter.post("/projects/:id/scenes/generate-all-veo", async (req, res, next) => {
   try {

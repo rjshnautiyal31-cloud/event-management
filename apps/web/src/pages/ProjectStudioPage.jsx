@@ -158,6 +158,17 @@ export function ProjectStudioPage({ auth, token: propToken }) {
       if (activeProject.customVoiceId) {
         setCustomVoiceId(activeProject.customVoiceId);
       }
+      if (activeProject.activeSongId?.durationSeconds) {
+        const d = activeProject.activeSongId.durationSeconds;
+        const matchingDuration = d <= 45 ? "30" : d <= 75 ? "60" : d <= 105 ? "90" : "180";
+        setSelectedTargetDuration(matchingDuration);
+      }
+      if (activeProject.activeSongId?.genre) {
+        setSelectedGenre(activeProject.activeSongId.genre);
+      }
+      if (activeProject.activeSongId?.provider && ["google_lyria", "elevenlabs", "suno", "google_tts"].includes(activeProject.activeSongId.provider)) {
+        setSelectedMusicProvider(activeProject.activeSongId.provider);
+      }
       setProjectCharacters(Array.isArray(activeProject.characters) ? activeProject.characters : []);
       setProjectDirectorGuidelines(activeProject.directorGuidelines || "");
       if (activeProject.activeStoryboardId?.scenes) {
@@ -1208,7 +1219,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                                 : activeProject.activeSongId.provider?.includes("lyria")
                                 ? "🌟 Google DeepMind Lyria 3 Pro"
                                 : activeProject.activeSongId.provider || "Studio Audio"}
-                              {" "}• {activeProject.activeSongId.durationSeconds ? `${Math.floor(activeProject.activeSongId.durationSeconds / 60)}m ${activeProject.activeSongId.durationSeconds % 60}s` : "30s"}
+                              {" "}• {activeProject.activeSongId.durationSeconds ? (activeProject.activeSongId.durationSeconds >= 60 ? `${Math.floor(activeProject.activeSongId.durationSeconds / 60)}m ${activeProject.activeSongId.durationSeconds % 60}s` : `${activeProject.activeSongId.durationSeconds}s`) : "30s"}
                               {" "}• {activeProject.activeSongId.voiceType === "male"
                                 ? "👨 Male Vocals"
                                 : activeProject.activeSongId.voiceType === "duet"

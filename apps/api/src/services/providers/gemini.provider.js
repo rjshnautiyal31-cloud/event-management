@@ -115,18 +115,38 @@ export async function generateLyricsWithGemini(storySummary, targetGenre, option
   if (!clientInfo) return mockLyrics;
 
   try {
-    const isFullSong = targetDuration >= 90;
-    const structureHint = isFullSong
-      ? "Verse 1, Chorus, Verse 2, Chorus, Bridge, Chorus, Outro (complete ~3 min studio song structure)"
-      : "Verse 1, Chorus, Verse 2, Outro";
+    const isShortClip = targetDuration <= 45;
+    const isMediumTrack = targetDuration <= 90;
 
-    const prompt = `Write structured song lyrics (${structureHint}) in ${langConfig.name} (${langConfig.nativeName}) based on this story summary: "${storySummary}".
+    let prompt = "";
+    if (isShortClip) {
+      prompt = `Write very short, punchy song lyrics in ${langConfig.name} (${langConfig.nativeName}) based on this story summary: "${storySummary}".
+Genre style: ${targetGenre}.
+Target Duration: exactly ~${targetDuration} seconds (Short Social Clip / Reel format).
+CRITICAL REQUIREMENT: The lyrics must be very brief, with strictly 25 to 35 words TOTAL across the entire song, so it can be sung or spoken within ~20 seconds with musical intro and outro.
+Output only formatted lyrics:
+[Verse]
+(2 short lines)
+
+[Chorus]
+(2 short, catchy lines)`;
+    } else if (isMediumTrack) {
+      prompt = `Write concise structured song lyrics (Verse 1, Chorus, Verse 2, Outro) in ${langConfig.name} (${langConfig.nativeName}) based on this story summary: "${storySummary}".
 Genre style: ${targetGenre}.
 Target Duration: ~${targetDuration} seconds.
-${isFullSong ? "Compose rich, full-length narrative verses with around 120-180 words so it sustains a complete 2.5 to 3 minute musical performance." : "Compose concise lyrics suited for a short track."}
-Keep lines rhythmically balanced, poetic, expressive, and natural for singing in ${langConfig.name}.
-${langConfig.code !== "en" ? `Important: Write the lyrics authentically in ${langConfig.name} (${langConfig.nativeName}) with natural rhyme and musical meter.` : ""}
-Output only the formatted song lyrics with section headers like [Verse 1], [Chorus], [Verse 2], [Chorus], [Bridge], [Outro].`;
+Total length requirement: Around 60-80 words total so it completes in ~60-90 seconds.
+Output only formatted song lyrics with section headers [Verse 1], [Chorus], [Verse 2], [Outro].`;
+    } else {
+      prompt = `Write structured full-length song lyrics (Verse 1, Chorus, Verse 2, Chorus, Bridge, Chorus, Outro) in ${langConfig.name} (${langConfig.nativeName}) based on this story summary: "${storySummary}".
+Genre style: ${targetGenre}.
+Target Duration: ~${targetDuration} seconds (~3 min full studio song).
+Compose rich, narrative verses with around 130-180 words so it sustains a complete 2.5 to 3 minute musical performance.
+Output only formatted song lyrics with section headers [Verse 1], [Chorus], [Verse 2], [Chorus], [Bridge], [Outro].`;
+    }
+
+    if (langConfig.code !== "en") {
+      prompt += `\nImportant: Write the lyrics authentically in ${langConfig.name} (${langConfig.nativeName}) with natural rhyme and musical meter.`;
+    }
 
     const response = await clientInfo.ai.models.generateContent({
       model: clientInfo.modelName,

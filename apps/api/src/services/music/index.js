@@ -25,10 +25,54 @@ export function getAudioDurationFromFile(filePath) {
         const secs = parseFloat(match[3]);
         resolve(Math.round(hours * 3600 + mins * 60 + secs));
       } else {
-        resolve(180);
+        resolve(0);
       }
     });
   });
+}
+
+export async function enforceTargetAudioDuration(inputAudioPath, targetDurationSeconds) {
+  const targetSec = Number(targetDurationSeconds);
+  if (!targetSec || targetSec <= 0 || targetSec >= 240) return inputAudioPath;
+
+  const currentDuration = await getAudioDurationFromFile(inputAudioPath);
+  if (currentDuration <= 0) return inputAudioPath;
+  // If already within 2 seconds of target duration, keep as is
+  if (currentDuration <= targetSec + 2) return inputAudioPath;
+
+  console.log(`[Audio Duration Enforcer] Trimming ${currentDuration}s down to target ${targetSec}s with 2.5s musical fade-out...`);
+  const parsed = path.parse(inputAudioPath);
+  const trimmedPath = path.join(parsed.dir, `${parsed.name}_trimmed_${targetSec}_${Date.now()}${parsed.ext}`);
+  const fadeStart = Math.max(1, targetSec - 2.5);
+
+  try {
+    await new Promise((resolve, reject) => {
+      execFile(
+        activeFfmpegPath,
+        [
+          "-y",
+          "-i", inputAudioPath,
+          "-t", `${targetSec}`,
+          "-af", `afade=t=out:st=${fadeStart}:d=2.5`,
+          "-c:a", "libmp3lame",
+          "-b:a", "192k",
+          trimmedPath
+        ],
+        (err) => {
+          if (err) return reject(err);
+          resolve();
+        }
+      );
+    });
+
+    if (fs.existsSync(trimmedPath)) {
+      await fsPromises.unlink(inputAudioPath).catch(() => {});
+      await fsPromises.rename(trimmedPath, inputAudioPath);
+    }
+  } catch (err) {
+    console.warn("[Audio Duration Enforcer] Failed to trim audio:", err.message);
+  }
+  return inputAudioPath;
 }
 
 function extractLyricsFromLyriaOutput(outputText) {
@@ -240,8 +284,8 @@ class GoogleTtsMusicAdapter {
       vocalDuration = await getAudioDurationFromFile(vocalPath);
     }
 
-    // Determine target duration: ensure it covers full vocals + 3s musical outro, or matches requested durationSeconds
-    const targetDuration = Math.max(Number(durationSeconds) || 60, vocalDuration > 0 ? vocalDuration + 3 : 30);
+    // Target duration strictly matches requested durationSeconds (e.g. 30s reel or 180s full song)
+    const targetDuration = Number(durationSeconds) || 60;
 
     // 2. Generate background musical chord progression matching selected genre & target duration
     const wavBuffer = createMusicalMelodyWavBuffer(targetDuration, 44100, genre);
@@ -274,6 +318,7 @@ class GoogleTtsMusicAdapter {
       await fsPromises.rename(bgPath, outputPath);
     }
 
+    await enforceTargetAudioDuration(outputPath, targetDuration);
     const audioBuffer = await fsPromises.readFile(outputPath);
     const storageKey = buildStoryStorageKey({
       projectId,
@@ -483,7 +528,7 @@ class ElevenLabsMusicAdapter {
       vocalDuration = await getAudioDurationFromFile(vocalPath);
     }
 
-    const targetDuration = Math.max(Number(durationSeconds) || 60, vocalDuration > 0 ? vocalDuration + 3 : 30);
+    const targetDuration = Number(durationSeconds) || 60;
     const wavBuffer = createMusicalMelodyWavBuffer(targetDuration, 44100, genre);
     await fsPromises.writeFile(bgPath, wavBuffer);
 
@@ -513,6 +558,7 @@ class ElevenLabsMusicAdapter {
       await fsPromises.rename(bgPath, outputPath);
     }
 
+    await enforceTargetAudioDuration(outputPath, targetDuration);
     const audioBuffer = await fsPromises.readFile(outputPath);
     const storageKey = buildStoryStorageKey({
       projectId,
@@ -566,9 +612,19 @@ export class GoogleLyriaMusicAdapter {
         vocalStyleInstruction = `${customVoicePrompt.trim()} singing vocals`;
       }
 
+      const targetSec = Number(durationSeconds) || 180;
+      const isShortTrack = targetSec <= 45;
+      const isMediumTrack = targetSec <= 90;
+      const durationDesc = isShortTrack
+        ? `strictly ~${targetSec} seconds (Short Social Clip / Reel format with quick punchy intro, single verse, hook chorus, and rapid outro resolution)`
+        : isMediumTrack
+        ? `~${targetSec} seconds (Standard Radio Track format)`
+        : `~${targetSec} seconds (Full Studio Song format with intro, verse 1, chorus, verse 2, chorus, bridge, outro)`;
+
       // Construct rich musical prompt incorporating story context and lyrics
       let promptInput = `Song Genre: ${genre} (${mood}).\n`;
       if (title) promptInput += `Title: ${title}.\n`;
+      promptInput += `Target Track Duration: ${durationDesc}.\n`;
       promptInput += `Language of Vocals: ${langConfig.name} (${langConfig.nativeName}).\n`;
       promptInput += `Vocal Performance Style: ${vocalStyleInstruction}.\n`;
       if (storyContext && storyContext.trim()) {
@@ -577,7 +633,7 @@ export class GoogleLyriaMusicAdapter {
       if (lyrics && lyrics.trim().length > 10) {
         promptInput += `Lyrics / Thematic Guide (in ${langConfig.name}):\n${lyrics.trim().slice(0, 1200)}\n`;
       }
-      promptInput += `Perform an authentic, cohesive song with ${vocalStyleInstruction} in ${langConfig.name}, natural harmonies, evocative instrumentation matching ${genre}, and a balanced musical structure (intro, verses, chorus, bridge, outro).`;
+      promptInput += `Perform an authentic, cohesive song with ${vocalStyleInstruction} in ${langConfig.name}, natural harmonies, evocative instrumentation matching ${genre}. The total length of the performance must be strictly tailored for ${targetSec} seconds.`;
 
       let interaction = null;
       let lastLyriaErr = null;
@@ -605,8 +661,12 @@ export class GoogleLyriaMusicAdapter {
       if (interaction?.output_audio?.data) {
         const outputFilename = `lyria_song_${timestamp}.mp3`;
         const outputPath = path.join(uploadDir, outputFilename);
-        const audioBuffer = Buffer.from(interaction.output_audio.data, "base64");
-        await fsPromises.writeFile(outputPath, audioBuffer);
+        const rawAudioBuffer = Buffer.from(interaction.output_audio.data, "base64");
+        await fsPromises.writeFile(outputPath, rawAudioBuffer);
+
+        await enforceTargetAudioDuration(outputPath, durationSeconds);
+        const audioBuffer = await fsPromises.readFile(outputPath);
+
         const storageKey = buildStoryStorageKey({
           projectId,
           title,
@@ -618,7 +678,7 @@ export class GoogleLyriaMusicAdapter {
         const realDuration = await getAudioDurationFromFile(outputPath);
         const extractedLyrics = extractLyricsFromLyriaOutput(interaction.output_text);
 
-        console.log(`[Google Lyria AI Music] Lyria 3 Pro created full song: ${outputFilename} (${realDuration}s, ${audioBuffer.length} bytes) in ${langConfig.name}`);
+        console.log(`[Google Lyria AI Music] Lyria 3 Pro created song: ${outputFilename} (${realDuration}s, ${audioBuffer.length} bytes) in ${langConfig.name}`);
         return {
           audioUrl,
           durationSeconds: realDuration,
@@ -684,6 +744,7 @@ export class GoogleLyriaMusicAdapter {
         });
         await fsPromises.unlink(bgWavPath).catch(() => {});
 
+        await enforceTargetAudioDuration(outputPath, durationSeconds);
         const audioBuffer = await fsPromises.readFile(outputPath);
         const storageKey = buildStoryStorageKey({
           projectId,

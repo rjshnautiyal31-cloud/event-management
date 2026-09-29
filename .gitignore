@@ -12,3 +12,4 @@ apps/api/gcp-service-account.json
 apps/api/uploads/*
 !apps/api/uploads/.gitkeep
 .mongo-data/
+uploads/

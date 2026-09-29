@@ -324,7 +324,7 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
         }
 
         const segOutputOpts = [
-          "-vf", `scale=${preset.width}:${preset.height}:force_original_aspect_ratio=decrease,pad=${preset.width}:${preset.height}:(ow-iw)/2:(oh-ih)/2:black,format=yuv420p`,
+          "-vf", `scale=${preset.width}:${preset.height}:force_original_aspect_ratio=increase,crop=${preset.width}:${preset.height},format=yuv420p`,
           "-r", "25",
           "-an",
           "-c:v", "libx264",

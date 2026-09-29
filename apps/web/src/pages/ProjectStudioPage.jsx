@@ -407,12 +407,13 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     if (!activeProject?._id) return;
     setGeneratingImageSceneIdx(sceneIdx);
     setError("");
-    setSuccess(`🎨 Generating AI image frame for Scene ${sceneIdx + 1}...`);
+    const targetAspectRatio = videoPresets[selectedPreset]?.aspectRatio || "16:9";
+    setSuccess(`🎨 Generating AI image frame (${targetAspectRatio}) for Scene ${sceneIdx + 1}...`);
     try {
       await api(`/api/story-video/projects/${activeProject._id}/scenes/${sceneIdx}/image`, {
         token,
         method: "POST",
-        body: { prompt }
+        body: { prompt, aspectRatio: targetAspectRatio }
       });
       setSuccess(`🎉 New AI image frame generated for Scene ${sceneIdx + 1}!`);
       const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });
@@ -548,12 +549,13 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     if (!activeProject) return;
     setGeneratingAllImages(true);
     setError("");
-    setSuccess("🎨 Synthesizing Google AI high-definition scene frames for storyboard (~5-10s per scene)...");
+    const targetAspectRatio = videoPresets[selectedPreset]?.aspectRatio || "16:9";
+    setSuccess(`🎨 Synthesizing Google AI high-definition ${targetAspectRatio} scene frames for storyboard (~5-10s per scene)...`);
     try {
       const res = await api(`/api/story-video/projects/${activeProject._id}/scenes/generate-all-images`, {
         token,
         method: "POST",
-        body: { overwrite }
+        body: { overwrite, aspectRatio: targetAspectRatio }
       });
       setSuccess(`🎉 ${res.message || "Google AI scene images generated successfully!"}`);
       const updated = await api(`/api/story-video/projects/${activeProject._id}`, { token });

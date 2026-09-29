@@ -440,7 +440,8 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
         const generatedImageUrl = await generateSceneImageWithGemini(sceneItem.visualIdea, {
           projectId: project._id,
           title: project.title,
-          sceneNumber: sceneItem.sceneNumber || 1
+          sceneNumber: sceneItem.sceneNumber || 1,
+          aspectRatio: "16:9"
         });
         if (generatedImageUrl) {
           media = await Media.create({
@@ -636,18 +637,20 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/image", async (req, res,
     const generatedImageUrl = await generateSceneImageWithGemini(promptText, {
       projectId: project._id,
       title: project.title,
-      sceneNumber: scene.sceneNumber
+      sceneNumber: scene.sceneNumber,
+      aspectRatio: req.body.aspectRatio || "16:9"
     });
 
     if (!generatedImageUrl) {
       return res.status(500).json({ message: "Unable to generate image frame for this scene" });
     }
 
+    const mimeType = generatedImageUrl.endsWith(".png") ? "image/png" : "image/jpeg";
     const mediaDoc = await Media.create({
       projectId: project._id,
       fileUrl: generatedImageUrl,
       mediaType: "image",
-      originalFilename: `scene_frame_${scene.sceneNumber}.jpg`,
+      originalFilename: `scene_frame_${scene.sceneNumber}.${mimeType.includes("png") ? "png" : "jpg"}`,
       caption: promptText
     });
 
@@ -677,7 +680,7 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/image", async (req, res,
 storyVideoRouter.post("/projects/:id/scenes/generate-all-images", async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { overwrite = false } = req.body || {};
+    const { overwrite = false, aspectRatio = "16:9" } = req.body || {};
     const project = await Project.findById(id).populate({
       path: "activeStoryboardId",
       populate: { path: "scenes.mediaId" }
@@ -703,7 +706,8 @@ storyVideoRouter.post("/projects/:id/scenes/generate-all-images", async (req, re
       const generatedImageUrl = await generateSceneImageWithGemini(promptText, {
         projectId: project._id,
         title: project.title,
-        sceneNumber: scene.sceneNumber
+        sceneNumber: scene.sceneNumber,
+        aspectRatio
       });
 
       if (generatedImageUrl) {

@@ -246,7 +246,7 @@ Return a JSON array of scenes.`;
 
 // 4. Generate Cinematic Visual Scene Images using Google AI with High-Resolution Fallback
 export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
-  const { projectId, title = "", sceneNumber = 1 } = (typeof options === "object" && options !== null) ? options : {};
+  const { projectId, title = "", sceneNumber = 1, aspectRatio = "16:9" } = (typeof options === "object" && options !== null) ? options : {};
   const clientInfo = getGeminiClient();
 
   if (clientInfo?.ai) {
@@ -254,12 +254,17 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
 
     // 1. Primary: Google Gemini Flash Image (Vertex AI native multimodal image generation)
     try {
-      console.log(`[Google AI Image] Generating high-definition 16:9 scene frame with gemini-2.5-flash-image for Scene ${sceneNumber}...`);
-      const enhancedPrompt = `A photorealistic 16:9 widescreen cinematic shot, 8k resolution, professional photography, natural lighting: ${visualPrompt}`;
+      console.log(`[Google AI Image] Generating high-definition ${aspectRatio} scene frame with gemini-2.5-flash-image for Scene ${sceneNumber}...`);
+      const enhancedPrompt = `A photorealistic ${aspectRatio} widescreen cinematic shot, 8k resolution, professional photography, natural lighting: ${visualPrompt}`;
 
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-image",
-        contents: enhancedPrompt
+        contents: enhancedPrompt,
+        config: {
+          imageConfig: {
+            aspectRatio: aspectRatio
+          }
+        }
       });
 
       const parts = response.candidates?.[0]?.content?.parts || [];
@@ -286,7 +291,7 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
 
     // 2. Secondary: Google Imagen 3 via generateImages (if publisher model is enabled)
     try {
-      console.log(`[Gemini Imagen 3] Generating 16:9 scene image for prompt: "${visualPrompt.slice(0, 80)}..."`);
+      console.log(`[Gemini Imagen 3] Generating ${aspectRatio} scene image for prompt: "${visualPrompt.slice(0, 80)}..."`);
 
       const response = await ai.models.generateImages({
         model: "imagen-3.0-generate-002",
@@ -294,7 +299,7 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
         config: {
           numberOfImages: 1,
           outputMimeType: "image/jpeg",
-          aspectRatio: "16:9"
+          aspectRatio: aspectRatio
         }
       });
 
@@ -321,10 +326,10 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
   try {
     const cleanPrompt = encodeURIComponent(visualPrompt.slice(0, 250));
     const seed = Math.floor(Math.random() * 100000);
-    // Request full 1920x1080 resolution with Flux model, nologo=true, and private=true to prevent blurry/watermarked Sana outputs
-    const aiImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1920&height=1080&model=flux&nologo=true&private=true&enhance=false&seed=${seed}`;
+    const dims = aspectRatio === "9:16" ? "width=1080&height=1920" : (aspectRatio === "1:1" ? "width=1080&height=1080" : "width=1920&height=1080");
+    const aiImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?${dims}&model=flux&nologo=true&private=true&enhance=false&seed=${seed}`;
 
-    console.log(`[AI Image Generator] Fetching high-definition 1920x1080 scene frame (seed=${seed})...`);
+    console.log(`[AI Image Generator] Fetching high-definition ${dims} scene frame (seed=${seed})...`);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 20000);
 

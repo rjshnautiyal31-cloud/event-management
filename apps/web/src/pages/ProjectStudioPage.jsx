@@ -700,7 +700,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
   const selectedEvent = events.find(ev => ev._id === selectedEventId);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans pb-16">
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans pb-16 overflow-x-hidden">
       {/* Shared Navbar Header & Hamburger Menu */}
       <Navbar auth={auth} />
 
@@ -717,39 +717,42 @@ export function ProjectStudioPage({ auth, token: propToken }) {
       />
 
       {/* Main Studio Content Area */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-slate-800 w-full flex-1">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8 text-slate-800 w-full flex-1 min-w-0">
         {/* Header Banner */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#0A2D59] text-white p-6 rounded-2xl shadow-xl mb-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#0A2D59] text-white p-4 sm:p-6 rounded-2xl shadow-xl mb-8">
         <div>
-          <h1 className="text-2xl font-black flex items-center gap-2">
+          <h1 className="text-xl sm:text-2xl font-black flex items-center gap-2">
             <span>🎬</span> Event AI Story-to-Video Studio
           </h1>
-          <p className="text-slate-300 text-sm mt-1">
+          <p className="text-slate-300 text-xs sm:text-sm mt-1">
             Generate AI lyrics, music tracks, and MP4 videos for your events (Event Admin & Super Admin Access).
           </p>
         </div>
 
         {/* Event Context Selector */}
-        <div className="flex items-center gap-3 bg-white/10 p-2.5 rounded-xl border border-white/20">
-          <label className="text-xs font-extrabold uppercase text-slate-200">Event:</label>
-          <select
-            value={selectedEventId}
-            onChange={(e) => setSelectedEventId(e.target.value)}
-            className="bg-white text-slate-900 text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none"
-          >
-            {events.map((ev) => (
-              <option key={ev._id} value={ev._id}>
-                {ev.title}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 bg-white/10 p-2.5 rounded-xl border border-white/20 w-full md:w-auto min-w-0">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <label className="text-xs font-extrabold uppercase text-slate-200 shrink-0">Event:</label>
+            <select
+              value={selectedEventId}
+              onChange={(e) => setSelectedEventId(e.target.value)}
+              className="bg-white text-slate-900 text-xs font-bold px-3 py-2 rounded-lg border border-slate-200 focus:outline-none flex-1 min-w-0 truncate"
+            >
+              {events.map((ev) => (
+                <option key={ev._id} value={ev._id}>
+                  {ev.title}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <button
             onClick={() => setShowCreateModal(true)}
             disabled={!selectedEventId}
-            className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold px-3.5 py-1.5 rounded-lg shadow transition text-xs flex items-center gap-1"
+            className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold px-3.5 py-2 rounded-lg shadow transition text-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50 whitespace-nowrap"
           >
-            <span>+</span> Story
+            <span className="font-black text-sm leading-none">+</span>
+            <span>New Story</span>
           </button>
         </div>
       </div>
@@ -810,11 +813,11 @@ export function ProjectStudioPage({ auth, token: propToken }) {
         </div>
 
         {/* Studio Canvas Area */}
-        <div className="lg:col-span-3 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        <div className="lg:col-span-3 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 min-w-0">
           {activeProject ? (
-            <div>
+            <div className="w-full min-w-0">
               {/* Studio Tabs Navigation */}
-              <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-4 mb-6">
+              <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-4 mb-6 w-full">
                 {[
                   { id: "story", label: "1. Story Analysis", icon: "📖" },
                   { id: "lyrics", label: "2. AI Lyrics & Audio", icon: "🎵" },
@@ -825,7 +828,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`px-4 py-2 rounded-xl font-bold text-xs transition flex items-center gap-1.5 ${
+                    className={`px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                       activeTab === tab.id
                         ? "bg-[#0A2D59] text-white shadow-sm"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -1838,158 +1841,178 @@ export function ProjectStudioPage({ auth, token: propToken }) {
 
       {/* Modal: New Event Story Project */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <h3 className="text-lg font-black text-slate-900">
-              Create AI Story for "{selectedEvent?.title}"
-            </h3>
-            <form onSubmit={handleCreateProject} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Story Title</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Highlights & Key Moments"
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A2D59]"
-                />
-              </div>
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowCreateModal(false);
+          }}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto"
+        >
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl flex flex-col max-h-[90vh] max-h-[90dvh] my-auto overflow-hidden border border-slate-100">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 shrink-0 bg-white">
+              <h3 className="text-base sm:text-lg font-black text-slate-900 truncate pr-2">
+                Create AI Story for "{selectedEvent?.title}"
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center font-bold text-sm transition-colors shrink-0 cursor-pointer"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Language for Song & Video</label>
-                <select
-                  value={newLanguage}
-                  onChange={(e) => setNewLanguage(e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-semibold focus:ring-2 focus:ring-[#0A2D59] bg-white"
-                >
-                  {languages.map((l) => (
-                    <option key={l.code} value={l.code}>
-                      {l.flag} {l.name} ({l.nativeName})
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Lyrics, singing vocals, and synchronized subtitles will be generated in this language.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Story Narrative / Event Memories</label>
-                <textarea
-                  required
-                  rows={4}
-                  placeholder="Type or paste the story, speech, or summary of this event..."
-                  value={newStory}
-                  onChange={(e) => setNewTitleStory(e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A2D59]"
-                />
-              </div>
-
-              {/* Cast & Characters (Visual Consistency) */}
-              <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                      <span>👥</span> Cast & Characters (Optional)
-                    </span>
-                    <p className="text-[11px] text-slate-500">Helps AI render consistent faces & attire across all video scenes.</p>
-                  </div>
-                  {newCharacters.length > 0 && (
-                    <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-                      {newCharacters.length} added
-                    </span>
-                  )}
+            <form onSubmit={handleCreateProject} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Story Title</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Highlights & Key Moments"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A2D59]"
+                  />
                 </div>
 
-                {newCharacters.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {newCharacters.map((c, i) => (
-                      <span key={i} className="inline-flex items-center gap-1 bg-white border border-slate-300 text-slate-800 text-[11px] font-semibold px-2.5 py-1 rounded-lg shadow-sm">
-                        <span>👤 {c.name}</span>
-                        {c.role && <span className="text-slate-400 text-[10px]">({c.role})</span>}
-                        <button
-                          type="button"
-                          onClick={() => setNewCharacters(prev => prev.filter((_, idx) => idx !== i))}
-                          className="text-slate-400 hover:text-red-500 text-xs ml-1 font-bold"
-                        >
-                          ✕
-                        </button>
-                      </span>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Language for Song & Video</label>
+                  <select
+                    value={newLanguage}
+                    onChange={(e) => setNewLanguage(e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-semibold focus:ring-2 focus:ring-[#0A2D59] bg-white"
+                  >
+                    {languages.map((l) => (
+                      <option key={l.code} value={l.code}>
+                        {l.flag} {l.name} ({l.nativeName})
+                      </option>
                     ))}
-                  </div>
-                )}
+                  </select>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Lyrics, singing vocals, and synchronized subtitles will be generated in this language.
+                  </p>
+                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <input
-                    type="text"
-                    placeholder="Name (e.g. Rahul)"
-                    value={newCharName}
-                    onChange={(e) => setNewCharName(e.target.value)}
-                    className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-1 focus:ring-[#0A2D59]"
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Story Narrative / Event Memories</label>
+                  <textarea
+                    required
+                    rows={4}
+                    placeholder="Type or paste the story, speech, or summary of this event..."
+                    value={newStory}
+                    onChange={(e) => setNewTitleStory(e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-[#0A2D59]"
                   />
-                  <input
-                    type="text"
-                    placeholder="Role (e.g. Groom)"
-                    value={newCharRole}
-                    onChange={(e) => setNewCharRole(e.target.value)}
-                    className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-1 focus:ring-[#0A2D59]"
-                  />
-                  <div className="flex gap-1.5">
+                </div>
+
+                {/* Cast & Characters (Visual Consistency) */}
+                <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                        <span>👥</span> Cast & Characters (Optional)
+                      </span>
+                      <p className="text-[11px] text-slate-500">Helps AI render consistent faces & attire across all video scenes.</p>
+                    </div>
+                    {newCharacters.length > 0 && (
+                      <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                        {newCharacters.length} added
+                      </span>
+                    )}
+                  </div>
+
+                  {newCharacters.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {newCharacters.map((c, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 bg-white border border-slate-300 text-slate-800 text-[11px] font-semibold px-2.5 py-1 rounded-lg shadow-sm">
+                          <span>👤 {c.name}</span>
+                          {c.role && <span className="text-slate-400 text-[10px]">({c.role})</span>}
+                          <button
+                            type="button"
+                            onClick={() => setNewCharacters(prev => prev.filter((_, idx) => idx !== i))}
+                            className="text-slate-400 hover:text-red-500 text-xs ml-1 font-bold cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <input
                       type="text"
-                      placeholder="Appearance / Attire"
-                      value={newCharDesc}
-                      onChange={(e) => setNewCharDesc(e.target.value)}
-                      className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-1 focus:ring-[#0A2D59] flex-1"
+                      placeholder="Name (e.g. Rahul)"
+                      value={newCharName}
+                      onChange={(e) => setNewCharName(e.target.value)}
+                      className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-1 focus:ring-[#0A2D59]"
                     />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!newCharName.trim()) return;
-                        setNewCharacters(prev => [...prev, {
-                          name: newCharName.trim(),
-                          role: newCharRole.trim(),
-                          visualDescription: newCharDesc.trim()
-                        }]);
-                        setNewCharName("");
-                        setNewCharRole("");
-                        setNewCharDesc("");
-                      }}
-                      className="bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold px-2.5 py-1.5 rounded-lg whitespace-nowrap"
-                    >
-                      + Add
-                    </button>
+                    <input
+                      type="text"
+                      placeholder="Role (e.g. Groom)"
+                      value={newCharRole}
+                      onChange={(e) => setNewCharRole(e.target.value)}
+                      className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-1 focus:ring-[#0A2D59]"
+                    />
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        placeholder="Appearance / Attire"
+                        value={newCharDesc}
+                        onChange={(e) => setNewCharDesc(e.target.value)}
+                        className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-1 focus:ring-[#0A2D59] flex-1 min-w-0"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!newCharName.trim()) return;
+                          setNewCharacters(prev => [...prev, {
+                            name: newCharName.trim(),
+                            role: newCharRole.trim(),
+                            visualDescription: newCharDesc.trim()
+                          }]);
+                          setNewCharName("");
+                          setNewCharRole("");
+                          setNewCharDesc("");
+                        }}
+                        className="bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold px-2.5 py-1.5 rounded-lg whitespace-nowrap cursor-pointer shrink-0"
+                      >
+                        + Add
+                      </button>
+                    </div>
                   </div>
+                </div>
+
+                {/* Director Guidelines & Must-Have Scenes */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                    <span>🎬</span> Director Guidelines & Must-Have Scenes (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. Include stage garland exchange, grand cake cutting, and family toast..."
+                    value={newDirectorGuidelines}
+                    onChange={(e) => setNewDirectorGuidelines(e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-[#0A2D59]"
+                  />
                 </div>
               </div>
 
-              {/* Director Guidelines & Must-Have Scenes */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                  <span>🎬</span> Director Guidelines & Must-Have Scenes (Optional)
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Include stage garland exchange, grand cake cutting, and family toast..."
-                  value={newDirectorGuidelines}
-                  onChange={(e) => setNewDirectorGuidelines(e.target.value)}
-                  className="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-[#0A2D59]"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
+              {/* Modal Sticky Footer */}
+              <div className="flex justify-end gap-2 px-5 sm:px-6 py-3.5 border-t border-slate-100 shrink-0 bg-slate-50 rounded-b-2xl">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 rounded-xl text-slate-600 font-bold text-xs hover:bg-slate-100"
+                  className="px-4 py-2 rounded-xl text-slate-600 font-bold text-xs hover:bg-slate-200/70 transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="bg-[#0A2D59] text-white font-bold px-5 py-2 rounded-xl text-xs shadow hover:bg-slate-800 transition"
+                  className="bg-[#0A2D59] text-white font-bold px-5 py-2 rounded-xl text-xs shadow hover:bg-slate-800 transition cursor-pointer disabled:opacity-50"
                 >
                   {loading ? "Creating..." : "Create Story Project"}
                 </button>

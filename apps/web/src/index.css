@@ -107,8 +107,12 @@ body {
   animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Safe Area Inset Padding for Mobile Bottom Bar */
-.pb-mobile-nav {
-  padding-bottom: 5.5rem;
+/* Scrollbar hidden utility */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 

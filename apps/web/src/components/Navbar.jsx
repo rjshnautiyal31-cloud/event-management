@@ -55,21 +55,22 @@ export function Navbar({
           </Link>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        {/* Desktop Navigation Links (Hidden on mobile for clean UI) */}
+        <div className="hidden md:flex items-center gap-2 shrink-0">
           {location.pathname !== "/dashboard" && (
             <Link
               to="/dashboard"
-              className="inline-flex items-center gap-1 sm:gap-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors px-2.5 sm:px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/80"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/80"
             >
               <span>📊</span>
-              <span className="hidden sm:inline">Dashboard</span>
+              <span>Dashboard</span>
             </Link>
           )}
 
           {isSuperAdmin && location.pathname !== "/generator" && (
             <Link
               to="/generator"
-              className="hidden md:inline-flex items-center gap-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/80"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors px-3 py-1.5 text-xs font-bold text-slate-700 border border-slate-200/80"
             >
               <span>🎨 Studio</span>
             </Link>
@@ -77,30 +78,30 @@ export function Navbar({
 
           <Link
             to="/studio"
-            className={`inline-flex items-center gap-1 sm:gap-1.5 rounded-xl px-2.5 sm:px-3.5 py-1.5 text-xs font-bold transition-all ${
+            className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all ${
               location.pathname === "/studio"
                 ? "bg-[#0A2D59] text-white shadow-sm shadow-[#0A2D59]/20 ring-2 ring-[#0A2D59]/20"
                 : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80"
             }`}
           >
             <span>🎬</span>
-            <span className="hidden sm:inline">AI Story Studio</span>
+            <span>AI Story Studio</span>
           </Link>
 
           {location.pathname !== "/scan" && (
             <Link
               to="/scan"
-              className="inline-flex items-center gap-1 sm:gap-1.5 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-2.5 sm:px-3.5 py-1.5 text-xs font-bold text-white shadow-sm shadow-[#0A2D59]/20"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-3.5 py-1.5 text-xs font-bold text-white shadow-sm shadow-[#0A2D59]/20"
             >
               <span>📷</span>
-              <span className="hidden sm:inline">Scanner</span>
+              <span>Scanner</span>
             </Link>
           )}
 
           {isSuperAdmin && (
             <Link
               to="/settings"
-              className={`inline-flex items-center gap-1 sm:gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 text-xs font-bold transition-all ${
+              className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
                 location.pathname === "/settings"
                   ? "bg-[#0A2D59] text-white shadow-sm shadow-[#0A2D59]/20 ring-2 ring-[#0A2D59]/20"
                   : "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80"
@@ -108,15 +109,27 @@ export function Navbar({
               title="System & Environment Settings"
             >
               <span>⚙️</span>
-              <span className="hidden lg:inline">Settings</span>
+              <span>Settings</span>
             </Link>
           )}
 
           <button
             onClick={() => auth.logout()}
-            className="hidden sm:inline-block rounded-xl bg-slate-100 hover:bg-red-50 hover:text-red-600 transition-colors px-2.5 py-1.5 text-xs text-slate-500 font-semibold border border-slate-200 cursor-pointer"
+            className="rounded-xl bg-slate-100 hover:bg-red-50 hover:text-red-600 transition-colors px-3 py-1.5 text-xs text-slate-500 font-semibold border border-slate-200 cursor-pointer"
           >
             Logout
+          </button>
+        </div>
+
+        {/* Mobile Clean User Avatar Trigger */}
+        <div className="flex md:hidden items-center gap-2 shrink-0">
+          <button
+            onClick={() => setHamburgerMenuOpen(true)}
+            className="h-8 w-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-[#0A2D59] flex items-center justify-center font-black text-xs transition-all border border-slate-200/80 shadow-2xs active:scale-95 cursor-pointer"
+            title="Open Menu"
+            aria-label="Open Navigation Menu"
+          >
+            {auth.user?.name?.charAt(0)?.toUpperCase() || "U"}
           </button>
         </div>
       </header>
@@ -153,16 +166,91 @@ export function Navbar({
               </button>
             </div>
 
-            {/* Navigation Workspaces Section */}
+            {/* Navigation Drawer Body */}
             <div className="p-4 space-y-6 flex-1">
+              {/* Section 1: Core Applications */}
               <div>
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 px-2">
-                  Workspaces & Control
+                  Navigation
+                </p>
+                <div className="space-y-1">
+                  <Link
+                    to="/dashboard"
+                    onClick={() => setHamburgerMenuOpen(false)}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                      location.pathname === "/dashboard"
+                        ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
+                        : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span>📊</span>
+                      <span>Dashboard Hub</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">➔</span>
+                  </Link>
+
+                  <Link
+                    to="/studio"
+                    onClick={() => setHamburgerMenuOpen(false)}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                      location.pathname === "/studio"
+                        ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
+                        : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span>🎬</span>
+                      <span>AI Story Studio</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">➔</span>
+                  </Link>
+
+                  <Link
+                    to="/scan"
+                    onClick={() => setHamburgerMenuOpen(false)}
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                      location.pathname === "/scan"
+                        ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
+                        : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span>📷</span>
+                      <span>Live Entrance Scanner</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">➔</span>
+                  </Link>
+
+                  {isSuperAdmin && (
+                    <Link
+                      to="/generator"
+                      onClick={() => setHamburgerMenuOpen(false)}
+                      className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                        location.pathname === "/generator"
+                          ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
+                          : "text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <span>🎨</span>
+                        <span>QR Studio Generator</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400">➔</span>
+                    </Link>
+                  )}
+                </div>
+              </div>
+
+              {/* Section 2: Event Workspaces & Tabs (Hidden on mobile when on /dashboard since bottom bar is active) */}
+              <div className={location.pathname === "/dashboard" ? "hidden md:block" : ""}>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 px-2">
+                  Event Workspaces
                 </p>
                 <div className="space-y-1">
                   <button
                     onClick={() => handleNavTab("overview")}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       activeTab === "overview" && location.pathname === "/dashboard"
                         ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
                         : "text-slate-700 hover:bg-slate-100"
@@ -177,7 +265,7 @@ export function Navbar({
 
                   <button
                     onClick={() => handleNavTab("attendees")}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       activeTab === "attendees" && location.pathname === "/dashboard"
                         ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
                         : "text-slate-700 hover:bg-slate-100"
@@ -192,7 +280,7 @@ export function Navbar({
 
                   <button
                     onClick={() => handleNavTab("gates")}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       activeTab === "gates" && location.pathname === "/dashboard"
                         ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
                         : "text-slate-700 hover:bg-slate-100"
@@ -200,7 +288,7 @@ export function Navbar({
                   >
                     <span className="flex items-center gap-2.5">
                       <span>📍</span>
-                      <span>Gates & Posts</span>
+                      <span>Gates & Checkpoints</span>
                     </span>
                     <span className="text-[10px] font-extrabold text-slate-400">➔</span>
                   </button>
@@ -209,7 +297,7 @@ export function Navbar({
                     <>
                       <button
                         onClick={() => handleNavTab("events")}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                           activeTab === "events" && location.pathname === "/dashboard"
                             ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
                             : "text-slate-700 hover:bg-slate-100"
@@ -224,7 +312,7 @@ export function Navbar({
 
                       <button
                         onClick={() => handleNavTab("team")}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                           activeTab === "team" && location.pathname === "/dashboard"
                             ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
                             : "text-slate-700 hover:bg-slate-100"
@@ -241,51 +329,57 @@ export function Navbar({
                 </div>
               </div>
 
-              {/* Tools & Utilities */}
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 px-2">
-                  Tools & Shortcuts
-                </p>
-                <div className="space-y-1">
-                  {isSuperAdmin && (
-                    <Link
-                      to="/generator"
-                      onClick={() => setHamburgerMenuOpen(false)}
-                      className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                        location.pathname === "/generator"
-                          ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
-                          : "text-slate-700 hover:bg-slate-100"
-                      }`}
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <span>🎨</span>
-                        <span>QR Studio Generator</span>
-                      </span>
-                      <span className="text-[10px] text-slate-400">↗</span>
-                    </Link>
-                  )}
+              {/* Section 3: Event Quick Actions */}
+              {isAdmin && (onOpenCreateEvent || onOpenWalkIn || onOpenBulkImport) && (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 px-2">
+                    Event Actions
+                  </p>
+                  <div className="space-y-1">
+                    {onOpenCreateEvent && (
+                      <button
+                        onClick={() => { onOpenCreateEvent(); setHamburgerMenuOpen(false); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-[#0A2D59] bg-slate-50 hover:bg-slate-100 transition-all border border-slate-200 cursor-pointer"
+                      >
+                        <span>➕</span>
+                        <span>Create New Event</span>
+                      </button>
+                    )}
 
-                  <Link
-                    to="/studio"
-                    onClick={() => setHamburgerMenuOpen(false)}
-                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                      location.pathname === "/studio"
-                        ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
-                        : "text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <span>🎬</span>
-                      <span>AI Story Studio</span>
-                    </span>
-                    <span className="text-[10px] text-slate-400">↗</span>
-                  </Link>
+                    {onOpenWalkIn && (
+                      <button
+                        onClick={() => { onOpenWalkIn(); setHamburgerMenuOpen(false); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
+                      >
+                        <span>📝</span>
+                        <span>Walk-In Guest Registration</span>
+                      </button>
+                    )}
 
-                  {isSuperAdmin && (
+                    {onOpenBulkImport && (
+                      <button
+                        onClick={() => { onOpenBulkImport(); setHamburgerMenuOpen(false); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
+                      >
+                        <span>📥</span>
+                        <span>Bulk Import CSV / Excel</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Section 4: System Utilities */}
+              {isSuperAdmin && (
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 px-2">
+                    System
+                  </p>
+                  <div className="space-y-1">
                     <Link
                       to="/settings"
                       onClick={() => setHamburgerMenuOpen(false)}
-                      className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                      className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all ${
                         location.pathname === "/settings"
                           ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
                           : "text-slate-700 hover:bg-slate-100"
@@ -295,61 +389,11 @@ export function Navbar({
                         <span>⚙️</span>
                         <span>System Settings</span>
                       </span>
-                      <span className="text-[10px] text-slate-400">↗</span>
+                      <span className="text-[10px] text-slate-400">➔</span>
                     </Link>
-                  )}
-
-                  <Link
-                    to="/scan"
-                    onClick={() => setHamburgerMenuOpen(false)}
-                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                      location.pathname === "/scan"
-                        ? "bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20"
-                        : "text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <span>📷</span>
-                      <span>Live Entrance Scanner</span>
-                    </span>
-                    <span className="text-[10px] text-slate-400">↗</span>
-                  </Link>
-
-                  {isAdmin && (
-                    <>
-                      {onOpenCreateEvent && (
-                        <button
-                          onClick={() => { onOpenCreateEvent(); setHamburgerMenuOpen(false); }}
-                          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-[#0A2D59] bg-slate-50 hover:bg-slate-100 transition-all border border-slate-200 cursor-pointer"
-                        >
-                          <span>➕</span>
-                          <span>Create New Event</span>
-                        </button>
-                      )}
-
-                      {onOpenWalkIn && (
-                        <button
-                          onClick={() => { onOpenWalkIn(); setHamburgerMenuOpen(false); }}
-                          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
-                        >
-                          <span>📝</span>
-                          <span>Walk-In Guest Registration</span>
-                        </button>
-                      )}
-
-                      {onOpenBulkImport && (
-                        <button
-                          onClick={() => { onOpenBulkImport(); setHamburgerMenuOpen(false); }}
-                          className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
-                        >
-                          <span>📥</span>
-                          <span>Bulk Import CSV / Excel</span>
-                        </button>
-                      )}
-                    </>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Footer Sign Out */}

@@ -84,7 +84,7 @@ async function ensureLocalFile(fileUrlOrPath, tempDir, prefix = "asset", cleanup
     return fileUrlOrPath;
   }
 
-  // If it references /uploads/ on local server
+  // If it references /uploads/ on local server or file already exists locally in uploads/
   if (fileUrlOrPath.includes("/uploads/")) {
     const relPart = fileUrlOrPath.split("/uploads/")[1];
     if (relPart) {
@@ -97,6 +97,19 @@ async function ensureLocalFile(fileUrlOrPath, tempDir, prefix = "asset", cleanup
     const fallbackPath = path.join(process.cwd(), "uploads", filename);
     if (fsSync.existsSync(fallbackPath)) {
       return fallbackPath;
+    }
+  }
+
+  // Check if file with same basename is already cached in uploads/
+  const baseFilename = path.basename(fileUrlOrPath.split("?")[0]);
+  if (baseFilename) {
+    const localUploadsPath = path.join(process.cwd(), "uploads", baseFilename);
+    if (fsSync.existsSync(localUploadsPath)) {
+      try {
+        if (fsSync.statSync(localUploadsPath).size > 0) {
+          return localUploadsPath;
+        }
+      } catch {}
     }
   }
 
@@ -286,10 +299,11 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       }
     }
 
-    // Determine audio track path
-    let effectiveAudioPath = audioPath;
-    if (!effectiveAudioPath && songDoc?.audioUrl) {
-      effectiveAudioPath = await ensureLocalFile(songDoc.audioUrl, uploadDir, "song_audio", tempFilesToClean);
+    // Determine audio track path - always localize remote URLs before passing to FFmpeg
+    let effectiveAudioPath = null;
+    const rawAudioSource = audioPath || songDoc?.audioUrl;
+    if (rawAudioSource) {
+      effectiveAudioPath = await ensureLocalFile(rawAudioSource, uploadDir, "song_audio", tempFilesToClean);
     }
     if (!effectiveAudioPath) {
       const fallbackWavPath = path.join(uploadDir, `fallback_audio_${timestamp}.wav`);
@@ -507,9 +521,17 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
 
     return videoDoc;
   } catch (err) {
+    if (tempOutputPath) await fs.unlink(tempOutputPath).catch(() => {});
+    if (concatListPath) await fs.unlink(concatListPath).catch(() => {});
+    if (Array.isArray(segmentPaths)) {
+      await Promise.all(segmentPaths.map((sp) => fs.unlink(sp).catch(() => {})));
+    }
+    if (Array.isArray(tempFilesToClean)) {
+      await Promise.all(tempFilesToClean.map((tf) => fs.unlink(tf).catch(() => {})));
+    }
     dbJob.status = "failed";
     dbJob.errorMessage = err.message || "Video rendering failed";
-    await dbJob.save();
+    await dbJob.save().catch(() => {});
     throw err;
   }
 }

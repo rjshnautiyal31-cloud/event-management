@@ -472,7 +472,7 @@ export function DashboardPage({ auth }) {
   }, [publicRegistrationUrl]);
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans pb-mobile-nav">
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans pb-20 md:pb-12 overflow-x-hidden">
       
       {/* Shared Navbar Header & Hamburger Menu */}
       <Navbar
@@ -485,30 +485,30 @@ export function DashboardPage({ auth }) {
       />
 
       {/* 2. Top Event Switcher & Tab Selector Header */}
-      <div className="bg-white border-b border-slate-200/80 px-4 py-3 shadow-xs">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div className="bg-white border-b border-slate-200/80 px-3 sm:px-4 py-2.5 sm:py-3 shadow-xs">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
           
           <div className="flex items-center gap-2 flex-1 min-w-0">
             {/* Interactive Command Switcher Pill Trigger */}
             <button
               onClick={() => setSwitcherModalOpen(true)}
-              className="flex-1 flex items-center justify-between rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3.5 py-2 text-xs font-bold text-slate-800 transition-all cursor-pointer shadow-2xs group"
+              className="flex-1 min-w-0 flex items-center justify-between rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2.5 sm:px-3.5 py-2 text-xs font-bold text-slate-800 transition-all cursor-pointer shadow-2xs group"
               title="Click or press ⌘K to search & switch events"
             >
-              <div className="flex items-center gap-2 truncate">
-                <span className="text-xs">⚡</span>
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1 mr-1 sm:mr-2">
+                <span className="text-xs shrink-0">⚡</span>
                 <span className="truncate font-black text-[#0A2D59]">
                   {selectedEvent?.title || "Select Event..."}
                 </span>
                 {selectedEvent && (
-                  <span className="text-[11px] font-semibold text-slate-500 hidden sm:inline">
+                  <span className="text-[11px] font-semibold text-slate-500 hidden md:inline shrink-0">
                     ({new Date(selectedEvent.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })})
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-[10px] font-mono font-extrabold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200 shadow-2xs">
-                  ⌘K Search
+              <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                <span className="hidden sm:inline-block text-[10px] font-mono font-extrabold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200 shadow-2xs">
+                  ⌘K
                 </span>
                 <span className="text-xs text-slate-400 group-hover:text-slate-600">▼</span>
               </div>
@@ -517,18 +517,18 @@ export function DashboardPage({ auth }) {
             {isAdmin && (
               <button
                 onClick={() => setCreateEventModalOpen(true)}
-                className="shrink-0 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-3.5 py-2 text-xs font-bold text-white shadow-sm cursor-pointer"
+                className="shrink-0 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-2.5 sm:px-3.5 py-2 text-xs font-bold text-white shadow-sm cursor-pointer whitespace-nowrap"
               >
-                + New Event
+                + New<span className="hidden sm:inline"> Event</span>
               </button>
             )}
           </div>
 
-          {/* Desktop Tab Selector Pills */}
+          {/* Desktop Tab Selector Pills (Hidden on mobile; mobile uses native bottom app navigation bar) */}
           <div className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0">
             <button
               onClick={() => setActiveTab("overview")}
-              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === "overview" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
               }`}
             >
@@ -536,7 +536,7 @@ export function DashboardPage({ auth }) {
             </button>
             <button
               onClick={() => setActiveTab("attendees")}
-              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === "attendees" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
               }`}
             >
@@ -549,7 +549,7 @@ export function DashboardPage({ auth }) {
             </button>
             <button
               onClick={() => setActiveTab("gates")}
-              className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === "gates" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
               }`}
             >
@@ -559,7 +559,7 @@ export function DashboardPage({ auth }) {
               <>
                 <button
                   onClick={() => setActiveTab("events")}
-                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     activeTab === "events" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -567,7 +567,7 @@ export function DashboardPage({ auth }) {
                 </button>
                 <button
                   onClick={() => setActiveTab("team")}
-                  className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     activeTab === "team" ? "bg-white text-[#0A2D59] shadow-xs border border-slate-200/60" : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
@@ -1824,64 +1824,76 @@ export function DashboardPage({ auth }) {
         </div>
       )}
 
-      {/* 10. Mobile Fixed Bottom Navigation Bar with #0A2D59 Branding */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/80 py-2 px-4 flex items-center justify-around md:hidden shadow-xl">
+      {/* 10. Native Mobile App Fixed Bottom Navigation Bar with #0A2D59 Branding */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/80 py-2 px-3 flex items-center justify-around md:hidden shadow-lg safe-area-pb">
         <button
           onClick={() => setActiveTab("overview")}
-          className={`flex flex-col items-center gap-1 transition-all ${
-            activeTab === "overview" ? "text-[#0A2D59] font-black scale-105" : "text-slate-500 hover:text-slate-800"
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            activeTab === "overview"
+              ? "text-[#0A2D59] font-black scale-105"
+              : "text-slate-400 hover:text-slate-700 font-semibold"
           }`}
         >
-          <span className="text-lg">📊</span>
-          <span className="text-[10px] font-bold">Overview</span>
+          <span className="text-lg leading-none">📊</span>
+          <span className="text-[10px] tracking-tight">Overview</span>
         </button>
 
         <button
           onClick={() => setActiveTab("attendees")}
-          className={`flex flex-col items-center gap-1 transition-all relative ${
-            activeTab === "attendees" ? "text-[#0A2D59] font-black scale-105" : "text-slate-500 hover:text-slate-800"
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all relative cursor-pointer ${
+            activeTab === "attendees"
+              ? "text-[#0A2D59] font-black scale-105"
+              : "text-slate-400 hover:text-slate-700 font-semibold"
           }`}
         >
-          <span className="text-lg">👥</span>
-          <span className="text-[10px] font-bold">Attendees</span>
-          {stats && (
-            <span className="absolute -top-1 -right-2 bg-[#0A2D59] text-white text-[9px] font-black h-4 w-4 rounded-full flex items-center justify-center">
-              {stats.totalRegistrations}
-            </span>
-          )}
+          <div className="relative leading-none">
+            <span className="text-lg">👥</span>
+            {stats?.totalRegistrations > 0 && (
+              <span className="absolute -top-1.5 -right-3 bg-[#0A2D59] text-white text-[9px] font-black h-4 min-w-4 px-1 rounded-full flex items-center justify-center shadow-xs">
+                {stats.totalRegistrations}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] tracking-tight">Attendees</span>
         </button>
 
         <button
           onClick={() => setActiveTab("gates")}
-          className={`flex flex-col items-center gap-1 transition-all ${
-            activeTab === "gates" ? "text-[#0A2D59] font-black scale-105" : "text-slate-500 hover:text-slate-800"
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            activeTab === "gates"
+              ? "text-[#0A2D59] font-black scale-105"
+              : "text-slate-400 hover:text-slate-700 font-semibold"
           }`}
         >
-          <span className="text-lg">📍</span>
-          <span className="text-[10px] font-bold">Gates</span>
+          <span className="text-lg leading-none">📍</span>
+          <span className="text-[10px] tracking-tight">Gates</span>
         </button>
 
         {isAdmin && (
           <button
             onClick={() => setActiveTab("events")}
-            className={`flex flex-col items-center gap-1 transition-all ${
-              activeTab === "events" ? "text-[#0A2D59] font-black scale-105" : "text-slate-500 hover:text-slate-800"
+            className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+              activeTab === "events"
+                ? "text-[#0A2D59] font-black scale-105"
+                : "text-slate-400 hover:text-slate-700 font-semibold"
             }`}
           >
-            <span className="text-lg">🗓️</span>
-            <span className="text-[10px] font-bold">Events</span>
+            <span className="text-lg leading-none">🗓️</span>
+            <span className="text-[10px] tracking-tight">Events</span>
           </button>
         )}
 
         {isAdmin && (
           <button
             onClick={() => setActiveTab("team")}
-            className={`flex flex-col items-center gap-1 transition-all ${
-              activeTab === "team" ? "text-[#0A2D59] font-black scale-105" : "text-slate-500 hover:text-slate-800"
+            className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+              activeTab === "team"
+                ? "text-[#0A2D59] font-black scale-105"
+                : "text-slate-400 hover:text-slate-700 font-semibold"
             }`}
           >
-            <span className="text-lg">🛡️</span>
-            <span className="text-[10px] font-bold">Team</span>
+            <span className="text-lg leading-none">🛡️</span>
+            <span className="text-[10px] tracking-tight">Team</span>
           </button>
         )}
       </nav>

@@ -1,7 +1,22 @@
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+import fs from "fs";
 import { SystemSetting } from "../models/SystemSetting.js";
 
+// 1. Load standard environment file from working directory (if present)
 dotenv.config();
+
+// 2. In monorepo/local dev, also load apps/api/.env if present (dotenv will not override existing env vars)
+try {
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
+  const apiEnvPath = path.resolve(currentDir, "../../.env");
+  if (fs.existsSync(apiEnvPath)) {
+    dotenv.config({ path: apiEnvPath });
+  }
+} catch {
+  // Graceful fallback for non-file environments
+}
 
 // In-memory cache for database configured settings
 let dbSettingsCache = {};

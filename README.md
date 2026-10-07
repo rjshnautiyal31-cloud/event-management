@@ -1,14 +1,67 @@
 # Event Management, QR Ticket, & AI Story-to-Video Platform
 
-A full-stack, enterprise-grade monorepo for high-volume event registration, unique QR ticket generation, physical gate management, fast on-site QR validation with duplicate-scan prevention, and an integrated **AI Story-to-Song-to-Video Studio**.
+A full-stack, enterprise-grade monorepo for multi-tenant company event management, self-service company registration, unique QR entrance pass generation, physical gate monitoring, high-speed on-site QR validation with duplicate-scan prevention, and an integrated **AI Story-to-Song-to-Video Studio**.
 
 ---
 
 ## Key Features 🚀
 
-### 1. AI Story-to-Song-to-Video Studio (`/#/studio`)
+### 1. Multi-Tenant Company Hierarchy & Role-Based Access Control (RBAC)
+- **🏢 Self-Service Company Registration**:
+  - Direct company onboarding from `/login` with unique company name, owner name, email, phone, and password.
+  - Automatically provisions an isolated company workspace and designates the registering user as the Company **Owner**.
+- **👥 Rigid Organizational Hierarchy**:
+  - `1 Company -> 1 Owner -> Many Co-Owners -> Many Events -> Many Event Admins -> Many Event Staff`
+- **🛡️ Role Governance & Access Control Boundaries**:
+  - **👑 Owner (`owner`)**:
+    - Unrestricted administrative authority over the entire company workspace.
+    - Can create, edit, and delete events, physical gates, and AI story projects.
+    - Has **exclusive authority** to create, edit, and delete **Co-Owners** (`co_owner`), as well as **Event Admins** (`event_admin`) and **Event Staff** (`event_staff`).
+  - **🤝 Co-Owner (`co_owner`)**:
+    - Co-manages all company events, attendees, gates, and staff.
+    - Can create, edit, and delete events, Event Admins, and Event Staff.
+    - **Strict Protection Guard**: Cannot create, edit, update, or delete the Company Owner or any other Co-Owner accounts.
+  - **🎫 Event Admin (`event_admin`)**:
+    - Scoped strictly to assigned events. Unassigned events are completely invisible.
+    - Can manage event metadata, attendees, walk-in registrations, CSV imports, gates, and AI storyboards for their assigned events.
+    - Can create, edit, and delete **Event Staff** (`event_staff`) only, and assign them to gates within their assigned events.
+    - Cannot create, edit, or delete Owners, Co-Owners, or other Event Admins.
+  - **📲 Event Staff (`event_staff`)**:
+    - Focused strictly on physical gate operations at `/scan`.
+    - Automatically locked to assigned gate on login to eliminate check-in confusion.
+    - Zero access to administrative dashboard, event creation, or attendee rosters.
+  - **🌐 Super Admin (`super_admin`)**:
+    - Global platform maintenance role for cloud infrastructure and Back Office configuration (`/#/settings`).
+- **🔄 Automatic Legacy Data Migration**:
+  - Existing legacy users, events, and gates with unassigned companies are automatically grouped under a default tenant (`Default Organization`) upon API server startup.
+
+### 2. Core Event Management & Instant QR Passes
+- **📲 Downloadable Event Registration QR Code Link**:
+  - Every event automatically generates a public registration URL (`/#/register/:slug`) and a high-resolution (360x360) `#0A2D59` branded QR code.
+  - 1-tap **"Download Registration QR"** button exports a ready-to-print `.png` image for posters, standees, flyers, digital banners, or social media promotion.
+  - Guests scan the QR code with any smartphone camera to open the instant registration form directly.
+- **🗑️ Cascading Event Deletion**:
+  - Secure event deletion with automatic cascade cleanup of associated gates, attendees, check-in logs, and AI story projects.
+- **`#0A2D59` Deep Navy Brand Identity & Universal Top Navigation**:
+  - Sticky top header featuring a **Hamburger (`☰`) Slide-Over Drawer Navigation Panel** displaying current tenant company context.
+- **High-Volume Event Switcher Command Palette (`⌘K` / `Ctrl+K`)**:
+  - Real-time instant search input filtering by **title**, **venue location**, or **date**.
+  - Categorized tabs: `⚡ Active & Upcoming`, `🕒 Past Events`, and `⭐ Pinned / Favorites` (pinned events persist in `localStorage`).
+- **`🗓️ Managed Events Directory` Workspace**:
+  - Full-width table view listing all accessible events with real-time text search, status filters (`🟢 Live Today`, `🗓 Upcoming`, `🏁 Ended`), public registration links, and 1-tap active event switching.
+- **High-Volume Attendee Roster (100s / 1000s of Attendees)**:
+  - Real-time text search, status filters (`All`, `Checked In`, `Pending`), batch size selector (25 / 50 / 100 / All), and **Virtual Infinite Scroll / Lazy Loading**.
+- **Inline CID Attachment Ticket Emails (`cid:qrcode`)**:
+  - Automatic email tickets sent via Resend API or SMTP using `cid:qrcode` Content-ID inline attachment embedding (eliminating broken images in Gmail, Outlook, and Yahoo).
+- **Event Gates & Automated Staff Locking**:
+  - Create, delete, and monitor physical gates per event (*Gate A, VIP Gate, Main Entrance*).
+  - Staff scanner accounts automatically lock to their assigned gate upon login to prevent mis-scans.
+- **Decoupled Check-in Logs**:
+  - Denormalizes attendee name and email into `entrylogs` at check-in so historical records are preserved even if an attendee profile is subsequently deleted.
+
+### 3. AI Story-to-Song-to-Video Studio (`/#/studio`)
 - **Event-Scoped AI Stories & Multi-Video Support**:
-  - Associate multiple AI story projects per event. Restrictable via Event ACL (`super_admin` & `event_admin`).
+  - Associate multiple AI story projects per event. Restrictable via Event ACL (`owner`, `co_owner`, `event_admin`, `super_admin`).
 - **Multilingual Narrative & Audio Synthesis (10+ Languages)**:
   - Generate story analysis, poetic song lyrics, singing vocals, visual storyboards, and burned subtitles in **English**, **Hindi (हिन्दी)**, **Spanish (Español)**, **French (Français)**, **German (Deutsch)**, **Japanese (日本語)**, **Chinese (中文)**, **Arabic (العربية)**, **Portuguese (Português)**, and **Bengali (বাংলা)**.
   - Native script rendering (Devanagari, Hanzi, Arabic, etc.) with automatic cross-lingual visual translation for AI video generators.
@@ -45,25 +98,7 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
   - Automatically limits FFmpeg to single-threaded low-memory streaming (`-threads 1`, `-preset veryfast`, `-bufsize 512k`) on Render Free Tier to stay safely within 512 MB RAM limits.
   - Universal multi-cloud storage adapter supporting **Local disk**, **AWS S3**, **Cloudflare R2** (zero egress fees), and **Google Cloud Storage (GCS)**.
 
-### 2. Core Event & Gate Management
-- **`#0A2D59` Deep Navy Brand Identity & Universal Top Navigation**:
-  - Sticky top header featuring a **Hamburger (`☰`) Slide-Over Drawer Navigation Panel**.
-- **High-Volume Event Switcher Command Palette (`⌘K` / `Ctrl+K`)**:
-  - Real-time instant search input filtering by **title**, **venue location**, or **date**.
-  - Categorized tabs: `⚡ Active & Upcoming`, `🕒 Past Events`, and `⭐ Pinned / Favorites` (pinned events persist in `localStorage`).
-- **`🗓️ Managed Events Directory` Workspace**:
-  - Full-width table view listing all managed events with real-time text search, status filters (`🟢 Live Today`, `🗓 Upcoming`, `🏁 Ended`), public registration links (`/#/register/:slug`), and 1-tap active event switching.
-- **High-Volume Attendee Roster (100s / 1000s of Attendees)**:
-  - Real-time text search, status filters (`All`, `Checked In`, `Pending`), batch size selector (25 / 50 / 100 / All), and **Virtual Infinite Scroll / Lazy Loading**.
-- **Inline CID Attachment Ticket Emails (`cid:qrcode`)**:
-  - Automatic email tickets sent via Resend API or SMTP using `cid:qrcode` Content-ID inline attachment embedding (eliminating broken images in Gmail, Outlook, and Yahoo).
-- **Event Gates & Automated Staff Locking**:
-  - Create, delete, and monitor physical gates per event (*Gate A, VIP Gate, Main Entrance*).
-  - Staff scanner accounts automatically lock to their assigned gate upon login to prevent mis-scans.
-- **Decoupled Check-in Logs**:
-  - Denormalizes attendee name and email into `entrylogs` at check-in so historical records are preserved even if an attendee profile is subsequently deleted.
-
-### 3. Back Office Settings & Dynamic Configuration (`/#/settings`)
+### 4. Back Office Settings & Dynamic Configuration (`/#/settings`)
 - **Dual-Tier Precedence Hierarchy**:
   - **1st Priority (Highest): Database Overrides** configured via the Back Office Settings Dashboard in MongoDB (`SystemSetting` collection).
   - **2nd Priority (Fallback): Local `.env` Variables** loaded into `process.env`.
@@ -84,22 +119,24 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
 
 ## Monorepo Layout
 
-- `apps/api`: Node.js Express backend (ESM), Mongoose/MongoDB, token signers, CSV parser, Resend/Nodemailer email engine, FFmpeg video worker, and AI provider adapters (Google Gemini, Google Cloud TTS, Google Veo).
+- `apps/api`: Node.js Express backend (ESM), Mongoose/MongoDB, JWT signers, CSV parser, Resend/Nodemailer email engine, FFmpeg video worker, and AI provider adapters (Google Gemini, Google Cloud TTS, Google Veo).
 - `apps/web`: React 18 + Vite + Tailwind CSS frontend, HashRouter navigation, html5-qrcode scanner integration, responsive dashboard, AI Studio UI (`ProjectStudioPage.jsx`), and public registration portal.
 
 ---
 
 ## Database Schema (MongoDB Collections)
 
-### Core Event Collections
-- `users`: User profiles with role-based access (`super_admin` | `event_admin` | `event_staff`) and gate assignments.
-- `events`: Event definitions, dates, locations, public slug, createdBy.
-- `gates`: Physical entrance gates per event.
-- `attendees`: Registered attendees, ticket UUIDs, QR code base64, check-in status.
-- `entrylogs`: Historical check-in log records with denormalized names/emails.
+### Core Tenant & Event Collections
+- `companies`: Multi-tenant organization workspace (`name`, `slug`, `ownerId`, `email`, `phone`, `isActive`).
+- `users`: User profiles with multi-tenant company association (`companyId`, `phone`, `role`: `owner` | `co_owner` | `event_admin` | `event_staff` | `super_admin`, `assignedGateId`).
+- `events`: Event definitions (`companyId`, `title`, `date`, `location`, `description`, `slug`, `createdBy`).
+- `eventassignments`: Scoping mapping between team members (`event_admin`, `event_staff`) and specific `events`.
+- `gates`: Physical entrance gates per event (`companyId`, `eventId`, `name`).
+- `attendees`: Registered attendees (`companyId`, `eventId`, `name`, `email`, `phoneNumber`, `ticketUuid`, `ticketQrDataUrl`, `isCheckedIn`).
+- `entrylogs`: Historical check-in log records with denormalized names/emails (`companyId`, `eventId`, `gateId`, `attendeeId`, `scannedAt`).
 
 ### AI Story-to-Video Collections
-- `projects`: Story projects linked to `eventId` with references to active analysis, song, storyboard, and video, plus `language`, `characters: [{ name, role, visualDescription, referenceMediaId }]`, and `directorGuidelines`.
+- `projects`: Story projects linked to `companyId` and `eventId` with references to active analysis, song, storyboard, and video, plus `language`, `characters: [{ name, role, visualDescription, referenceMediaId }]`, and `directorGuidelines`.
 - `storyanalyses`: Story analysis output (summary, emotional arc, themes, key moments).
 - `songs`: Generated lyrics, audio URL, duration, genre, mood, `language`, `voiceType`, and `musicProvider`.
 - `medias`: Uploaded photo & video clip media items per project (`fileUrl`, `mediaType`, `caption`).
@@ -111,38 +148,28 @@ A full-stack, enterprise-grade monorepo for high-volume event registration, uniq
 
 ## API Endpoints
 
-### AI Story-to-Video Studio (`/api/story-video/*`)
-- `POST /api/story-video/projects` (admin): Create a new AI story project with optional language, characters cast, and director guidelines.
-- `GET /api/story-video/projects` (auth): List all story projects for an event.
-- `GET /api/story-video/projects/:id` (auth): Fetch full project details (populated with analysis, song, storyboard, media, and video).
-- `PATCH /api/story-video/projects/:id` (admin): Update project settings (title, language, characters cast, director guidelines).
-- `POST /api/story-video/projects/:id/analyze` (admin): Analyze story narrative using Gemini 2.5 Flash in the selected language.
-- `POST /api/story-video/projects/:id/lyrics` (admin): Generate AI lyrics and synthesize song audio with duration, genre, language, and vocal voice type.
-- `POST /api/story-video/projects/:id/media` (admin): Upload photo or video clip assets for video stitching.
-- `GET /api/story-video/projects/:id/media` (auth): Get media gallery items for a project.
-- `DELETE /api/story-video/projects/:id/media/:mediaId` (admin): Delete a specific uploaded photo or video clip.
-- `DELETE /api/story-video/projects/:id/media` (admin): Clear all uploaded media (activates Pure AI Scene Generation Mode).
-- `POST /api/story-video/projects/:id/storyboard` (admin): Generate lyric-synchronized scene timeline incorporating character cast descriptions and director guidelines.
-- `PATCH /api/story-video/projects/:id/scenes/:sceneIndex` (admin): Update an individual scene's visual prompt, caption, characters, or assigned media.
-- `POST /api/story-video/projects/:id/scenes/:sceneIndex/image` (admin): Generate / regenerate a high-resolution AI image frame for a specific scene.
-- `POST /api/story-video/projects/:id/scenes/:sceneIndex/veo` (admin): Generate / regenerate a 5s Gemini Omni 1.1 motion video clip for a specific scene with custom prompt.
-- `POST /api/story-video/projects/:id/scenes/generate-all-veo` (admin): Batch generate Gemini Omni 1.1 motion video clips for all storyboard scenes.
-- `GET /api/story-video/video-presets` (auth): Fetch supported resolution presets (`1080p`, `720p`, `mobile`, `tablet`, `square`).
-- `POST /api/story-video/projects/:id/render` (admin): Trigger FFmpeg background video rendering with resolution preset.
-- `GET /api/story-video/jobs/:jobId` (auth): Poll video rendering job progress.
+### Auth & Multi-Tenant Management (`/api/auth/*`)
+- `POST /api/auth/register-company`: Self-service company registration creating company workspace & initial Owner.
+- `POST /api/auth/setup-admin`: Bootstrap initial global super admin account.
+- `POST /api/auth/login`: Validate credentials, verify company active state, and issue tenant-scoped JWT token.
+- `GET /api/auth/staff` (auth): List company team members (scoped by caller's role hierarchy).
+- `POST /api/auth/staff` (auth): Create team user (`co_owner`, `event_admin`, `event_staff`) with role validation, event assignments, and gate assignment.
+- `PUT /api/auth/staff/:id` (auth): Update team member details, role, gate, or event assignments (enforces hierarchy guardrails).
+- `DELETE /api/auth/staff/:id` (auth): Delete team member account (prevents self-deletion and protects Owner/Co-Owner accounts from unauthorized deletion).
 
-### Auth & User Accounts
-- `POST /api/auth/setup-admin`: Bootstrap initial super admin account.
-- `POST /api/auth/login`: Validate credentials and issue JWT.
-- `GET /api/auth/staff` (admin): List staff users.
-- `POST /api/auth/staff` (admin): Create staff user with role & gate assignment.
-
-### Events, Attendees, & Gates
-- `POST /api/events` (admin): Create event.
-- `GET /api/events` (auth): List accessible events.
+### Events, Attendees, & Gates (`/api/events/*`)
+- `POST /api/events` (owner, co_owner, super_admin): Create a new event within the caller's company.
+- `GET /api/events` (auth): List accessible events (company-wide for Owner/Co-Owner; assignment-scoped for Event Admin/Staff).
+- `DELETE /api/events/:eventId` (owner, co_owner, super_admin): Delete event with cascading cleanup of attendees, gates, logs, and storyboards.
 - `GET /api/events/:eventId/stats` (auth): Event registration & check-in analytics.
-- `GET /api/events/:eventId/attendees` (auth): Paginated attendee list.
-- `POST /api/scan/validate` (auth): Validate scanned QR ticket UUID.
+- `GET /api/events/:eventId/attendees` (auth): Paginated attendee list with virtual scrolling support.
+- `POST /api/events/:eventId/attendees` (auth): Register walk-in guest attendee.
+- `POST /api/events/:eventId/attendees/bulk` (auth): Bulk CSV attendee import.
+- `PATCH /api/events/:eventId/attendees/:attendeeId` (auth): Update attendee details.
+- `DELETE /api/events/:eventId/attendees/:attendeeId` (auth): Delete attendee record.
+- `POST /api/events/:eventId/gates` (auth): Create physical entrance gate.
+- `DELETE /api/events/:eventId/gates/:gateId` (auth): Delete entrance gate and unassign attached staff.
+- `POST /api/scan/validate` (auth): Validate scanned QR ticket UUID with atomic duplicate prevention and gate logging.
 
 ---
 

@@ -1,30 +1,53 @@
-# Event QR Check-In System: Comprehensive User Guide
+# Event QR Check-In System: Comprehensive User & Administrator Guide
 
-Welcome to the **Event QR Check-In System**! This application is designed to help you create and manage events at scale, register attendees (via a public form, walk-in additions, or bulk CSV import), distribute unique QR tickets with inline image attachments, and check-in attendees at different gates with double-scan prevention and zero-lag performance.
+Welcome to the **Event QR Check-In System**! This application is designed to help organizations and event organizers manage events at scale across isolated company workspaces, register attendees (via a public registration link, walk-in additions, bulk CSV import, or downloadable event QR codes), distribute unique QR tickets with inline image attachments, check-in attendees at designated gates with double-scan prevention, and create cinematic milestone videos using the integrated **AI Story-to-Song-to-Video Studio**.
 
 ---
 
 ## Table of Contents
-1. [First-Time Admin Setup](#1-first-time-admin-setup)
-2. [Navigation & High-Volume Event Management](#2-navigation--high-volume-event-management)
-3. [Event Creation & Quick Pickers](#3-event-creation--quick-pickers)
-4. [User, Staff & Role Management](#4-user-staff--role-management)
-5. [Event Gate Management](#5-event-gate-management)
-6. [Attendee Management & High-Volume Virtual Roster](#6-attendee-management--high-volume-virtual-roster)
-7. [QR Code Check-In Scanning](#7-qr-code-check-in-scanning)
-8. [Email Ticket Deliveries (Resend vs SMTP)](#8-email-ticket-deliveries-resend-vs-smtp)
-9. [AI Story-to-Song-to-Video Studio](#9-ai-story-to-song-to-video-studio)
-10. [Google Cloud Run & Cloud Storage Production Setup](#10-google-cloud-run--cloud-storage-production-setup)
-11. [How to Switch API Between Cloud Run and Render](#11-how-to-switch-api-between-cloud-run-and-render)
-12. [Back Office Settings & Environment Variables (`/#/settings`)](#12-back-office-settings--environment-variables--settings)
+1. [Customer Company Registration & Owner Account Setup](#1-customer-company-registration--owner-account-setup)
+2. [First-Time Super Admin Setup (Platform Oversight)](#2-first-time-super-admin-setup-platform-oversight)
+3. [Navigation & Multi-Tenant Workspace](#3-navigation--multi-tenant-workspace)
+4. [Event Creation, Public Links & Downloadable QR Codes](#4-event-creation-public-links--downloadable-qr-codes)
+5. [Multi-Tenant Role-Based Access Control (RBAC) & Team Governance](#5-multi-tenant-role-based-access-control-rbac--team-governance)
+6. [Event Gate Management](#6-event-gate-management)
+7. [Attendee Management & High-Volume Virtual Roster](#7-attendee-management--high-volume-virtual-roster)
+8. [QR Code Check-In Scanning](#8-qr-code-check-in-scanning)
+9. [Email Ticket Deliveries (Resend vs SMTP)](#9-email-ticket-deliveries-resend-vs-smtp)
+10. [AI Story-to-Song-to-Video Studio](#10-ai-story-to-song-to-video-studio)
+11. [Multi-Cloud Storage & Render Free Tier Deployment](#11-multi-cloud-storage--render-free-tier-deployment)
+12. [Google Cloud Run & Cloud Storage Production Setup](#12-google-cloud-run--cloud-storage-production-setup)
+13. [How to Switch API Between Cloud Run and Render](#13-how-to-switch-api-between-cloud-run-and-render)
+14. [Back Office Settings & Environment Variables (`/#/settings`)](#14-back-office-settings--environment-variables--settings)
 
 ---
 
-## 1. First-Time Admin Setup
+## 1. Customer Company Registration & Owner Account Setup
 
-When you deploy the application for the first time, bootstrap your initial **Super Administrator** account:
+The platform provides a streamlined self-service onboarding flow for new customer companies and event organizers directly from the authentication page:
 
-1. **Bootstrap Endpoint**: Send a `POST` request to `/api/auth/setup-admin` with the body:
+### How to Register a New Company
+1. Open your browser and navigate to the **Login Page** (`/#/login`).
+2. Click on the **"Register Company"** tab at the top of the authentication card.
+3. Complete the registration form:
+   - **Company / Organization Name**: The unique legal or brand name of your business (e.g., *Acme Events Global*). Case-insensitive uniqueness is strictly enforced across the platform.
+   - **Your Full Name**: The administrative contact person (e.g., *Sarah Connor*).
+   - **Work Email**: Your unique company email address used for signing in (e.g., *sarah@acmeevents.com*).
+   - **Phone Number**: (Optional) Contact phone number.
+   - **Password**: Secure account password (minimum 6 characters).
+4. Click **"Register & Create Workspace"**.
+5. **Immediate Onboarding**:
+   - The platform creates your dedicated `Company` record and assigns you the **`owner`** role.
+   - Your session is automatically authenticated with a tenant-scoped JWT token and redirected to the **Dashboard** (`/#/dashboard`).
+   - Your company name is prominently displayed inside the top navigation header and slide-over menu drawer.
+
+---
+
+## 2. First-Time Super Admin Setup (Platform Oversight)
+
+For infrastructure operators or platform super administrators who manage cross-tenant maintenance, system diagnostics, and Back Office credentials:
+
+1. **Bootstrap Endpoint**: Send a `POST` request to `/api/auth/setup-admin` with the bootstrap payload:
    ```json
    {
      "setupKey": "setup-admin", // Configured via ADMIN_SETUP_KEY env var
@@ -34,18 +57,20 @@ When you deploy the application for the first time, bootstrap your initial **Sup
    }
    ```
 2. **Environment Configuration**: Ensure `ADMIN_SETUP_KEY` is set inside your backend's environment variables (`apps/api/.env`).
-3. Once bootstrapped, navigate to `/login` and log in using your newly created admin credentials.
+3. Once bootstrapped, navigate to `/#/login` under the **"Sign In"** tab and log in using your admin credentials. Super Admins have unrestricted access to the **Back Office Settings Dashboard** (`/#/settings`).
 
 ---
 
-## 2. Navigation & High-Volume Event Management
+## 3. Navigation & Multi-Tenant Workspace
 
 ### **Universal `#0A2D59` Navigation Bar (`Navbar`)**
-- Present across all pages (`/dashboard`, `/generator`, `/scan`).
-- Click the **Hamburger Menu (`☰`)** button in the top left to reveal the slide-over drawer panel for 1-tap navigation between **Overview Hub**, **Attendee Roster**, **Gates & Posts**, **Events Directory**, and **Team Access**.
+- Present across all pages (`/dashboard`, `/generator`, `/scan`, `/studio`, `/settings`).
+- **Company Identity Pill**: Displays the currently active tenant company name with an organization badge (`🏢 Company Name`).
+- **Hamburger Menu (`☰`)**: Click to reveal the slide-over drawer panel for 1-tap navigation between **Overview Hub**, **Attendee Roster**, **Gates & Posts**, **Events Directory**, **Team Access**, and **AI Studio**.
+- **Role-Aware Action Buttons**: High-privilege actions like `+ New Event` and `⚙️ Settings` dynamically adapt based on whether you are logged in as an Owner, Co-Owner, Event Admin, Staff, or Super Admin.
 
 ### **Command Switcher Palette (`⌘K` / `Ctrl+K`)**
-When managing dozens, hundreds, or thousands of events:
+When managing dozens or hundreds of events within your company:
 1. Click the **Event Switcher Pill** in the header or press `⌘K` (`Ctrl+K` on Windows/Linux) to launch the **Command Switcher Palette**.
 2. **Search Input**: Type any keyword to instantly filter events by title, venue location, or date.
 3. **Category Tabs**: Toggle between `⚡ Active & Upcoming`, `🕒 Past Events`, and `⭐ Pinned / Favorites`.
@@ -53,40 +78,118 @@ When managing dozens, hundreds, or thousands of events:
 
 ### **Events Directory Workspace Tab**
 1. Switch to the **🗓️ Events** tab in your dashboard.
-2. View the full-width data table listing all managed events with real-time text search, status filters (`🟢 Live Today`, `🗓 Upcoming`, `🏁 Ended`), public pass links (`/#/register/:slug`), and 1-tap active event switching.
+2. View the full-width data table listing all accessible events with real-time text search, status filters (`🟢 Live Today`, `🗓 Upcoming`, `🏁 Ended`), public registration links (`/#/register/:slug`), and 1-tap active event switching.
 
 ---
 
-## 3. Event Creation & Quick Pickers
+## 4. Event Creation, Public Links & Downloadable QR Codes
 
-1. Click **+ New Event** in the header or dashboard.
-2. **Quick Date & Time Pickers**:
-   - Use 1-tap preset buttons: `📅 Today`, `🚀 Tomorrow`, `📆 Next Week`.
-   - Native calendar and time popups open automatically on tap/click.
-3. Click **Create Event**. Your new event becomes active immediately.
+### **Creating an Event**
+1. Click **+ New Event** in the header or dashboard (available to `owner`, `co_owner`, and `super_admin`).
+2. Enter the event **Title**, **Date & Time**, **Venue Location**, and optional **Description**.
+3. **Quick Date & Time Pickers**: Use 1-tap preset buttons (`📅 Today`, `🚀 Tomorrow`, `📆 Next Week`) for rapid entry.
+4. Click **Create Event**. The event is immediately provisioned within your company workspace.
 
-### **Public Registration Pass Links**
-- Share the public pass link (`/#/register/your-event-slug`) or print the **Event Registration QR Code**.
-- When attendees submit the form, their unique QR entrance ticket renders instantly on-screen and is automatically emailed to them with an inline QR image (`cid:qrcode`).
+### **Public Guest Registration Link**
+- Every event is assigned a SEO-friendly, unique public slug:
+  ```
+  https://<your-domain>/#/register/your-event-slug
+  ```
+- Guests can open this link on any mobile or desktop web browser without requiring a user account.
+- Upon registration, guests immediately receive:
+  - An on-screen digital entrance pass featuring their unique QR ticket UUID.
+  - An automated confirmation email with an embedded inline QR code (`cid:qrcode`) for easy presentation at event gates.
+
+### **📲 Downloadable Event Registration QR Code Link**
+- Directly beside the public registration link on the event overview card, the platform renders a **high-resolution 360x360 branded QR code** in `#0A2D59` navy.
+- **1-Tap PNG Download**: Click **"📥 Download Registration QR"** to immediately download a high-definition image named:
+  ```
+  <event-title>-registration-qr.png
+  ```
+- **How to Use the Downloadable QR Code**:
+  - **On-Site Print Signage**: Place the QR code on roll-up standees at venue entrances, registration check-in kiosks, table tents, printed flyers, or badges so walk-in attendees can register on the spot.
+  - **Digital Marketing**: Insert the PNG into email marketing newsletters, WhatsApp invitations, event landing pages, LinkedIn posts, or presentation slides.
+  - **Attendee Experience**: Guests simply point their smartphone camera at the printed or digital QR code. Their phone natively detects the link and opens the event registration page instantly in their default browser.
+
+### **🗑️ Event Deletion & Cascading Cleanup**
+- Owners and Co-Owners can delete events from the Events Directory or the active event card.
+- **Cascade Deletion**: When an event is deleted, the system automatically removes all associated attendees, physical gates, check-in entry logs, and AI story projects, ensuring your workspace remains clean and free of orphaned records.
 
 ---
 
-## 4. User, Staff & Role Management
+## 5. Multi-Tenant Role-Based Access Control (RBAC) & Team Governance
 
-The system features granular role-based access control:
-- **`super_admin`**: Full system control across all events, user accounts, and global settings.
-- **`event_admin`**: Full management access to assigned events, attendees, and gates.
-- **`event_staff`**: Restricted to the **Scanner Page** (`/scan`) to validate tickets at assigned gates.
+The system enforces a rigid 5-tier organizational hierarchy:
+```
+1 Company ➔ 1 Owner ➔ Many Co-Owners ➔ Many Events ➔ Many Event Admins ➔ Many Event Staff
+```
 
-### **Creating and Assigning Users**
-1. Go to the **Team & Staff Access** section in the dashboard.
-2. Enter the staff member's **Name**, **Email**, and **Password**.
-3. Select their **Role** and optional **Assigned Gate**.
-4. Scanner accounts are **automatically locked to their assigned gate upon login**, eliminating mis-scan errors.
+### **Role Definitions & Boundaries**
+
+1. **👑 Company Owner (`owner`)**:
+   - The primary account owner created during company registration.
+   - Holds complete authority over company profile, events, gates, and team members.
+   - **Exclusive Privilege**: Only the Owner can create, edit, or delete **Co-Owner** (`co_owner`) accounts.
+   - Assigns events to Event Admins and gates to Event Staff.
+
+2. **🤝 Company Co-Owner (`co_owner`)**:
+   - Executive administrator sharing operational control across all company events, attendees, and gates.
+   - Can create, edit, and delete events.
+   - Can create, edit, and delete **Event Admin** and **Event Staff** accounts.
+   - **Strict Protection Guardrail**: Co-Owners **cannot** create, edit, update, or delete the Company Owner account, nor can they create or modify other Co-Owners.
+
+3. **🎫 Event Admin (`event_admin`)**:
+   - Scoped strictly to the specific events assigned to them by an Owner or Co-Owner.
+   - Cannot see, access, or modify unassigned company events.
+   - Manages attendee registrations, CSV imports, walk-in additions, gate setups, and AI storyboards for their assigned events.
+   - Can create, edit, and delete **Event Staff** (`event_staff`) only, and assign them to gates within their assigned events.
+   - Cannot create, edit, or delete Owners, Co-Owners, or other Event Admins.
+
+4. **📲 Event Staff (`event_staff`)**:
+   - Dedicated gate scanner role restricted exclusively to the **Scanner Interface** (`/#/scan`).
+   - Automatically locked to their assigned gate upon login to eliminate gate-crossing mistakes.
+   - Zero access to attendee rosters, event settings, or administrative dashboards.
+
+5. **🌐 Super Admin (`super_admin`)**:
+   - Global platform oversight role for multi-tenant monitoring, database maintenance, and Back Office configuration (`/#/settings`).
+
+### **RBAC Governance Matrix**
+
+| Operational Capability | 👑 Owner | 🤝 Co-Owner | 🎫 Event Admin | 📲 Event Staff | 🌐 Super Admin |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Register / Provision Company** | ✅ | ❌ | ❌ | ❌ | ✅ |
+| **Create & Delete Events** | ✅ | ✅ | ❌ | ❌ | ✅ |
+| **View Events** | All Company Events | All Company Events | Assigned Events Only | Assigned Events Only | All Platform Events |
+| **Create / Delete Co-Owners** | ✅ (Exclusive) | ❌ | ❌ | ❌ | ✅ |
+| **Edit / Delete Owner Account** | ❌ (Protected) | ❌ (Blocked) | ❌ (Blocked) | ❌ (Blocked) | ✅ |
+| **Create Event Admins** | ✅ | ✅ | ❌ | ❌ | ✅ |
+| **Edit / Delete Event Admins** | ✅ | ✅ | ❌ | ❌ | ✅ |
+| **Assign Events to Admins** | ✅ | ✅ | ❌ | ❌ | ✅ |
+| **Create / Delete Event Staff** | ✅ | ✅ | ✅ (For assigned events) | ❌ | ✅ |
+| **Assign Gates to Staff** | ✅ | ✅ | ✅ (For assigned gates) | ❌ | ✅ |
+| **Manage Attendees & CSV Import** | ✅ | ✅ | ✅ (Assigned events) | ❌ | ✅ |
+| **Scan QR Tickets (`/scan`)** | ✅ | ✅ | ✅ | ✅ (Locked to gate) | ✅ |
+| **AI Story-to-Video Studio** | ✅ | ✅ | ✅ (Assigned events) | ❌ | ✅ |
+| **Back Office Settings (`/#/settings`)**| ❌ | ❌ | ❌ | ❌ | ✅ |
+
+### **Managing Team Members & Role Assignments**
+1. Navigate to the **Team Access** tab in the dashboard.
+2. **Add Team Member**:
+   - Enter **Full Name**, **Work Email**, **Phone Number**, and a temporary **Password**.
+   - Select the target **Role** (`Co-Owner`, `Event Admin`, or `Event Staff`). Note that Co-Owner is only selectable by the Company Owner or Super Admin.
+   - For **Event Admin**: Use the multi-select event picker to assign one or multiple events they are authorized to manage.
+   - For **Event Staff**: Select their assigned physical gate.
+3. **Editing & Updating Users**:
+   - Click the **Edit (`✏️`)** button on any team user card to update their name, phone, role, assigned events, or gate assignment.
+   - Role escalation rules are strictly validated on the backend.
+4. **Deleting Users**:
+   - Click the **Delete (`🗑️`)** button.
+   - You cannot delete your own logged-in account.
+   - Co-Owners cannot delete Owners or other Co-Owners. Event Admins cannot delete other Admins or Owners.
 
 ---
 
-## 5. Event Gate Management
+## 6. Event Gate Management
 
 1. Go to the **Gates & Posts** tab.
 2. Enter a gate name (e.g., `Gate A - Main Entrance`, `VIP Gate`) and click **Add Gate**.
@@ -94,7 +197,7 @@ The system features granular role-based access control:
 
 ---
 
-## 6. Attendee Management & High-Volume Virtual Roster
+## 7. Attendee Management & High-Volume Virtual Roster
 
 The **Attendee Roster** is engineered for high-volume crowds (100s to 1,000s of attendees):
 - **Real-Time Search**: Search by attendee name, email, or phone number.
@@ -105,7 +208,7 @@ The **Attendee Roster** is engineered for high-volume crowds (100s to 1,000s of 
 
 ---
 
-## 7. QR Code Check-In Scanning
+## 8. QR Code Check-In Scanning
 
 1. Staff members open the **Scanner Page** (`/scan`).
 2. The scanner uses the device camera to scan tickets in real-time.
@@ -115,18 +218,18 @@ The **Attendee Roster** is engineered for high-volume crowds (100s to 1,000s of 
 
 ---
 
-## 8. Email Ticket Deliveries (Resend vs SMTP)
+## 9. Email Ticket Deliveries (Resend vs SMTP)
 
 - **Resend API Integration** (`RESEND_API_KEY`): Recommended for cloud platforms like Render's Free Tier (bypasses blocked outbound SMTP ports 25, 465, and 587).
 - **Inline CID Attachments** (`cid:qrcode`): QR ticket images are embedded inline as Content-ID attachments, guaranteeing crisp image rendering across Gmail, Outlook, Yahoo, and mobile mail apps.
 
 ---
 
-## 9. AI Story-to-Song-to-Video Studio
+## 10. AI Story-to-Song-to-Video Studio
 
 The integrated **AI Story Studio** transforms event stories, testimonials, and milestone narratives into full musical songs with synchronized lyrics, realistic motion video clips, and high-definition rendered MP4 videos.
 
-Navigate to **`/#/studio`** (accessible from the top navigation bar or drawer menu).
+Navigate to **`/#/studio`** (accessible from the top navigation bar or drawer menu for authorized event roles).
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
@@ -137,7 +240,7 @@ Navigate to **`/#/studio`** (accessible from the top navigation bar or drawer me
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 9.1 Multilingual Story-to-Song-to-Video Engine
+### 10.1 Multilingual Story-to-Song-to-Video Engine
 The studio natively supports **10 major global languages**:
 - 🇺🇸 **English** (en)
 - 🇮🇳 **Hindi (हिन्दी)** (hi)
@@ -159,44 +262,7 @@ The studio natively supports **10 major global languages**:
 
 ---
 
-### Stage 1: Story Narrative, Cast Bible & Director Directives (Level 1 Control)
-1. Select an existing story project or click **"+ New Story Project"**.
-2. **Story Narrative**: Enter raw event memories, speeches, or summaries.
-3. **👥 Cast & Characters Consistency Guide (Visual Bible)**:
-   - Define the key individuals in your story (*Rahul, Priya, Keynote Speaker, Birthday Star*).
-   - Provide their **Role in Event** and specific **Visual Appearance & Attire** (e.g. *30yo Indian man with short black hair, wearing a cream silk sherwani with red turban*).
-   - **Why This Matters**: Generative AI models often change character faces and clothes between clips. By defining your cast here, Gemini systematically injects these visual descriptors into every scene featuring that character, preserving visual identity throughout the entire video.
-4. **🎬 Director Guidelines & Must-Have Scenes**:
-   - Provide directives for specific moments you want featured (e.g. *1. Grand welcome. 2. Stage garland exchange. 3. Family champagne toast. 4. Lantern lighting at dusk.*).
-   - Gemini prioritizes these moments when laying out the chronological timeline.
-5. Click **"Analyze Story Narrative"** to generate an executive summary, emotional arc, and thematic tags.
-
----
-
-### Stage 2: AI Song Lyrics, Vocal Voice Selection & Duration Control
-Switch to **Tab 2: AI Lyrics & Audio**:
-1. **Music Engine**:
-   - 🌟 **Google DeepMind Lyria 3 Pro** (`lyria-3-pro-preview`): State-of-the-art vocal composition and acoustic production.
-   - 🎵 **ElevenLabs Music Synthesis**: Polished studio pop, acoustic, and electronic production.
-   - 🎸 **Suno AI**: Melodic song synthesis.
-   - 🔊 **Google Cloud Neural2 TTS**: High-fidelity speech synthesis over rhythmically synchronized backing beats.
-2. **Vocal Voice Selection**:
-   - 👩 **Female Vocalist**: Emotive soprano / alto lead vocals.
-   - 👨 **Male Vocalist**: Warm tenor / baritone lead vocals.
-   - 👥 **Duet / Harmonized Ensemble**: Harmonious dual vocal arrangement.
-   - 🎙️ **Custom Vocal Persona**: Freely type any vocal style (e.g., *husky delta blues singer*, *ethereal operatic choir*, *energetic K-pop vocalist*).
-3. **Musical Style / Genre**:
-   - 🎸 Acoustic / Folk • 🎹 Cinematic Orchestral • 🎤 Pop / Uplifting • ⚡ Epic Rock • 🥁 Lo-Fi Chill • 🎷 Jazz / Soul • 🪕 Traditional / Cultural.
-4. **Audio Song Duration Control**:
-   - Choose between **15s, 30s, 45s, 60s, 90s, 120s, up to 180s (3 full minutes)**.
-   - The AI writes structured lyrics (*Verses, Chorus, Bridge, Outro*) tailored to fill the target time window.
-5. Click **"Generate AI Song & Vocals"**:
-   - Includes automatic retry if a model is temporarily rate-limited.
-   - **Transparent Fallback Badges**: The player clearly displays which engine produced the audio track (e.g. `🌟 DeepMind Lyria 3 Pro` or `🔊 Neural2 TTS + Rhythm Synth`) so you are always aware of the active provider.
-
----
-
-### 9.2 Production Modes: Standard Cinematic Mode vs. Ultra Motion Mode
+### 10.2 Production Modes: Standard Cinematic Mode vs. Ultra Motion Mode
 The studio supports two distinct rendering and visual paradigms:
 
 | Feature | Standard Cinematic Mode | Ultra Motion Mode |
@@ -328,7 +394,7 @@ Switch to **Tab 5: Render & Video Player**:
 
 ---
 
-### 9.3 End-to-End Walkthrough Example (Standard Cinematic Mode)
+### 10.3 End-to-End Walkthrough Example (Standard Cinematic Mode)
 
 Here is a practical reference example you can follow step-by-step in the Studio:
 
@@ -365,7 +431,7 @@ Here is a practical reference example you can follow step-by-step in the Studio:
 
 ---
 
-## 10. Multi-Cloud Storage & Render Free Tier Deployment
+## 11. Multi-Cloud Storage & Render Free Tier Deployment
 
 ### Understanding Free Tier Constraints
 When deploying to cloud platforms like **Render's Free Web Service**:
@@ -420,7 +486,7 @@ The built-in video worker employs two optimization strategies:
 
 ---
 
-## 10. Google Cloud Run & Cloud Storage Production Setup
+## 12. Google Cloud Run & Cloud Storage Production Setup
 
 For high-volume video rendering, Google Cloud Run is the recommended production backend target:
 - **Dedicated Compute**: 2 vCPU and 2 GB RAM (Gen2 execution environment, 600s timeout).
@@ -444,7 +510,7 @@ gcloud run deploy event-qr-api \
 
 ---
 
-## 11. How to Switch API Between Cloud Run and Render
+## 13. How to Switch API Between Cloud Run and Render
 
 Because the frontend and backend are completely decoupled, you can switch the backend between Google Cloud Run and Render at any time by changing a single environment variable in the frontend on Render.
 
@@ -498,7 +564,7 @@ Because the frontend and backend are completely decoupled, you can switch the ba
 
 ---
 
-## 12. Back Office Settings & Environment Variables (`/#/settings`)
+## 14. Back Office Settings & Environment Variables (`/#/settings`)
 
 The platform includes a dedicated **Back Office Settings Dashboard** accessible directly from the top navigation bar or drawer menu (`⚙️ Settings`).
 

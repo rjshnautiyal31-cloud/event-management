@@ -160,44 +160,59 @@ authRouter.post("/setup-admin", async (req, res) => {
  *     summary: Login and receive a JWT
  */
 authRouter.post("/login", async (req, res) => {
-  const { email, password } = req.body || {};
+  try {
+    const { email, password } = req.body || {};
 
-  if (!email || !password) {
-    return res.status(400).json({ message: "Email and password are required" });
-  }
-  const user = await User.findOne({ email: String(email).toLowerCase() })
-    .populate("companyId", "name slug")
-    .populate("assignedGateId");
-
-  if (!user) {
-    return res.status(401).json({ message: "Invalid credentials" });
-  }
-
-  const isMatch = await bcrypt.compare(password, user.passwordHash);
-  if (!isMatch) {
-    return res.status(401).json({ message: "Invalid credentials" });
-  }
-
-  const token = signToken(user);
-  return res.json({
-    token,
-    user: {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone || "",
-      role: user.role,
-      company: user.companyId
-        ? {
-            id: user.companyId._id,
-            name: user.companyId.name,
-            slug: user.companyId.slug
-          }
-        : null,
-      assignedGateId: user.assignedGateId?._id || null,
-      assignedGateName: user.assignedGateId?.name || null
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
     }
-  });
+    const user = await User.findOne({ email: String(email).toLowerCase() })
+      .populate("companyId", "name slug")
+      .populate("assignedGateId");
+
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    // Self-heal: If user has no companyId and is not super_admin, link to active company
+    if (!user.companyId && user.role !== "super_admin") {
+      const activeCompany = await Company.findOne({ isActive: true }).sort({ createdAt: 1 });
+      if (activeCompany) {
+        user.companyId = activeCompany;
+        await User.updateOne({ _id: user._id }, { $set: { companyId: activeCompany._id } });
+        console.log(`[Auth] Self-healed user ${user.email} on login -> linked to company ${activeCompany.name}`);
+      }
+    }
+
+    const token = signToken(user);
+    return res.json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone || "",
+        role: user.role,
+        company: user.companyId
+          ? {
+              id: user.companyId._id,
+              name: user.companyId.name,
+              slug: user.companyId.slug
+            }
+          : null,
+        assignedGateId: user.assignedGateId?._id || null,
+        assignedGateName: user.assignedGateId?.name || null
+      }
+    });
+  } catch (error) {
+    console.error("Error in POST /api/auth/login:", error);
+    return res.status(500).json({ message: error.message || "Login failed" });
+  }
 });
 
 async function getManagedEventIdsForUser(userId, companyId) {
@@ -216,112 +231,123 @@ async function getManagedEventIdsForUser(userId, companyId) {
  *     summary: List users in the organization
  */
 authRouter.get("/staff", requireAuth, requireRole("owner", "co_owner", "event_admin", "admin", "super_admin"), async (req, res) => {
-  const currentRole = req.user.role;
-  const currentUserId = req.user.id;
-  const currentCompanyId = req.user.companyId;
+  try {
+    const currentRole = req.user.role;
+    const currentUserId = req.user.id;
+    const currentCompanyId = req.user.companyId;
 
-  if (currentRole === "super_admin") {
-    const users = await User.find()
-      .populate("assignedGateId")
-      .populate("companyId", "name")
-      .sort({ createdAt: -1 })
-      .lean();
-    return res.json(
-      users.map((u) => ({
-        id: u._id,
-        name: u.name,
-        email: u.email,
-        phone: u.phone || "",
-        role: u.role,
-        companyName: u.companyId?.name || "",
-        assignedGateId: u.assignedGateId?._id || null,
-        assignedGateName: u.assignedGateId?.name || null
-      }))
-    );
-  }
-
-  if (currentRole === "owner" || currentRole === "co_owner" || currentRole === "admin") {
-    // Owners and Co-Owners see all users in their company
-    const users = await User.find({ companyId: currentCompanyId })
-      .populate("assignedGateId")
-      .sort({ createdAt: -1 })
-      .lean();
-
-    const userIds = users.map((u) => u._id);
-    const assignments = await EventAssignment.find({ userId: { $in: userIds } })
-      .populate("eventId", "title")
-      .lean();
-
-    const assignmentsByUser = {};
-    for (const a of assignments) {
-      const uid = a.userId.toString();
-      if (!assignmentsByUser[uid]) assignmentsByUser[uid] = [];
-      assignmentsByUser[uid].push({
-        eventId: a.eventId?._id,
-        eventTitle: a.eventId?.title,
-        role: a.role
-      });
+    if (currentRole === "super_admin") {
+      const users = await User.find()
+        .populate("assignedGateId")
+        .populate("companyId", "name")
+        .sort({ createdAt: -1 })
+        .lean();
+      return res.json(
+        users.map((u) => ({
+          id: u._id,
+          name: u.name,
+          email: u.email,
+          phone: u.phone || "",
+          role: u.role,
+          companyName: u.companyId?.name || "",
+          assignedGateId: u.assignedGateId?._id || null,
+          assignedGateName: u.assignedGateId?.name || null
+        }))
+      );
     }
 
-    return res.json(
-      users.map((u) => ({
-        id: u._id,
-        name: u.name,
-        email: u.email,
-        phone: u.phone || "",
-        role: u.role,
-        assignedGateId: u.assignedGateId?._id || null,
-        assignedGateName: u.assignedGateId?.name || null,
-        assignments: assignmentsByUser[u._id.toString()] || []
-      }))
-    );
-  }
+    if (!currentCompanyId) {
+      return res.json([]);
+    }
 
-  if (currentRole === "event_admin") {
-    // Event Admins see ONLY event_staff assigned to their managed events
-    const managedEventIds = await getManagedEventIdsForUser(currentUserId, currentCompanyId);
-    const staffAssignments = await EventAssignment.find({
-      eventId: { $in: managedEventIds },
-      role: "event_staff"
-    }).select("userId eventId").populate("eventId", "title").lean();
+    if (currentRole === "owner" || currentRole === "co_owner" || currentRole === "admin") {
+      // Owners and Co-Owners see all users in their company
+      const users = await User.find({ companyId: currentCompanyId })
+        .populate("assignedGateId")
+        .sort({ createdAt: -1 })
+        .lean();
 
-    const staffUserIds = [...new Set(staffAssignments.map((a) => a.userId.toString()))];
+      const userIds = users.map((u) => u._id);
+      const assignments = await EventAssignment.find({ userId: { $in: userIds } })
+        .populate("eventId", "title")
+        .lean();
 
-    const users = await User.find({
-      _id: { $in: staffUserIds },
-      companyId: currentCompanyId,
-      role: "event_staff"
-    })
-      .populate("assignedGateId")
-      .sort({ createdAt: -1 })
-      .lean();
+      const assignmentsByUser = {};
+      for (const a of assignments) {
+        if (!a || !a.userId) continue;
+        const uid = a.userId.toString();
+        if (!assignmentsByUser[uid]) assignmentsByUser[uid] = [];
+        assignmentsByUser[uid].push({
+          eventId: a.eventId?._id,
+          eventTitle: a.eventId?.title,
+          role: a.role
+        });
+      }
 
-    const assignmentsByUser = {};
-    for (const a of staffAssignments) {
-      const uid = a.userId.toString();
-      if (!assignmentsByUser[uid]) assignmentsByUser[uid] = [];
-      assignmentsByUser[uid].push({
-        eventId: a.eventId?._id,
-        eventTitle: a.eventId?.title,
+      return res.json(
+        users.map((u) => ({
+          id: u._id,
+          name: u.name,
+          email: u.email,
+          phone: u.phone || "",
+          role: u.role,
+          assignedGateId: u.assignedGateId?._id || null,
+          assignedGateName: u.assignedGateId?.name || null,
+          assignments: assignmentsByUser[u._id.toString()] || []
+        }))
+      );
+    }
+
+    if (currentRole === "event_admin") {
+      // Event Admins see ONLY event_staff assigned to their managed events
+      const managedEventIds = await getManagedEventIdsForUser(currentUserId, currentCompanyId);
+      const staffAssignments = await EventAssignment.find({
+        eventId: { $in: managedEventIds },
         role: "event_staff"
-      });
+      }).select("userId eventId").populate("eventId", "title").lean();
+
+      const staffUserIds = [...new Set(staffAssignments.map((a) => (a && a.userId ? a.userId.toString() : null)).filter(Boolean))];
+
+      const users = await User.find({
+        _id: { $in: staffUserIds },
+        companyId: currentCompanyId,
+        role: "event_staff"
+      })
+        .populate("assignedGateId")
+        .sort({ createdAt: -1 })
+        .lean();
+
+      const assignmentsByUser = {};
+      for (const a of staffAssignments) {
+        if (!a || !a.userId) continue;
+        const uid = a.userId.toString();
+        if (!assignmentsByUser[uid]) assignmentsByUser[uid] = [];
+        assignmentsByUser[uid].push({
+          eventId: a.eventId?._id,
+          eventTitle: a.eventId?.title,
+          role: "event_staff"
+        });
+      }
+
+      return res.json(
+        users.map((u) => ({
+          id: u._id,
+          name: u.name,
+          email: u.email,
+          phone: u.phone || "",
+          role: u.role,
+          assignedGateId: u.assignedGateId?._id || null,
+          assignedGateName: u.assignedGateId?.name || null,
+          assignments: assignmentsByUser[u._id.toString()] || []
+        }))
+      );
     }
 
-    return res.json(
-      users.map((u) => ({
-        id: u._id,
-        name: u.name,
-        email: u.email,
-        phone: u.phone || "",
-        role: u.role,
-        assignedGateId: u.assignedGateId?._id || null,
-        assignedGateName: u.assignedGateId?.name || null,
-        assignments: assignmentsByUser[u._id.toString()] || []
-      }))
-    );
+    return res.status(403).json({ message: "Insufficient permissions" });
+  } catch (error) {
+    console.error("Error in GET /api/auth/staff:", error);
+    return res.status(500).json({ message: error.message || "Failed to load staff" });
   }
-
-  return res.status(403).json({ message: "Insufficient permissions" });
 });
 
 /**
@@ -332,115 +358,126 @@ authRouter.get("/staff", requireAuth, requireRole("owner", "co_owner", "event_ad
  *     summary: Create a user account in the organization
  */
 authRouter.post("/staff", requireAuth, requireRole("owner", "co_owner", "event_admin", "admin", "super_admin"), async (req, res) => {
-  const currentRole = req.user.role;
-  const currentUserId = req.user.id;
-  const currentCompanyId = req.user.companyId;
-  const { name, email, password, phone, role, assignedGateId, assignedEventIds } = req.body || {};
-  const normalizedEmail = String(email || "").toLowerCase().trim();
+  try {
+    const currentRole = req.user.role;
+    const currentUserId = req.user.id;
+    let currentCompanyId = req.user.companyId;
 
-  if (!name || !normalizedEmail || !password) {
-    return res.status(400).json({ message: "Name, email and password are required" });
-  }
-
-  // 1. Role Authorization Check
-  if (currentRole === "co_owner") {
-    if (role === "owner" || role === "co_owner") {
-      return res.status(403).json({ message: "Only the Owner can create Co-Owners or Owners" });
+    if (!currentCompanyId && currentRole !== "super_admin") {
+      const activeCompany = await Company.findOne({ isActive: true }).sort({ createdAt: 1 });
+      if (activeCompany) currentCompanyId = activeCompany._id.toString();
     }
-  } else if (currentRole === "event_admin") {
-    if (role !== "event_staff") {
-      return res.status(403).json({ message: "Event Admins can only create Event Staff accounts" });
+
+    const { name, email, password, phone, role, assignedGateId, assignedEventIds } = req.body || {};
+    const normalizedEmail = String(email || "").toLowerCase().trim();
+
+    if (!name || !normalizedEmail || !password) {
+      return res.status(400).json({ message: "Name, email and password are required" });
     }
-  }
 
-  let targetRole = role;
-  if (currentRole === "event_admin") {
-    targetRole = "event_staff";
-  } else if (currentRole === "co_owner") {
-    targetRole = role === "event_admin" ? "event_admin" : "event_staff";
-  } else {
-    // Owner or super_admin
-    const allowedRoles = ["co_owner", "event_admin", "event_staff"];
-    targetRole = allowedRoles.includes(role) ? role : "event_staff";
-  }
-
-  const existing = await User.findOne({ email: normalizedEmail });
-  if (existing) {
-    return res.status(409).json({ message: "An account with this email already exists" });
-  }
-
-  const gateId = assignedGateId && mongoose.Types.ObjectId.isValid(assignedGateId) ? assignedGateId : null;
-
-  if (gateId) {
-    const gate = await Gate.findById(gateId).lean();
-    if (!gate) {
-      return res.status(404).json({ message: "Assigned gate not found" });
-    }
-    const gateEvent = await Event.findById(gate.eventId).lean();
-    if (!gateEvent || gateEvent.companyId?.toString() !== currentCompanyId?.toString()) {
-      return res.status(403).json({ message: "Gate does not belong to your company" });
-    }
-    if (currentRole === "event_admin") {
-      const managedEventIds = await getManagedEventIdsForUser(currentUserId, currentCompanyId);
-      if (!managedEventIds.includes(gate.eventId.toString())) {
-        return res.status(403).json({ message: "Selected gate does not belong to your managed events" });
+    // 1. Role Authorization Check
+    if (currentRole === "co_owner") {
+      if (role === "owner" || role === "co_owner") {
+        return res.status(403).json({ message: "Only the Owner can create Co-Owners or Owners" });
+      }
+    } else if (currentRole === "event_admin") {
+      if (role !== "event_staff") {
+        return res.status(403).json({ message: "Event Admins can only create Event Staff accounts" });
       }
     }
-  }
 
-  const passwordHash = await bcrypt.hash(password, 10);
-  const user = await User.create({
-    companyId: currentCompanyId,
-    name: name.trim(),
-    email: normalizedEmail,
-    passwordHash,
-    phone: String(phone || "").trim(),
-    role: targetRole,
-    assignedGateId: gateId
-  });
-
-  // Handle assigned events if provided
-  if (Array.isArray(assignedEventIds) && assignedEventIds.length > 0) {
-    const validEvents = await Event.find({
-      _id: { $in: assignedEventIds },
-      companyId: currentCompanyId
-    }).select("_id").lean();
-
-    let validEventIds = validEvents.map((e) => e._id.toString());
+    let targetRole = role;
     if (currentRole === "event_admin") {
-      const managed = await getManagedEventIdsForUser(currentUserId, currentCompanyId);
-      validEventIds = validEventIds.filter((id) => managed.includes(id));
+      targetRole = "event_staff";
+    } else if (currentRole === "co_owner") {
+      targetRole = role === "event_admin" ? "event_admin" : "event_staff";
+    } else {
+      // Owner or super_admin
+      const allowedRoles = ["co_owner", "event_admin", "event_staff"];
+      targetRole = allowedRoles.includes(role) ? role : "event_staff";
     }
 
-    const assignmentRole = targetRole === "event_admin" ? "event_admin" : "event_staff";
-    for (const evId of validEventIds) {
-      await EventAssignment.updateOne(
-        { userId: user._id, eventId: evId },
-        { $set: { role: assignmentRole, assignedGateId: gateId } },
-        { upsert: true }
-      );
+    const existing = await User.findOne({ email: normalizedEmail });
+    if (existing) {
+      return res.status(409).json({ message: "An account with this email already exists" });
     }
-  } else if (gateId) {
-    const gate = await Gate.findById(gateId).lean();
-    if (gate) {
-      await EventAssignment.updateOne(
-        { userId: user._id, eventId: gate.eventId },
-        { $set: { role: "event_staff", assignedGateId: gate._id } },
-        { upsert: true }
-      );
+
+    const gateId = assignedGateId && mongoose.Types.ObjectId.isValid(assignedGateId) ? assignedGateId : null;
+
+    if (gateId) {
+      const gate = await Gate.findById(gateId).lean();
+      if (!gate) {
+        return res.status(404).json({ message: "Assigned gate not found" });
+      }
+      const gateEvent = await Event.findById(gate.eventId).lean();
+      if (!gateEvent || gateEvent.companyId?.toString() !== currentCompanyId?.toString()) {
+        return res.status(403).json({ message: "Gate does not belong to your company" });
+      }
+      if (currentRole === "event_admin") {
+        const managedEventIds = await getManagedEventIdsForUser(currentUserId, currentCompanyId);
+        if (!managedEventIds.includes(gate.eventId.toString())) {
+          return res.status(403).json({ message: "Selected gate does not belong to your managed events" });
+        }
+      }
     }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await User.create({
+      companyId: currentCompanyId,
+      name: name.trim(),
+      email: normalizedEmail,
+      passwordHash,
+      phone: String(phone || "").trim(),
+      role: targetRole,
+      assignedGateId: gateId
+    });
+
+    // Handle assigned events if provided
+    if (Array.isArray(assignedEventIds) && assignedEventIds.length > 0) {
+      const validEvents = await Event.find({
+        _id: { $in: assignedEventIds },
+        companyId: currentCompanyId
+      }).select("_id").lean();
+
+      let validEventIds = validEvents.map((e) => e._id.toString());
+      if (currentRole === "event_admin") {
+        const managed = await getManagedEventIdsForUser(currentUserId, currentCompanyId);
+        validEventIds = validEventIds.filter((id) => managed.includes(id));
+      }
+
+      const assignmentRole = targetRole === "event_admin" ? "event_admin" : "event_staff";
+      for (const evId of validEventIds) {
+        await EventAssignment.updateOne(
+          { userId: user._id, eventId: evId },
+          { $set: { role: assignmentRole, assignedGateId: gateId } },
+          { upsert: true }
+        );
+      }
+    } else if (gateId) {
+      const gate = await Gate.findById(gateId).lean();
+      if (gate) {
+        await EventAssignment.updateOne(
+          { userId: user._id, eventId: gate.eventId },
+          { $set: { role: "event_staff", assignedGateId: gate._id } },
+          { upsert: true }
+        );
+      }
+    }
+
+    const populated = await User.findById(user._id).populate("assignedGateId");
+    return res.status(201).json({
+      id: populated._id,
+      name: populated.name,
+      email: populated.email,
+      phone: populated.phone || "",
+      role: populated.role,
+      assignedGateId: populated.assignedGateId?._id || null,
+      assignedGateName: populated.assignedGateId?.name || null
+    });
+  } catch (error) {
+    console.error("Error in POST /api/auth/staff:", error);
+    return res.status(500).json({ message: error.message || "Failed to create user" });
   }
-
-  const populated = await User.findById(user._id).populate("assignedGateId");
-  return res.status(201).json({
-    id: populated._id,
-    name: populated.name,
-    email: populated.email,
-    phone: populated.phone || "",
-    role: populated.role,
-    assignedGateId: populated.assignedGateId?._id || null,
-    assignedGateName: populated.assignedGateId?.name || null
-  });
 });
 
 /**

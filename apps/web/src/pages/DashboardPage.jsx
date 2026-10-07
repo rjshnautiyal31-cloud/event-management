@@ -78,9 +78,15 @@ export function DashboardPage({ auth }) {
   async function loadEvents() {
     try {
       const list = await api("/api/events", { token: auth.token });
-      setEvents(list);
-      if (list.length && !selectedEventId) {
-        setSelectedEventId(list[0]._id);
+      const safeList = Array.isArray(list) ? list : [];
+      setEvents(safeList);
+      if (safeList.length && !selectedEventId) {
+        setSelectedEventId(safeList[0]._id);
+      } else if (!safeList.length) {
+        setSelectedEventId("");
+        setStats(null);
+        setAttendees([]);
+        setGates([]);
       }
     } catch (err) {
       setError(err.message);
@@ -89,28 +95,39 @@ export function DashboardPage({ auth }) {
 
   async function loadStaff() {
     if (!isAdmin) return;
-    const staff = await api("/api/auth/staff", { token: auth.token });
-    setStaffUsers(staff);
+    try {
+      const staff = await api("/api/auth/staff", { token: auth.token });
+      setStaffUsers(Array.isArray(staff) ? staff : []);
+    } catch (err) {
+      console.error("Failed to load staff:", err);
+      setStaffError(err.message);
+    }
   }
 
   useEffect(() => {
     loadEvents();
-    loadStaff().catch((err) => setError(err.message));
+    loadStaff();
   }, [auth.token]);
 
   async function loadEventDetails(eventId) {
-    const [s, a] = await Promise.all([
-      api(`/api/events/${eventId}/stats`, { token: auth.token }),
-      api(`/api/events/${eventId}/attendees`, { token: auth.token })
-    ]);
-    setStats(s);
-    setAttendees(a);
+    if (!eventId) return;
+    try {
+      const [s, a] = await Promise.all([
+        api(`/api/events/${eventId}/stats`, { token: auth.token }),
+        api(`/api/events/${eventId}/attendees`, { token: auth.token })
+      ]);
+      setStats(s);
+      setAttendees(Array.isArray(a) ? a : []);
+    } catch (err) {
+      console.error("Failed to load event details:", err);
+    }
   }
 
   async function loadGates(eventId) {
+    if (!eventId) return;
     try {
       const list = await api(`/api/events/${eventId}/gates`, { token: auth.token });
-      setGates(list);
+      setGates(Array.isArray(list) ? list : []);
     } catch (err) {
       console.error("Failed to load gates:", err);
     }
@@ -845,8 +862,21 @@ export function DashboardPage({ auth }) {
         {/* TAB 2: 👥 ATTENDEES & HIGH-VOLUME SCALABLE ROSTER */}
         {activeTab === "attendees" && (
           <div className="space-y-4 animate-fade-in">
-            
-            {/* Header & Quick Action Trigger Bar */}
+            {!selectedEvent ? (
+              <div className="bg-white rounded-2xl p-8 border border-slate-200/80 text-center space-y-3 shadow-xs">
+                <p className="text-slate-500 text-sm font-semibold">Please select or create an event to view and manage attendees.</p>
+                {canCreateEvent && (
+                  <button
+                    onClick={() => setCreateEventModalOpen(true)}
+                    className="rounded-xl bg-[#0A2D59] hover:bg-[#082247] px-4 py-2.5 text-xs font-bold text-white shadow-sm"
+                  >
+                    + Create An Event
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                {/* Header & Quick Action Trigger Bar */}
             <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs space-y-3">
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 <div className="relative flex-1">
@@ -1032,13 +1062,28 @@ export function DashboardPage({ auth }) {
                 </div>
               )}
             </div>
+              </>
+            )}
           </div>
         )}
 
         {/* TAB 3: 📍 GATES & CHECK-IN POSTS */}
         {activeTab === "gates" && (
           <div className="space-y-6 animate-fade-in">
-            
+            {!selectedEvent ? (
+              <div className="bg-white rounded-2xl p-8 border border-slate-200/80 text-center space-y-3 shadow-xs">
+                <p className="text-slate-500 text-sm font-semibold">Please select or create an event to view and manage entrance gates.</p>
+                {canCreateEvent && (
+                  <button
+                    onClick={() => setCreateEventModalOpen(true)}
+                    className="rounded-xl bg-[#0A2D59] hover:bg-[#082247] px-4 py-2.5 text-xs font-bold text-white shadow-sm"
+                  >
+                    + Create An Event
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
             {/* Live Camera Scanner Launcher Banner with #0A2D59 Branding */}
             <div className="bg-gradient-to-r from-[#0A2D59] via-[#0D386F] to-[#0A2D59] rounded-2xl p-6 text-white shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="space-y-1">
@@ -1100,6 +1145,8 @@ export function DashboardPage({ auth }) {
                 ))}
               </div>
             </div>
+              </>
+            )}
           </div>
         )}
 
@@ -1467,7 +1514,13 @@ export function DashboardPage({ auth }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium">
-                    {events
+                    {events.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-slate-400 text-xs italic font-medium">
+                          No events found in your workspace.
+                        </td>
+                      </tr>
+                    ) : events
                       .filter((ev) => {
                         const query = eventSearchQuery.trim().toLowerCase();
                         const matchesQuery =

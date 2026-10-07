@@ -39,8 +39,10 @@ app.use("/api/scan", scanRouter);
 app.use("/api/story-video", storyVideoRouter);
 app.use("/api/settings", settingsRouter);
 
-app.use((err, _req, res, _next) => {
+app.use((err, req, res, _next) => {
   console.error(err);
-  res.status(500).json({ message: "Internal server error" });
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  res.status(500).json({ message: err.message || "Internal server error" });
 });
 

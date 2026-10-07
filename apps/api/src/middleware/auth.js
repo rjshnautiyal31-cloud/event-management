@@ -2,8 +2,9 @@ import { verifyToken } from "../utils/jwt.js";
 import { EventAssignment } from "../models/EventAssignment.js";
 import { Attendee } from "../models/Attendee.js";
 import { Event } from "../models/Event.js";
+import { User } from "../models/User.js";
 
-export function requireAuth(req, res, next) {
+export async function requireAuth(req, res, next) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.substring(7) : (req.query?.token || null);
 
@@ -13,9 +14,24 @@ export function requireAuth(req, res, next) {
 
   try {
     const decoded = verifyToken(token);
+    const userId = decoded.sub || decoded.id || decoded._id;
+    let companyId = decoded.companyId || null;
+    let role = decoded.role;
+
+    // Fallback if companyId is missing from token (e.g. older session)
+    if (!companyId) {
+      const dbUser = await User.findById(userId).select("companyId role").lean();
+      if (dbUser) {
+        companyId = dbUser.companyId ? dbUser.companyId.toString() : null;
+        role = dbUser.role || role;
+      }
+    }
+
     req.user = {
       ...decoded,
-      id: decoded.sub || decoded.id || decoded._id
+      id: userId,
+      role,
+      companyId
     };
     return next();
   } catch (error) {
@@ -28,11 +44,12 @@ export function requireRole(...roles) {
     if (!req.user) {
       return res.status(401).json({ message: "Authentication required" });
     }
-    // Support alias roles: 'admin' maps to 'super_admin' or 'admin' or 'event_admin', 'staff' maps to 'event_staff' or 'staff'
     const userRole = req.user.role;
     const isAllowed = roles.some((role) => {
-      if (role === "admin" && (userRole === "admin" || userRole === "super_admin" || userRole === "event_admin")) return true;
-      if (role === "staff" && (userRole === "staff" || userRole === "event_staff")) return true;
+      // Support aliases for backward compatibility
+      if (role === "admin" && (userRole === "owner" || userRole === "co_owner" || userRole === "event_admin" || userRole === "super_admin" || userRole === "admin")) return true;
+      if (role === "owner_or_co_owner" && (userRole === "owner" || userRole === "co_owner" || userRole === "super_admin")) return true;
+      if (role === "staff" && (userRole === "event_staff" || userRole === "staff")) return true;
       return userRole === role;
     });
 
@@ -49,11 +66,12 @@ export function requireEventAccess(allowedRoles = ["event_admin", "event_staff"]
       return res.status(401).json({ message: "Authentication required" });
     }
 
-    const userId = req.user.id || req.user.sub;
+    const userId = req.user.id;
     const userRole = req.user.role;
+    const userCompanyId = req.user.companyId ? req.user.companyId.toString() : null;
 
-    // 1. Super User Fallback: Super Admins bypass event-level scoping completely
-    if (userRole === "super_admin" || userRole === "admin") {
+    // 1. Super Admins bypass event-level scoping completely
+    if (userRole === "super_admin") {
       return next();
     }
 
@@ -73,11 +91,26 @@ export function requireEventAccess(allowedRoles = ["event_admin", "event_staff"]
       return res.status(400).json({ message: "Event context (eventId) is required for authorization" });
     }
 
-    // 3. Query event object to check if user is creator
-    const event = await Event.findById(eventId).select("createdBy").lean();
-    const isCreator = event && event.createdBy && event.createdBy.toString() === userId.toString();
+    // 3. Find event and verify company tenant ownership
+    const event = await Event.findById(eventId).select("companyId createdBy").lean();
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
 
-    // 4. Query EventAssignment collection for explicit grants
+    if (userCompanyId && event.companyId && event.companyId.toString() !== userCompanyId) {
+      return res.status(403).json({ message: "Access denied: Event does not belong to your company" });
+    }
+
+    // 4. Owners and Co-Owners automatically have full administrative access to all company events
+    if (userRole === "owner" || userRole === "co_owner") {
+      req.eventAssignment = { userId, eventId, role: "event_admin" };
+      return next();
+    }
+
+    // 5. Check if user is event creator
+    const isCreator = event.createdBy && event.createdBy.toString() === userId.toString();
+
+    // 6. Query EventAssignment collection for explicit grants
     let assignment = await EventAssignment.findOne({
       userId,
       eventId
@@ -86,7 +119,6 @@ export function requireEventAccess(allowedRoles = ["event_admin", "event_staff"]
     // If user created the event or is event_admin with created event, auto-grant event_admin
     if (!assignment && (isCreator || userRole === "event_admin")) {
       assignment = { userId, eventId, role: "event_admin" };
-      // Auto-heal missing assignment record in background
       EventAssignment.updateOne(
         { userId, eventId },
         { $setOnInsert: { role: "event_admin", assignedGateId: null } },
@@ -100,9 +132,9 @@ export function requireEventAccess(allowedRoles = ["event_admin", "event_staff"]
 
     const assignedRole = assignment.role || (isCreator ? "event_admin" : userRole);
 
-    // 5. Role Hierarchy & Permission Validation with alias matching
+    // 7. Role Hierarchy & Permission Validation
     const isAllowed = allowedRoles.some((role) => {
-      if (role === "event_admin" && (assignedRole === "event_admin" || assignedRole === "admin" || userRole === "event_admin")) return true;
+      if (role === "event_admin" && (assignedRole === "event_admin" || userRole === "event_admin")) return true;
       if (role === "event_staff" && (assignedRole === "event_staff" || assignedRole === "staff" || assignedRole === "event_admin" || userRole === "event_admin")) return true;
       return assignedRole === role;
     });
@@ -115,4 +147,3 @@ export function requireEventAccess(allowedRoles = ["event_admin", "event_staff"]
     return next();
   };
 }
-

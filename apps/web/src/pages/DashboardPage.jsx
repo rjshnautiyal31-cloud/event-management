@@ -14,7 +14,7 @@ export function DashboardPage({ auth }) {
   const [bulkResult, setBulkResult] = useState(null);
   const [manualAttendee, setManualAttendee] = useState({ name: "", email: "", phoneNumber: "" });
   const [staffUsers, setStaffUsers] = useState([]);
-  const [staffForm, setStaffForm] = useState({ name: "", email: "", password: "", role: "event_staff", assignedGateId: "" });
+  const [staffForm, setStaffForm] = useState({ name: "", email: "", password: "", phone: "", role: "event_staff", assignedGateId: "", assignedEventIds: [] });
   const [form, setForm] = useState({
     title: "",
     date: new Date().toISOString().split("T")[0],
@@ -61,14 +61,19 @@ export function DashboardPage({ auth }) {
 
   // User edit/delete states
   const [editingUser, setEditingUser] = useState(null);
-  const [editUserForm, setEditUserForm] = useState({ name: "", email: "", role: "event_staff", assignedGateId: "" });
+  const [editUserForm, setEditUserForm] = useState({ name: "", email: "", phone: "", role: "event_staff", assignedGateId: "", assignedEventIds: [] });
   const [editUserError, setEditUserError] = useState("");
 
   // Map of attendee IDs to generated QR Data URLs
   const [attendeeQrMap, setAttendeeQrMap] = useState({});
 
-  const isSuperAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin";
-  const isAdmin = isSuperAdmin || auth.user?.role === "event_admin";
+  const isSuperAdmin = auth.user?.role === "super_admin";
+  const isOwner = auth.user?.role === "owner";
+  const isCoOwner = auth.user?.role === "co_owner";
+  const isEventAdmin = auth.user?.role === "event_admin";
+  const isStaff = auth.user?.role === "event_staff" || auth.user?.role === "staff";
+  const isAdmin = isOwner || isCoOwner || isEventAdmin || isSuperAdmin || auth.user?.role === "admin";
+  const canCreateEvent = isOwner || isCoOwner || isSuperAdmin;
 
   async function loadEvents() {
     try {
@@ -280,6 +285,27 @@ export function DashboardPage({ auth }) {
     }
   }
 
+  async function handleDeleteEvent(eventId, eventTitle) {
+    if (!canCreateEvent) return;
+    if (!window.confirm(`Are you sure you want to delete event "${eventTitle}"? This will also remove attendees, gates, and storyboards for this event.`)) return;
+    setEventError("");
+    setEventSuccess("");
+    try {
+      await api(`/api/events/${eventId}`, {
+        token: auth.token,
+        method: "DELETE"
+      });
+      setEventSuccess(`Event "${eventTitle}" deleted successfully!`);
+      const updatedList = await api("/api/events", { token: auth.token });
+      setEvents(updatedList);
+      if (selectedEventId === eventId) {
+        setSelectedEventId(updatedList[0]?._id || "");
+      }
+    } catch (err) {
+      setEventError(err.message);
+    }
+  }
+
   async function uploadCsv(file) {
     setAttendeeError("");
     setAttendeeSuccess("");
@@ -332,9 +358,23 @@ export function DashboardPage({ auth }) {
         method: "POST",
         body: staffForm
       });
-      const roleLabels = { super_admin: "Super Admin", event_admin: "Event Admin", event_staff: "Event Staff" };
+      const roleLabels = {
+        owner: "Owner",
+        co_owner: "Co-Owner",
+        event_admin: "Event Admin",
+        event_staff: "Event Staff",
+        super_admin: "Super Admin"
+      };
       const createdRole = roleLabels[staffForm.role] || "User";
-      setStaffForm({ name: "", email: "", password: "", role: "event_staff", assignedGateId: "" });
+      setStaffForm({
+        name: "",
+        email: "",
+        password: "",
+        phone: "",
+        role: isEventAdmin ? "event_staff" : (isCoOwner ? "event_admin" : "event_staff"),
+        assignedGateId: "",
+        assignedEventIds: []
+      });
       setStaffSuccess(`${createdRole} account created successfully!`);
       await loadStaff();
     } catch (err) {
@@ -347,8 +387,10 @@ export function DashboardPage({ auth }) {
     setEditUserForm({
       name: user.name,
       email: user.email,
+      phone: user.phone || "",
       role: user.role,
-      assignedGateId: user.assignedGateId || ""
+      assignedGateId: user.assignedGateId || "",
+      assignedEventIds: (user.assignments || []).map((a) => (a.eventId?._id || a.eventId)?.toString()).filter(Boolean)
     });
     setEditUserError("");
   }
@@ -479,7 +521,7 @@ export function DashboardPage({ auth }) {
         auth={auth}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
-        onOpenCreateEvent={() => setCreateEventModalOpen(true)}
+        onOpenCreateEvent={canCreateEvent ? () => setCreateEventModalOpen(true) : null}
         onOpenWalkIn={() => setWalkInSheetOpen(true)}
         onOpenBulkImport={() => setBulkImportSheetOpen(true)}
       />
@@ -514,7 +556,7 @@ export function DashboardPage({ auth }) {
               </div>
             </button>
             
-            {isAdmin && (
+            {canCreateEvent && (
               <button
                 onClick={() => setCreateEventModalOpen(true)}
                 className="shrink-0 rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-2.5 sm:px-3.5 py-2 text-xs font-bold text-white shadow-sm cursor-pointer whitespace-nowrap"
@@ -692,7 +734,7 @@ export function DashboardPage({ auth }) {
             ) : (
               <div className="bg-white rounded-2xl p-8 border border-slate-200/80 text-center space-y-3 shadow-xs">
                 <p className="text-slate-500 text-sm font-semibold">No events found in your workspace.</p>
-                {isAdmin && (
+                {canCreateEvent && (
                   <button
                     onClick={() => setCreateEventModalOpen(true)}
                     className="rounded-xl bg-[#0A2D59] hover:bg-[#082247] px-4 py-2.5 text-xs font-bold text-white shadow-sm"
@@ -1070,7 +1112,7 @@ export function DashboardPage({ auth }) {
               <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
                 <h3 className="text-xs font-extrabold text-[#0A2D59] uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center gap-1.5">
                   <span>➕</span>
-                  <span>{isSuperAdmin ? "Create System Account" : "Create Event Staff"}</span>
+                  <span>{isEventAdmin ? "Add Event Staff" : "Add Team Member"}</span>
                 </h3>
 
                 <form onSubmit={createStaffUser} className="space-y-3">
@@ -1089,51 +1131,116 @@ export function DashboardPage({ auth }) {
                     onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })}
                     required
                   />
-                  <input
-                    className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
-                    placeholder="Temporary Password"
-                    type="password"
-                    value={staffForm.password}
-                    onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })}
-                    required
-                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
+                      placeholder="Phone Number (Optional)"
+                      type="tel"
+                      value={staffForm.phone}
+                      onChange={(e) => setStaffForm({ ...staffForm, phone: e.target.value })}
+                    />
+                    <input
+                      className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
+                      placeholder="Temporary Password"
+                      type="password"
+                      value={staffForm.password}
+                      onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })}
+                      required
+                    />
+                  </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <select
-                      className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
-                      value={staffForm.role}
-                      onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}
-                    >
-                      <option value="event_staff">Role: Event Staff</option>
-                      {isSuperAdmin && (
-                        <>
-                          <option value="event_admin">Role: Event Admin</option>
-                          <option value="super_admin">Role: Super Admin</option>
-                        </>
-                      )}
-                    </select>
-
-                    {staffForm.role === "event_staff" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Select Role</label>
                       <select
                         className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
-                        value={staffForm.assignedGateId}
-                        onChange={(e) => setStaffForm({ ...staffForm, assignedGateId: e.target.value })}
+                        value={staffForm.role}
+                        onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}
                       >
-                        <option value="">No Gate Assigned</option>
-                        {gates.map((g) => (
-                          <option key={g._id} value={g._id}>
-                            Gate: {g.name}
-                          </option>
-                        ))}
+                        <option value="event_staff">Role: Event Staff</option>
+                        {(isOwner || isSuperAdmin) && (
+                          <option value="co_owner">Role: Co-Owner</option>
+                        )}
+                        {(isOwner || isCoOwner || isSuperAdmin) && (
+                          <option value="event_admin">Role: Event Admin</option>
+                        )}
+                        {isSuperAdmin && (
+                          <option value="super_admin">Role: Super Admin</option>
+                        )}
                       </select>
+                    </div>
+
+                    {staffForm.role === "event_staff" ? (
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Initial Post (Optional)</label>
+                        <select
+                          className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
+                          value={staffForm.assignedGateId}
+                          onChange={(e) => setStaffForm({ ...staffForm, assignedGateId: e.target.value })}
+                        >
+                          <option value="">No Gate Assigned</option>
+                          {gates.map((g) => (
+                            <option key={g._id} value={g._id}>
+                              Gate: {g.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="flex items-center text-[10px] text-slate-500 italic p-2 bg-slate-50 rounded-xl border border-slate-200">
+                        {staffForm.role === "co_owner" && "Co-Owners manage all company events & staff."}
+                        {staffForm.role === "event_admin" && "Event Admins manage designated events below."}
+                        {staffForm.role === "super_admin" && "Global system administrative permissions."}
+                      </div>
                     )}
                   </div>
 
+                  {/* Event Assignments Multi-Select for event_admin and event_staff */}
+                  {(staffForm.role === "event_admin" || staffForm.role === "event_staff") && events.length > 0 && (
+                    <div className="space-y-1.5 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase">
+                          Assign to Events {staffForm.role === "event_admin" ? "(Required for Event Admin)" : "(Optional)"}:
+                        </label>
+                        <span className="text-[10px] text-slate-400 font-semibold">
+                          {staffForm.assignedEventIds?.length || 0} selected
+                        </span>
+                      </div>
+                      <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                        {events.map((ev) => {
+                          const checked = (staffForm.assignedEventIds || []).includes(ev._id);
+                          return (
+                            <label
+                              key={ev._id}
+                              className={`flex items-center gap-2 p-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                                checked ? "bg-white text-[#0A2D59] font-bold border border-slate-200/80 shadow-2xs" : "text-slate-600 hover:bg-slate-100"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const current = staffForm.assignedEventIds || [];
+                                  const updated = e.target.checked
+                                    ? [...current, ev._id]
+                                    : current.filter((id) => id !== ev._id);
+                                  setStaffForm({ ...staffForm, assignedEventIds: updated });
+                                }}
+                                className="rounded text-[#0A2D59] focus:ring-[#0A2D59]"
+                              />
+                              <span className="truncate">{ev.title}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <button
                     type="submit"
-                    className="w-full rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors p-2.5 text-xs font-bold text-white shadow-sm"
+                    className="w-full rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors p-2.5 text-xs font-bold text-white shadow-sm cursor-pointer"
                   >
-                    {isSuperAdmin ? "Create System Account" : "Create Staff Account"}
+                    {isEventAdmin ? "Create Staff Account" : "Add Team Member"}
                   </button>
                 </form>
               </div>
@@ -1142,51 +1249,115 @@ export function DashboardPage({ auth }) {
               <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
                 <h3 className="text-xs font-extrabold text-[#0A2D59] uppercase tracking-wider border-b border-slate-100 pb-2 flex items-center gap-1.5">
                   <span>🛡️</span>
-                  <span>{isSuperAdmin ? "System Accounts" : "Event Staff Accounts"} ({staffUsers.length})</span>
+                  <span>{isEventAdmin ? "Assigned Event Staff Accounts" : "Organization Team Directory"} ({staffUsers.length})</span>
                 </h3>
 
-                <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-[440px] overflow-y-auto pr-1">
                   {staffUsers.length === 0 && (
                     <p className="text-slate-400 text-xs italic font-medium">
-                      {isSuperAdmin ? "No system accounts found." : "No staff accounts assigned to your events."}
+                      {isEventAdmin ? "No staff accounts assigned to your events." : "No team accounts found."}
                     </p>
                   )}
                   {staffUsers.map((staff) => {
-                    const isSuper = staff.role === "super_admin" || staff.role === "admin";
-                    const isEventAdmin = staff.role === "event_admin";
-                    const roleBadgeText = isSuper ? "Super Admin" : isEventAdmin ? "Event Admin" : "Event Staff";
+                    const isStaffOwner = staff.role === "owner";
+                    const isStaffCoOwner = staff.role === "co_owner";
+                    const isSelf = auth.user?.id === staff.id;
+
+                    let roleBadge = null;
+                    if (isStaffOwner) {
+                      roleBadge = (
+                        <span className="ml-2 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
+                          👑 Owner
+                        </span>
+                      );
+                    } else if (isStaffCoOwner) {
+                      roleBadge = (
+                        <span className="ml-2 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-300">
+                          🛡️ Co-Owner
+                        </span>
+                      );
+                    } else if (staff.role === "event_admin") {
+                      roleBadge = (
+                        <span className="ml-2 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-300">
+                          🎯 Event Admin
+                        </span>
+                      );
+                    } else if (staff.role === "super_admin") {
+                      roleBadge = (
+                        <span className="ml-2 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-slate-200 text-slate-800 border border-slate-300">
+                          ⚡ Super Admin
+                        </span>
+                      );
+                    } else {
+                      roleBadge = (
+                        <span className="ml-2 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          🎫 Event Staff
+                        </span>
+                      );
+                    }
+
+                    // Permissions governance
+                    const canEdit =
+                      isOwner ||
+                      isSuperAdmin ||
+                      isSelf ||
+                      (isCoOwner && !isStaffOwner && !isStaffCoOwner) ||
+                      (isEventAdmin && staff.role === "event_staff");
+
+                    const canDelete =
+                      !isSelf &&
+                      !isStaffOwner &&
+                      (isOwner ||
+                        isSuperAdmin ||
+                        (isCoOwner && !isStaffCoOwner) ||
+                        (isEventAdmin && staff.role === "event_staff"));
 
                     return (
                       <div key={staff.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/60 space-y-2">
                         <div className="flex items-center justify-between">
-                          <div>
+                          <div className="flex items-center flex-wrap gap-1">
                             <span className="font-bold text-slate-900 text-xs">{staff.name}</span>
-                            <span className="ml-2 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-[#0A2D59]/10 text-[#0A2D59] border border-[#0A2D59]/20">
-                              {roleBadgeText}
-                            </span>
+                            {roleBadge}
                           </div>
                           <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleStartEditUser(staff)}
-                              className="text-[10px] font-bold text-[#0A2D59] hover:underline uppercase tracking-wider"
-                            >
-                              Edit
-                            </button>
-                            {auth.user?.id !== staff.id && (
+                            {canEdit && (
+                              <button
+                                onClick={() => handleStartEditUser(staff)}
+                                className="text-[10px] font-bold text-[#0A2D59] hover:underline uppercase tracking-wider cursor-pointer"
+                              >
+                                Edit
+                              </button>
+                            )}
+                            {canDelete && (
                               <button
                                 onClick={() => handleDeleteUser(staff.id, staff.name)}
-                                className="text-[10px] font-bold text-red-600 hover:text-red-800 uppercase tracking-wider"
+                                className="text-[10px] font-bold text-red-600 hover:text-red-800 uppercase tracking-wider cursor-pointer"
                               >
                                 Delete
                               </button>
                             )}
                           </div>
                         </div>
-                        <p className="text-[11px] text-slate-500 font-medium">{staff.email}</p>
+
+                        <div className="text-[11px] text-slate-500 font-medium space-y-0.5">
+                          <p>✉️ {staff.email}</p>
+                          {staff.phone && <p>📞 {staff.phone}</p>}
+                        </div>
+
+                        {staff.assignments && staff.assignments.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-slate-200/40">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Assigned Events:</span>
+                            {staff.assignments.map((a, idx) => (
+                              <span key={idx} className="bg-white text-slate-700 text-[10px] px-2 py-0.5 rounded border border-slate-200 font-semibold shadow-2xs">
+                                {a.eventTitle || "Event"}
+                              </span>
+                            ))}
+                          </div>
+                        )}
 
                         {(staff.role === "staff" || staff.role === "event_staff") && (
                           <div className="flex items-center gap-2 pt-1.5 border-t border-slate-200/60 text-xs">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase">Assign Post:</span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase">Current Gate:</span>
                             <select
                               value={staff.assignedGateId || ""}
                               onChange={(e) => handleReassignGate(staff.id, e.target.value)}
@@ -1227,13 +1398,15 @@ export function DashboardPage({ auth }) {
                   </p>
                 </div>
 
-                <button
-                  onClick={() => setCreateEventModalOpen(true)}
-                  className="rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-4 py-2.5 text-xs font-bold text-white shadow-sm flex items-center gap-1.5 self-start sm:self-center cursor-pointer"
-                >
-                  <span>+</span>
-                  <span>Create New Event</span>
-                </button>
+                {canCreateEvent && (
+                  <button
+                    onClick={() => setCreateEventModalOpen(true)}
+                    className="rounded-xl bg-[#0A2D59] hover:bg-[#082247] transition-colors px-4 py-2.5 text-xs font-bold text-white shadow-sm flex items-center gap-1.5 self-start sm:self-center cursor-pointer"
+                  >
+                    <span>+</span>
+                    <span>Create New Event</span>
+                  </button>
+                )}
               </div>
 
               {/* Filters Bar */}
@@ -1366,16 +1539,27 @@ export function DashboardPage({ auth }) {
                               )}
                             </td>
                             <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                              <button
-                                onClick={() => setSelectedEventId(ev._id)}
-                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                                  isSelected
-                                    ? "bg-[#0A2D59] text-white shadow-2xs"
-                                    : "bg-slate-100 hover:bg-[#0A2D59] hover:text-white text-slate-700 border border-slate-200"
-                                }`}
-                              >
-                                {isSelected ? "Active ✓" : "Switch Event"}
-                              </button>
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => setSelectedEventId(ev._id)}
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                    isSelected
+                                      ? "bg-[#0A2D59] text-white shadow-2xs"
+                                      : "bg-slate-100 hover:bg-[#0A2D59] hover:text-white text-slate-700 border border-slate-200"
+                                  }`}
+                                >
+                                  {isSelected ? "Active ✓" : "Switch Event"}
+                                </button>
+                                {canCreateEvent && (
+                                  <button
+                                    onClick={() => handleDeleteEvent(ev._id, ev.title)}
+                                    title="Delete Event"
+                                    className="p-1.5 rounded-xl text-xs font-bold bg-red-50 hover:bg-red-600 hover:text-white text-red-600 border border-red-200 transition-colors cursor-pointer"
+                                  >
+                                    🗑️
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1768,34 +1952,99 @@ export function DashboardPage({ auth }) {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Account Role</label>
-                <select
-                  value={editUserForm.role}
-                  onChange={(e) => setEditUserForm({ ...editUserForm, role: e.target.value })}
+                <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Phone Number (Optional)</label>
+                <input
+                  type="tel"
+                  placeholder="+1 (555) 000-0000"
+                  value={editUserForm.phone || ""}
+                  onChange={(e) => setEditUserForm({ ...editUserForm, phone: e.target.value })}
                   className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
-                >
-                  <option value="event_staff">Event Staff (Scanner Access)</option>
-                  {isSuperAdmin && (
-                    <>
-                      <option value="event_admin">Event Admin (Scoped Access)</option>
-                      <option value="super_admin">Super Admin (Global Access)</option>
-                    </>
-                  )}
-                </select>
+                />
               </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Account Role</label>
+                {editingUser.role === "owner" ? (
+                  <div className="w-full rounded-xl bg-slate-100 border border-slate-200 p-2.5 text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <span>👑</span>
+                    <span>Company Owner (Fixed Role)</span>
+                  </div>
+                ) : isEventAdmin ? (
+                  <div className="w-full rounded-xl bg-slate-100 border border-slate-200 p-2.5 text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <span>🎫</span>
+                    <span>Event Staff (Scanner Access)</span>
+                  </div>
+                ) : (
+                  <select
+                    value={editUserForm.role}
+                    onChange={(e) => setEditUserForm({ ...editUserForm, role: e.target.value })}
+                    className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
+                  >
+                    {(isOwner || isSuperAdmin) && (
+                      <option value="co_owner">Co-Owner (Company-Wide Management)</option>
+                    )}
+                    <option value="event_admin">Event Admin (Designated Events)</option>
+                    <option value="event_staff">Event Staff (Ticket Scanner)</option>
+                    {isSuperAdmin && (
+                      <option value="super_admin">Super Admin (Global System Access)</option>
+                    )}
+                  </select>
+                )}
+              </div>
+
+              {/* Event Assignments Multi-Select for event_admin and event_staff */}
+              {(editUserForm.role === "event_admin" || editUserForm.role === "event_staff") && events.length > 0 && (
+                <div className="space-y-1.5 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase">
+                      Assign to Events {editUserForm.role === "event_admin" ? "(Required for Event Admin)" : "(Optional)"}:
+                    </label>
+                    <span className="text-[10px] text-slate-400 font-semibold">
+                      {editUserForm.assignedEventIds?.length || 0} selected
+                    </span>
+                  </div>
+                  <div className="max-h-28 overflow-y-auto space-y-1 pr-1">
+                    {events.map((ev) => {
+                      const checked = (editUserForm.assignedEventIds || []).includes(ev._id);
+                      return (
+                        <label
+                          key={ev._id}
+                          className={`flex items-center gap-2 p-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                            checked ? "bg-white text-[#0A2D59] font-bold border border-slate-200/80 shadow-2xs" : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const current = editUserForm.assignedEventIds || [];
+                              const updated = e.target.checked
+                                ? [...current, ev._id]
+                                : current.filter((id) => id !== ev._id);
+                              setEditUserForm({ ...editUserForm, assignedEventIds: updated });
+                            }}
+                            className="rounded text-[#0A2D59] focus:ring-[#0A2D59]"
+                          />
+                          <span className="truncate">{ev.title}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {editUserForm.role === "event_staff" && (
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Assigned Gate</label>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Assigned Gate Post (Optional)</label>
                   <select
-                    value={editUserForm.assignedGateId}
+                    value={editUserForm.assignedGateId || ""}
                     onChange={(e) => setEditUserForm({ ...editUserForm, assignedGateId: e.target.value })}
                     className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                   >
-                    <option value="">No Gate Assigned</option>
+                    <option value="">No Gate Assigned (Default)</option>
                     {gates.map((g) => (
                       <option key={g._id} value={g._id}>
-                        {g.name}
+                        Gate: {g.name}
                       </option>
                     ))}
                   </select>
@@ -1905,7 +2154,7 @@ export function DashboardPage({ auth }) {
         events={events}
         selectedEventId={selectedEventId}
         onSelectEvent={(eventId) => setSelectedEventId(eventId)}
-        onOpenCreateModal={() => setCreateEventModalOpen(true)}
+        onOpenCreateModal={canCreateEvent ? () => setCreateEventModalOpen(true) : null}
       />
 
     </div>

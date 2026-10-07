@@ -16,7 +16,11 @@ export function Navbar({
   const location = useLocation();
 
   const isSuperAdmin = auth.user?.role === "super_admin";
-  const isAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin" || auth.user?.role === "event_admin";
+  const isOwner = auth.user?.role === "owner";
+  const isCoOwner = auth.user?.role === "co_owner";
+  const isEventAdmin = auth.user?.role === "event_admin";
+  const isAdmin = isOwner || isCoOwner || isEventAdmin || isSuperAdmin || auth.user?.role === "admin";
+  const canCreateEvent = isOwner || isCoOwner || isSuperAdmin;
 
   const handleNavTab = (tab) => {
     setHamburgerMenuOpen(false);
@@ -47,7 +51,9 @@ export function Navbar({
               Q
             </div>
             <div className="min-w-0">
-              <h1 className="text-xs font-black text-[#0A2D59] tracking-tight leading-none truncate">EventQR Hub</h1>
+              <h1 className="text-xs font-black text-[#0A2D59] tracking-tight leading-none truncate">
+                {auth.user?.company?.name || "EventQR Hub"}
+              </h1>
               <p className="text-[10px] text-slate-500 font-semibold mt-0.5 truncate">
                 {auth.user?.name} · <span className="text-[#0A2D59] font-extrabold capitalize">{auth.user?.role?.replace("_", " ")}</span>
               </p>
@@ -152,7 +158,7 @@ export function Navbar({
                 <div>
                   <h2 className="text-sm font-extrabold leading-tight text-white">{auth.user?.name}</h2>
                   <p className="text-[11px] text-slate-300 font-medium capitalize mt-0.5">
-                    {auth.user?.role?.replace("_", " ")}
+                    {auth.user?.company?.name ? `${auth.user?.company?.name} · ` : ""}{auth.user?.role?.replace("_", " ")}
                   </p>
                 </div>
               </div>
@@ -336,7 +342,7 @@ export function Navbar({
                     Event Actions
                   </p>
                   <div className="space-y-1">
-                    {onOpenCreateEvent && (
+                    {canCreateEvent && onOpenCreateEvent && (
                       <button
                         onClick={() => { onOpenCreateEvent(); setHamburgerMenuOpen(false); }}
                         className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-[#0A2D59] bg-slate-50 hover:bg-slate-100 transition-all border border-slate-200 cursor-pointer"

@@ -2,12 +2,19 @@ import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true },
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Company",
+      index: true,
+      default: null
+    },
+    name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
+    phone: { type: String, default: "", trim: true },
     role: {
       type: String,
-      enum: ["super_admin", "event_admin", "event_staff", "admin", "staff"],
+      enum: ["owner", "co_owner", "event_admin", "event_staff", "super_admin"],
       default: "event_staff"
     },
     assignedGateId: {
@@ -20,4 +27,3 @@ const userSchema = new mongoose.Schema(
 );
 
 export const User = mongoose.model("User", userSchema);
-

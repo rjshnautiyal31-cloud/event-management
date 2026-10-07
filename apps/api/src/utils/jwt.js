@@ -6,7 +6,8 @@ export function signToken(user) {
     {
       sub: user._id.toString(),
       role: user.role,
-      email: user.email
+      email: user.email,
+      companyId: user.companyId ? user.companyId.toString() : null
     },
     env.jwtSecret,
     { expiresIn: "12h" }
@@ -16,4 +17,3 @@ export function signToken(user) {
 export function verifyToken(token) {
   return jwt.verify(token, env.jwtSecret);
 }
-

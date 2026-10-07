@@ -52,7 +52,7 @@ eventRouter.use(requireAuth);
  *               type: array
  *               items: { $ref: '#/components/schemas/Event' }
  */
-eventRouter.post("/", requireRole("admin"), async (req, res) => {
+eventRouter.post("/", requireRole("owner", "co_owner", "super_admin"), async (req, res) => {
   const { title, date, location, description } = req.body;
   const normalizedTitle = String(title || "").trim();
   const normalizedLocation = String(location || "").trim();
@@ -62,13 +62,19 @@ eventRouter.post("/", requireRole("admin"), async (req, res) => {
     return res.status(400).json({ message: "title, valid date, and location are required" });
   }
 
+  const companyId = req.user.companyId;
+  if (!companyId && req.user.role !== "super_admin") {
+    return res.status(400).json({ message: "Company context is required to create an event" });
+  }
+
   const slugBase = String(normalizedTitle || "event")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
   const publicSlug = `${slugBase}-${Math.random().toString(36).slice(2, 8)}`;
-  const userId = req.user.id || req.user.sub;
+  const userId = req.user.id;
   const event = await Event.create({
+    companyId,
     title: normalizedTitle,
     date: parsedDate,
     location: normalizedLocation,
@@ -88,20 +94,66 @@ eventRouter.post("/", requireRole("admin"), async (req, res) => {
 });
 
 eventRouter.get("/", async (req, res) => {
-  const userId = req.user.id || req.user.sub;
+  const userId = req.user.id;
   const userRole = req.user.role;
+  const companyId = req.user.companyId;
 
-  // Super admin / legacy admin gets all events
-  if (userRole === "super_admin" || userRole === "admin") {
+  // Super admin gets all events
+  if (userRole === "super_admin") {
     const events = await Event.find().sort({ date: 1 }).lean();
+    return res.json(events);
+  }
+
+  // Owner and Co-Owner get all events in their company
+  if (userRole === "owner" || userRole === "co_owner" || userRole === "admin") {
+    const events = await Event.find({ companyId }).sort({ date: 1 }).lean();
     return res.json(events);
   }
 
   // Event admin / event staff gets assigned events only
   const assignments = await EventAssignment.find({ userId }).select("eventId").lean();
   const eventIds = assignments.map((a) => a.eventId);
-  const events = await Event.find({ _id: { $in: eventIds } }).sort({ date: 1 }).lean();
+  const events = await Event.find({ _id: { $in: eventIds }, companyId }).sort({ date: 1 }).lean();
   return res.json(events);
+});
+
+// Update event details (owner, co-owner, or assigned event-admin)
+eventRouter.put("/:eventId", requireEventAccess(["event_admin"]), async (req, res) => {
+  const { title, date, location, description } = req.body;
+  const event = await Event.findById(req.params.eventId);
+  if (!event) {
+    return res.status(404).json({ message: "Event not found" });
+  }
+
+  if (title) event.title = String(title).trim();
+  if (date) {
+    const d = new Date(date);
+    if (!Number.isNaN(d.getTime())) event.date = d;
+  }
+  if (location) event.location = String(location).trim();
+  if (description !== undefined) event.description = String(description).trim();
+
+  await event.save();
+  return res.json(event);
+});
+
+// Delete event (only owner or co-owner)
+eventRouter.delete("/:eventId", requireRole("owner", "co_owner", "super_admin"), async (req, res) => {
+  const event = await Event.findById(req.params.eventId);
+  if (!event) {
+    return res.status(404).json({ message: "Event not found" });
+  }
+
+  if (req.user.role !== "super_admin" && event.companyId?.toString() !== req.user.companyId?.toString()) {
+    return res.status(403).json({ message: "Event does not belong to your company" });
+  }
+
+  await Attendee.deleteMany({ eventId: event._id });
+  await Gate.deleteMany({ eventId: event._id });
+  await EventAssignment.deleteMany({ eventId: event._id });
+  await EntryLog.deleteMany({ eventId: event._id });
+  await Event.deleteOne({ _id: event._id });
+  return res.json({ message: "Event deleted successfully" });
 });
 /**
  * @openapi

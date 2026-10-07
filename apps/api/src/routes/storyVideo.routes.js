@@ -9,6 +9,8 @@ import { Media } from "../models/Media.js";
 import { Storyboard } from "../models/Storyboard.js";
 import { Video } from "../models/Video.js";
 import { GenerationJob } from "../models/GenerationJob.js";
+import { Event } from "../models/Event.js";
+import { EventAssignment } from "../models/EventAssignment.js";
 import { analyzeStoryWithGemini, generateLyricsWithGemini, generateSceneImageWithGemini, generateStoryboardFromLyrics } from "../services/providers/gemini.provider.js";
 import { getMusicProvider } from "../services/music/index.js";
 import { getVideoProvider } from "../services/video/index.js";
@@ -128,13 +130,32 @@ storyVideoRouter.get("/languages", (req, res) => {
   res.json(SUPPORTED_LANGUAGES);
 });
 
-// 1. Get Projects for an Event (an event can have multiple story/song/video projects)
+// 1. Get Projects for an Event (scoped to company and event access)
 storyVideoRouter.get("/projects", async (req, res, next) => {
   try {
     const { eventId } = req.query;
+    const userRole = req.user.role;
+    const companyId = req.user.companyId;
+
+    let allowedEventIds = [];
+    if (userRole === "super_admin") {
+      // Super admin can see any event
+    } else if (userRole === "owner" || userRole === "co_owner" || userRole === "admin") {
+      const companyEvents = await Event.find({ companyId }).select("_id").lean();
+      allowedEventIds = companyEvents.map((e) => e._id.toString());
+    } else {
+      const assignments = await EventAssignment.find({ userId: req.user.id }).select("eventId").lean();
+      allowedEventIds = assignments.map((a) => a.eventId.toString());
+    }
+
     const filter = {};
     if (eventId) {
+      if (userRole !== "super_admin" && !allowedEventIds.includes(eventId.toString())) {
+        return res.status(403).json({ message: "Access denied to this event's storyboards" });
+      }
       filter.eventId = eventId;
+    } else if (userRole !== "super_admin") {
+      filter.eventId = { $in: allowedEventIds };
     }
 
     const projects = await Project.find(filter)
@@ -172,6 +193,34 @@ storyVideoRouter.post("/projects", requireEventAccess(["event_admin"]), async (r
     next(err);
   }
 });
+
+// Enforce project-level company and event tenant isolation
+async function requireProjectAccess(req, res, next) {
+  try {
+    const project = await Project.findById(req.params.id);
+    if (!project) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+    if (req.user && req.user.role !== "super_admin") {
+      const event = await Event.findById(project.eventId).select("companyId").lean();
+      if (!event || (req.user.companyId && event.companyId && event.companyId.toString() !== req.user.companyId.toString())) {
+        return res.status(403).json({ message: "Access denied: Project does not belong to your company" });
+      }
+      if (req.user.role === "event_admin" || req.user.role === "event_staff") {
+        const assignment = await EventAssignment.findOne({ userId: req.user.id, eventId: event._id }).lean();
+        if (!assignment) {
+          return res.status(403).json({ message: "Access denied: You are not assigned to this project's event" });
+        }
+      }
+    }
+    req.project = project;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}
+
+storyVideoRouter.use("/projects/:id", requireProjectAccess);
 
 // 3. Get Details for a Specific Project
 storyVideoRouter.get("/projects/:id", async (req, res, next) => {

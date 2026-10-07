@@ -15,7 +15,12 @@ function ProtectedRoute({ token, user, adminOnly = false, superAdminOnly = false
   if (superAdminOnly && user?.role !== "super_admin") {
     return <Navigate to="/dashboard" replace />;
   }
-  const isAdminRole = user?.role === "admin" || user?.role === "super_admin" || user?.role === "event_admin";
+  const isAdminRole =
+    user?.role === "owner" ||
+    user?.role === "co_owner" ||
+    user?.role === "event_admin" ||
+    user?.role === "super_admin" ||
+    user?.role === "admin";
   if (adminOnly && !isAdminRole) {
     return <Navigate to="/dashboard" replace />;
   }

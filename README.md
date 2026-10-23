@@ -32,6 +32,10 @@ A full-stack, enterprise-grade monorepo for multi-tenant company event managemen
     - Zero access to administrative dashboard, event creation, or attendee rosters.
   - **🌐 Super Admin (`super_admin`)**:
     - Global platform maintenance role for cloud infrastructure and Back Office configuration (`/#/settings`).
+    - **Global Multi-Tenant Organization Switcher**: Seamlessly toggle between "All Organizations" or scope into any specific company workspace.
+    - **Cascading Scoped View**: Selecting a company instantly filters the Events Directory, active event context, Overview metrics, Attendee Rosters, Gate Checkpoints, and Team Access lists.
+    - **Cross-Tenant Creation & Reassignment**: Can provision events or staff members for any target organization or reassign team users across organizations.
+    - **Persistent Scope Selection**: Active organization context is preserved across page refreshes via `localStorage`.
 - **🔄 Automatic Legacy Data Migration**:
   - Existing legacy users, events, and gates with unassigned companies are automatically grouped under a default tenant (`Default Organization`) upon API server startup.
 
@@ -148,18 +152,22 @@ A full-stack, enterprise-grade monorepo for multi-tenant company event managemen
 
 ## API Endpoints
 
+### Companies & Multi-Tenant Oversight (`/api/companies/*`)
+- `GET /api/companies` (super_admin): List all customer organizations enriched with real-time `eventCount` and `staffCount`.
+- `GET /api/companies/:id` (super_admin): Retrieve detailed company profile, owner details, and aggregate metrics.
+
 ### Auth & Multi-Tenant Management (`/api/auth/*`)
 - `POST /api/auth/register-company`: Self-service company registration creating company workspace & initial Owner.
 - `POST /api/auth/setup-admin`: Bootstrap initial global super admin account.
 - `POST /api/auth/login`: Validate credentials, verify company active state, and issue tenant-scoped JWT token.
-- `GET /api/auth/staff` (auth): List company team members (scoped by caller's role hierarchy).
-- `POST /api/auth/staff` (auth): Create team user (`co_owner`, `event_admin`, `event_staff`) with role validation, event assignments, and gate assignment.
-- `PUT /api/auth/staff/:id` (auth): Update team member details, role, gate, or event assignments (enforces hierarchy guardrails).
+- `GET /api/auth/staff` (auth): List company team members (scoped by caller's role hierarchy; supports `?companyId=` filter for Super Admin).
+- `POST /api/auth/staff` (auth): Create team user (`co_owner`, `event_admin`, `event_staff`) with role validation, event assignments, and gate assignment (Super Admin can assign target company).
+- `PUT /api/auth/staff/:id` (auth): Update team member details, role, gate, or event assignments (Super Admin can reassign company).
 - `DELETE /api/auth/staff/:id` (auth): Delete team member account (prevents self-deletion and protects Owner/Co-Owner accounts from unauthorized deletion).
 
 ### Events, Attendees, & Gates (`/api/events/*`)
-- `POST /api/events` (owner, co_owner, super_admin): Create a new event within the caller's company.
-- `GET /api/events` (auth): List accessible events (company-wide for Owner/Co-Owner; assignment-scoped for Event Admin/Staff).
+- `POST /api/events` (owner, co_owner, super_admin): Create a new event within caller's company (or target `companyId` for Super Admin).
+- `GET /api/events` (auth): List accessible events (company-wide for Owner/Co-Owner; assignment-scoped for Event Admin/Staff; supports `?companyId=` filter for Super Admin).
 - `DELETE /api/events/:eventId` (owner, co_owner, super_admin): Delete event with cascading cleanup of attendees, gates, logs, and storyboards.
 - `GET /api/events/:eventId/stats` (auth): Event registration & check-in analytics.
 - `GET /api/events/:eventId/attendees` (auth): Paginated attendee list with virtual scrolling support.
@@ -341,5 +349,5 @@ Add your service account key JSON as a repository secret named `GCP_SA_KEY` unde
 ## Documentation & References
 
 - User Guide: [`USER_GUIDE.md`](./USER_GUIDE.md)
-- Technical Implementation Plan: [`ai_story_to_video_implementation_plan.md`](./ai_story_to_video_implementation_plan.md)
+- Technical Implementation Plan: [`docs/ai_story_to_video_implementation_plan.md`](./docs/ai_story_to_video_implementation_plan.md)
 

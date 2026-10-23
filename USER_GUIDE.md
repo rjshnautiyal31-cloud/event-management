@@ -8,6 +8,10 @@ Welcome to the **Event QR Check-In System**! This application is designed to hel
 1. [Customer Company Registration & Owner Account Setup](#1-customer-company-registration--owner-account-setup)
 2. [First-Time Super Admin Setup (Platform Oversight)](#2-first-time-super-admin-setup-platform-oversight)
 3. [Navigation & Multi-Tenant Workspace](#3-navigation--multi-tenant-workspace)
+   - [Universal #0A2D59 Navigation Bar](#universal-0a2d59-navigation-bar-navbar)
+   - [Command Switcher Palette (⌘K / Ctrl+K)](#command-switcher-palette-k--ctrlk)
+   - [Events Directory Workspace Tab](#events-directory-workspace-tab)
+   - [Super Admin Multi-Tenant Organization Switcher & Scoped View](#super-admin-multi-tenant-organization-switcher--scoped-view)
 4. [Event Creation, Public Links & Downloadable QR Codes](#4-event-creation-public-links--downloadable-qr-codes)
 5. [Multi-Tenant Role-Based Access Control (RBAC) & Team Governance](#5-multi-tenant-role-based-access-control-rbac--team-governance)
 6. [Event Gate Management](#6-event-gate-management)
@@ -79,6 +83,37 @@ When managing dozens or hundreds of events within your company:
 ### **Events Directory Workspace Tab**
 1. Switch to the **🗓️ Events** tab in your dashboard.
 2. View the full-width data table listing all accessible events with real-time text search, status filters (`🟢 Live Today`, `🗓 Upcoming`, `🏁 Ended`), public registration links (`/#/register/:slug`), and 1-tap active event switching.
+3. For Super Admins, the table displays an **Organization** column with badges (`🏢 Company Name`) showing which tenant owns each event.
+
+### **Super Admin Multi-Tenant Organization Switcher & Scoped View**
+
+When logged in as a **`super_admin`**, you have global operational oversight across every tenant company on the platform. The platform includes a unified, cascading **Organization Switcher** that allows you to inspect and operate within any specific company workspace without needing to log in as different tenant users.
+
+#### **1. Where to Switch Organizations**
+- **Dashboard Organization Switcher Bar**: Prominently displayed directly above the event hero card on the main dashboard (`DashboardPage.jsx`). Provides a full-width select dropdown:
+  - `🌐 All Organizations / Companies (Global Overview)`: Displays an aggregated view across all platform events and team members.
+  - `🏢 [Company Name] (X events • Y staff)`: Filters and scopes the entire interface into that selected customer company.
+- **Universal Top Navbar Dropdown**: A compact switcher embedded in the `#0A2D59` top navbar next to the brand title. When scoped to a company, the brand title dynamically updates to show: `[Brand] (🏢 Scoped)`.
+- **Mobile Drawer Panel**: Accessible from the hamburger menu (`☰`) on mobile and tablet devices, featuring an organization selector and a 1-tap `Reset to All` quick button.
+
+#### **2. Automatic Cascading Scoping Behavior**
+Selecting an organization triggers an instant, coordinated cascade across all dashboard sections:
+- **Events Directory Scoped**: Dynamically queries `/api/events?companyId=<companyId>`. Only the selected company's events are shown in the Events table.
+- **Active Event Auto-Cascade**: Automatically sets the active event (`selectedEventId`) to the first event of the chosen company.
+- **Overview Hub Scoped**: Real-time KPI cards (Total Registrations, Checked In count, Live Check-In Rate, Event Countdown) immediately compute and render data for the company's active event.
+- **Attendee Roster Scoped**: The **👥 Attendees** tab loads guests registered exclusively for the company's active event with fast search, pagination, status filtering, and CSV export.
+- **Gates & Checkpoints Scoped**: The **🚪 Gates** tab displays physical entrance gates configured for that company's active event.
+- **Team Directory Scoped**: The **👥 Team** tab queries `/api/auth/staff?companyId=<companyId>`, displaying only the Owners, Co-Owners, Event Admins, and Staff of that specific company with `🏢 [Company Name]` badges.
+- **Zero-Event Empty States**: If the selected company has no events yet, Overview, Attendees, and Gates present clear, company-specific empty-state callouts with 1-click `Create Event for [Company Name]` action buttons.
+
+#### **3. Context Pre-Filling & Cross-Tenant Reassignment**
+- **Creating Events (`+ New Event`)**: When an organization is selected, the Create Event modal automatically pre-selects that company in the **"Target Organization / Company"** dropdown, preventing accidental misallocation while still allowing you to choose another company if needed.
+- **Adding Team Members (`Add User`)**: Automatically pre-selects the scoped company in the **"Organization Assignment"** dropdown.
+- **Editing Users (`✏️ Edit User`)**: Super Admins can reassign any user account from one company to another via the **"Company / Organization"** selector.
+
+#### **4. Session Persistence & Strict Tenant Isolation**
+- **Persistence**: Your chosen organization scope is saved in browser `localStorage` (`superadmin_selected_company_id`), so page reloads or tab switches never reset your active viewing context.
+- **Strict Tenant Isolation**: Regular customer users (`owner`, `co_owner`, `event_admin`, `event_staff`) never see the organization switcher or other companies' data. Tenant boundaries are strictly enforced at the database query, JWT verification, and UI rendering layers.
 
 ---
 
@@ -175,14 +210,18 @@ The system enforces a rigid 5-tier organizational hierarchy:
 ### **Managing Team Members & Role Assignments**
 1. Navigate to the **Team Access** tab in the dashboard.
 2. **Add Team Member**:
+   - For Super Admins: Select the **Organization Assignment** to designate which company workspace the user belongs to.
    - Enter **Full Name**, **Work Email**, **Phone Number**, and a temporary **Password**.
-   - Select the target **Role** (`Co-Owner`, `Event Admin`, or `Event Staff`). Note that Co-Owner is only selectable by the Company Owner or Super Admin.
+   - Select the target **Role** (`Co-Owner`, `Event Admin`, or `Event Staff`). Note that Co-Owner is selectable only by the Company Owner or Super Admin.
    - For **Event Admin**: Use the multi-select event picker to assign one or multiple events they are authorized to manage.
    - For **Event Staff**: Select their assigned physical gate.
-3. **Editing & Updating Users**:
+3. **Company Badges on Team Cards**:
+   - Team cards display an organization badge (`🏢 [Company Name]`), allowing Super Admins to instantly see which tenant employs each team member.
+4. **Editing & Updating Users**:
    - Click the **Edit (`✏️`)** button on any team user card to update their name, phone, role, assigned events, or gate assignment.
+   - Super Admins can also reassign the user's **Company / Organization** from the edit modal.
    - Role escalation rules are strictly validated on the backend.
-4. **Deleting Users**:
+5. **Deleting Users**:
    - Click the **Delete (`🗑️`)** button.
    - You cannot delete your own logged-in account.
    - Co-Owners cannot delete Owners or other Co-Owners. Event Admins cannot delete other Admins or Owners.

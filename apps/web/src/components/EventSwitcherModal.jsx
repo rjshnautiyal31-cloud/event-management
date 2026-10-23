@@ -282,6 +282,12 @@ export function EventSwitcherModal({
                           Active
                         </span>
                       )}
+
+                      {ev.companyId?.name && (
+                        <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[9px] sm:text-[10px] font-bold border border-slate-200">
+                          🏢 {ev.companyId.name}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-[11px] font-medium text-slate-500 flex-wrap">

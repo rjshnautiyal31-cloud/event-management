@@ -9,7 +9,10 @@ export function Navbar({
   onOpenWalkIn,
   onOpenBulkImport,
   onOpenSwitcher,
-  selectedEventTitle
+  selectedEventTitle,
+  companies = [],
+  selectedCompanyId = "all",
+  onSelectCompany = null
 }) {
   const [hamburgerMenuOpen, setHamburgerMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -21,6 +24,10 @@ export function Navbar({
   const isEventAdmin = auth.user?.role === "event_admin";
   const isAdmin = isOwner || isCoOwner || isEventAdmin || isSuperAdmin || auth.user?.role === "admin";
   const canCreateEvent = isOwner || isCoOwner || isSuperAdmin;
+
+  const currentSelectedCompany = isSuperAdmin && selectedCompanyId !== "all"
+    ? companies.find((c) => c._id === selectedCompanyId)
+    : null;
 
   const handleNavTab = (tab) => {
     setHamburgerMenuOpen(false);
@@ -52,10 +59,11 @@ export function Navbar({
             </div>
             <div className="min-w-0">
               <h1 className="text-xs font-black text-[#0A2D59] tracking-tight leading-none truncate">
-                {auth.user?.company?.name || "EventQR Hub"}
+                {currentSelectedCompany ? currentSelectedCompany.name : (auth.user?.company?.name || "EventQR Hub")}
               </h1>
               <p className="text-[10px] text-slate-500 font-semibold mt-0.5 truncate">
                 {auth.user?.name} · <span className="text-[#0A2D59] font-extrabold capitalize">{auth.user?.role?.replace("_", " ")}</span>
+                {currentSelectedCompany && <span className="text-blue-600 font-bold ml-1">(🏢 Scoped)</span>}
               </p>
             </div>
           </Link>
@@ -63,6 +71,24 @@ export function Navbar({
 
         {/* Desktop Navigation Links (Hidden on mobile for clean UI) */}
         <div className="hidden md:flex items-center gap-2 shrink-0">
+          {isSuperAdmin && companies.length > 0 && onSelectCompany && (
+            <div className="flex items-center gap-1.5 bg-slate-100/90 hover:bg-slate-200/90 border border-slate-200 rounded-xl px-2.5 py-1 transition-colors">
+              <span className="text-xs">🏢</span>
+              <select
+                value={selectedCompanyId || "all"}
+                onChange={(e) => onSelectCompany(e.target.value)}
+                className="bg-transparent text-xs font-bold text-[#0A2D59] focus:outline-none cursor-pointer max-w-[140px] truncate"
+                title="Select Organization Filter"
+              >
+                <option value="all">🌐 All Organizations</option>
+                {companies.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {location.pathname !== "/dashboard" && (
             <Link
               to="/dashboard"
@@ -174,6 +200,37 @@ export function Navbar({
 
             {/* Navigation Drawer Body */}
             <div className="p-4 space-y-6 flex-1">
+              {/* Organization Switcher for Super Admin */}
+              {isSuperAdmin && companies.length > 0 && onSelectCompany && (
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                      🏢 Organization View
+                    </span>
+                    {selectedCompanyId !== "all" && (
+                      <button
+                        onClick={() => onSelectCompany("all")}
+                        className="text-[10px] font-bold text-[#0A2D59] hover:underline cursor-pointer"
+                      >
+                        Reset to All
+                      </button>
+                    )}
+                  </div>
+                  <select
+                    value={selectedCompanyId || "all"}
+                    onChange={(e) => onSelectCompany(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20"
+                  >
+                    <option value="all">🌐 All Organizations</option>
+                    {companies.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        🏢 {c.name} ({c.eventCount || 0} events)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Section 1: Core Applications */}
               <div>
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2 px-2">

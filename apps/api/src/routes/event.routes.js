@@ -7,6 +7,7 @@ import { EntryLog } from "../models/EntryLog.js";
 import { Gate } from "../models/Gate.js";
 import { User } from "../models/User.js";
 import { EventAssignment } from "../models/EventAssignment.js";
+import { Company } from "../models/Company.js";
 import { parseAttendeeCsv, parseAttendeeSpreadsheet } from "../utils/csv.js";
 import { registerAttendee } from "../services/attendeeService.js";
 const upload = multer({ storage: multer.memoryStorage() });
@@ -54,7 +55,7 @@ eventRouter.use(requireAuth);
  */
 eventRouter.post("/", requireRole("owner", "co_owner", "super_admin"), async (req, res) => {
   try {
-    const { title, date, location, description } = req.body;
+    const { title, date, location, description, companyId } = req.body;
     const normalizedTitle = String(title || "").trim();
     const normalizedLocation = String(location || "").trim();
     const parsedDate = new Date(date);
@@ -63,8 +64,17 @@ eventRouter.post("/", requireRole("owner", "co_owner", "super_admin"), async (re
       return res.status(400).json({ message: "title, valid date, and location are required" });
     }
 
-    const companyId = req.user.companyId;
-    if (!companyId && req.user.role !== "super_admin") {
+    let targetCompanyId = req.user.companyId;
+    if (req.user.role === "super_admin") {
+      if (companyId && companyId !== "all") {
+        targetCompanyId = companyId;
+      } else if (!targetCompanyId) {
+        const activeCompany = await Company.findOne({ isActive: true }).sort({ createdAt: 1 });
+        if (activeCompany) targetCompanyId = activeCompany._id;
+      }
+    }
+
+    if (!targetCompanyId) {
       return res.status(400).json({ message: "Company context is required to create an event" });
     }
 
@@ -75,7 +85,7 @@ eventRouter.post("/", requireRole("owner", "co_owner", "super_admin"), async (re
     const publicSlug = `${slugBase}-${Math.random().toString(36).slice(2, 8)}`;
     const userId = req.user.id;
     const event = await Event.create({
-      companyId,
+      companyId: targetCompanyId,
       title: normalizedTitle,
       date: parsedDate,
       location: normalizedLocation,
@@ -91,7 +101,11 @@ eventRouter.post("/", requireRole("owner", "co_owner", "super_admin"), async (re
       role: "event_admin"
     });
 
-    return res.status(201).json(event);
+    const populatedEvent = await Event.findById(event._id)
+      .populate("companyId", "name slug")
+      .lean();
+
+    return res.status(201).json(populatedEvent || event);
   } catch (error) {
     console.error("Error in POST /api/events:", error);
     return res.status(500).json({ message: error.message || "Failed to create event" });
@@ -104,9 +118,16 @@ eventRouter.get("/", async (req, res) => {
     const userRole = req.user.role;
     const companyId = req.user.companyId;
 
-    // Super admin gets all events
+    // Super admin gets all events or filtered by companyId
     if (userRole === "super_admin") {
-      const events = await Event.find().sort({ date: 1 }).lean();
+      const filter = {};
+      if (req.query.companyId && req.query.companyId !== "all") {
+        filter.companyId = req.query.companyId;
+      }
+      const events = await Event.find(filter)
+        .populate("companyId", "name slug")
+        .sort({ date: 1 })
+        .lean();
       return res.json(events);
     }
 
@@ -116,14 +137,20 @@ eventRouter.get("/", async (req, res) => {
 
     // Owner and Co-Owner get all events in their company
     if (userRole === "owner" || userRole === "co_owner" || userRole === "admin") {
-      const events = await Event.find({ companyId }).sort({ date: 1 }).lean();
+      const events = await Event.find({ companyId })
+        .populate("companyId", "name slug")
+        .sort({ date: 1 })
+        .lean();
       return res.json(events);
     }
 
     // Event admin / event staff gets assigned events only
     const assignments = await EventAssignment.find({ userId }).select("eventId").lean();
     const eventIds = assignments.map((a) => a.eventId).filter(Boolean);
-    const events = await Event.find({ _id: { $in: eventIds }, companyId }).sort({ date: 1 }).lean();
+    const events = await Event.find({ _id: { $in: eventIds }, companyId })
+      .populate("companyId", "name slug")
+      .sort({ date: 1 })
+      .lean();
     return res.json(events);
   } catch (error) {
     console.error("Error in GET /api/events:", error);

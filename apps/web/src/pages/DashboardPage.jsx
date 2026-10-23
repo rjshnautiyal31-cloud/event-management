@@ -14,13 +14,22 @@ export function DashboardPage({ auth }) {
   const [bulkResult, setBulkResult] = useState(null);
   const [manualAttendee, setManualAttendee] = useState({ name: "", email: "", phoneNumber: "" });
   const [staffUsers, setStaffUsers] = useState([]);
-  const [staffForm, setStaffForm] = useState({ name: "", email: "", password: "", phone: "", role: "event_staff", assignedGateId: "", assignedEventIds: [] });
+  const [staffForm, setStaffForm] = useState({ name: "", email: "", password: "", phone: "", role: "event_staff", assignedGateId: "", assignedEventIds: [], companyId: "" });
   const [form, setForm] = useState({
     title: "",
     date: new Date().toISOString().split("T")[0],
     time: "09:00",
     location: "",
-    description: ""
+    description: "",
+    companyId: ""
+  });
+  const [companies, setCompanies] = useState([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState(() => {
+    try {
+      return localStorage.getItem("superadmin_selected_company_id") || "all";
+    } catch {
+      return "all";
+    }
   });
   const [activeAttendeeQr, setActiveAttendeeQr] = useState(null);
 
@@ -75,28 +84,48 @@ export function DashboardPage({ auth }) {
   const isAdmin = isOwner || isCoOwner || isEventAdmin || isSuperAdmin || auth.user?.role === "admin";
   const canCreateEvent = isOwner || isCoOwner || isSuperAdmin;
 
-  async function loadEvents() {
+  async function loadCompanies() {
+    if (!isSuperAdmin) return;
     try {
-      const list = await api("/api/events", { token: auth.token });
+      const list = await api("/api/companies", { token: auth.token });
+      setCompanies(Array.isArray(list) ? list : []);
+    } catch (err) {
+      console.error("Failed to load companies:", err);
+    }
+  }
+
+  async function loadEvents(overrideCompId) {
+    try {
+      const activeCompId = overrideCompId !== undefined ? overrideCompId : selectedCompanyId;
+      const query = (isSuperAdmin && activeCompId && activeCompId !== "all") ? `?companyId=${activeCompId}` : "";
+      const list = await api(`/api/events${query}`, { token: auth.token });
       const safeList = Array.isArray(list) ? list : [];
       setEvents(safeList);
-      if (safeList.length && !selectedEventId) {
-        setSelectedEventId(safeList[0]._id);
-      } else if (!safeList.length) {
-        setSelectedEventId("");
+
+      setSelectedEventId((prev) => {
+        const stillExists = safeList.some((e) => e._id === prev);
+        if (stillExists) return prev;
+        return safeList.length ? safeList[0]._id : "";
+      });
+
+      if (!safeList.length) {
         setStats(null);
         setAttendees([]);
         setGates([]);
       }
+      return safeList;
     } catch (err) {
       setError(err.message);
+      return [];
     }
   }
 
-  async function loadStaff() {
+  async function loadStaff(overrideCompId) {
     if (!isAdmin) return;
     try {
-      const staff = await api("/api/auth/staff", { token: auth.token });
+      const activeCompId = overrideCompId !== undefined ? overrideCompId : selectedCompanyId;
+      const query = (isSuperAdmin && activeCompId && activeCompId !== "all") ? `?companyId=${activeCompId}` : "";
+      const staff = await api(`/api/auth/staff${query}`, { token: auth.token });
       setStaffUsers(Array.isArray(staff) ? staff : []);
     } catch (err) {
       console.error("Failed to load staff:", err);
@@ -104,10 +133,30 @@ export function DashboardPage({ auth }) {
     }
   }
 
+  async function handleSelectCompany(newCompanyId) {
+    setSelectedCompanyId(newCompanyId);
+    try {
+      if (newCompanyId && newCompanyId !== "all") {
+        localStorage.setItem("superadmin_selected_company_id", newCompanyId);
+      } else {
+        localStorage.removeItem("superadmin_selected_company_id");
+      }
+    } catch (e) {
+      console.error("Failed to persist selected company:", e);
+    }
+    await Promise.all([
+      loadEvents(newCompanyId),
+      loadStaff(newCompanyId)
+    ]);
+  }
+
   useEffect(() => {
+    if (isSuperAdmin) {
+      loadCompanies();
+    }
     loadEvents();
     loadStaff();
-  }, [auth.token]);
+  }, [auth.token, isSuperAdmin]);
 
   async function loadEventDetails(eventId) {
     if (!eventId) return;
@@ -274,6 +323,7 @@ export function DashboardPage({ auth }) {
     setEventSuccess("");
     try {
       const combinedDateTime = form.date && form.time ? `${form.date}T${form.time}` : form.date;
+      const targetCompany = form.companyId || (selectedCompanyId !== "all" ? selectedCompanyId : undefined);
       const created = await api("/api/events", {
         token: auth.token,
         method: "POST",
@@ -281,7 +331,8 @@ export function DashboardPage({ auth }) {
           title: form.title,
           date: combinedDateTime,
           location: form.location,
-          description: form.description
+          description: form.description,
+          companyId: targetCompany
         }
       });
       setForm({
@@ -289,11 +340,13 @@ export function DashboardPage({ auth }) {
         date: new Date().toISOString().split("T")[0],
         time: "09:00",
         location: "",
-        description: ""
+        description: "",
+        companyId: ""
       });
       setEventSuccess("Event created successfully!");
       setCreateEventModalOpen(false);
       await loadEvents();
+      if (isSuperAdmin) await loadCompanies();
       if (created && created._id) {
         setSelectedEventId(created._id);
       }
@@ -313,8 +366,8 @@ export function DashboardPage({ auth }) {
         method: "DELETE"
       });
       setEventSuccess(`Event "${eventTitle}" deleted successfully!`);
-      const updatedList = await api("/api/events", { token: auth.token });
-      setEvents(updatedList);
+      const updatedList = await loadEvents();
+      if (isSuperAdmin) await loadCompanies();
       if (selectedEventId === eventId) {
         setSelectedEventId(updatedList[0]?._id || "");
       }
@@ -370,10 +423,14 @@ export function DashboardPage({ auth }) {
     setStaffError("");
     setStaffSuccess("");
     try {
+      const targetCompany = staffForm.companyId || (selectedCompanyId !== "all" ? selectedCompanyId : undefined);
       await api("/api/auth/staff", {
         token: auth.token,
         method: "POST",
-        body: staffForm
+        body: {
+          ...staffForm,
+          companyId: targetCompany
+        }
       });
       const roleLabels = {
         owner: "Owner",
@@ -390,10 +447,12 @@ export function DashboardPage({ auth }) {
         phone: "",
         role: isEventAdmin ? "event_staff" : (isCoOwner ? "event_admin" : "event_staff"),
         assignedGateId: "",
-        assignedEventIds: []
+        assignedEventIds: [],
+        companyId: ""
       });
       setStaffSuccess(`${createdRole} account created successfully!`);
       await loadStaff();
+      if (isSuperAdmin) await loadCompanies();
     } catch (err) {
       setStaffError(err.message);
     }
@@ -406,6 +465,7 @@ export function DashboardPage({ auth }) {
       email: user.email,
       phone: user.phone || "",
       role: user.role,
+      companyId: user.companyId || "",
       assignedGateId: user.assignedGateId || "",
       assignedEventIds: (user.assignments || []).map((a) => (a.eventId?._id || a.eventId)?.toString()).filter(Boolean)
     });
@@ -427,6 +487,7 @@ export function DashboardPage({ auth }) {
       setEditingUser(null);
       setStaffSuccess("User account updated successfully!");
       await loadStaff();
+      if (isSuperAdmin) await loadCompanies();
     } catch (err) {
       setEditUserError(err.message);
     }
@@ -447,6 +508,7 @@ export function DashboardPage({ auth }) {
       });
       setStaffSuccess(`User account for "${userName}" deleted successfully!`);
       await loadStaff();
+      if (isSuperAdmin) await loadCompanies();
     } catch (err) {
       setStaffError(err.message);
     }
@@ -541,7 +603,55 @@ export function DashboardPage({ auth }) {
         onOpenCreateEvent={canCreateEvent ? () => setCreateEventModalOpen(true) : null}
         onOpenWalkIn={() => setWalkInSheetOpen(true)}
         onOpenBulkImport={() => setBulkImportSheetOpen(true)}
+        companies={companies}
+        selectedCompanyId={selectedCompanyId}
+        onSelectCompany={handleSelectCompany}
       />
+
+      {/* Super Admin Global Organization Context Switcher Bar */}
+      {isSuperAdmin && (
+        <div className="bg-gradient-to-r from-slate-900 via-[#0A2D59] to-slate-900 text-white px-3 sm:px-4 py-2 sm:py-2.5 shadow-sm border-b border-blue-950">
+          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs">
+            <div className="flex items-center gap-2 flex-wrap min-w-0">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-sm">🏢</span>
+                <span className="font-extrabold uppercase tracking-wider text-[10px] text-blue-200">Organization View:</span>
+              </div>
+              <select
+                value={selectedCompanyId}
+                onChange={(e) => handleSelectCompany(e.target.value)}
+                className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer max-w-full sm:max-w-xs"
+              >
+                <option value="all" className="bg-slate-900 text-white">🌐 All Companies (Global View)</option>
+                {companies.map((c) => (
+                  <option key={c._id} value={c._id} className="bg-slate-900 text-white">
+                    🏢 {c.name} ({c.eventCount || 0} events · {c.staffCount || 0} team)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedCompanyId !== "all" ? (
+              <div className="flex items-center gap-2 justify-between sm:justify-end shrink-0">
+                <span className="text-[11px] text-blue-200 font-medium truncate">
+                  Viewing data for: <strong className="text-white underline">{companies.find((c) => c._id === selectedCompanyId)?.name || "Selected Company"}</strong>
+                </span>
+                <button
+                  onClick={() => handleSelectCompany("all")}
+                  className="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[10px] font-black uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap"
+                  title="Reset to All Companies"
+                >
+                  ✕ Reset to All
+                </button>
+              </div>
+            ) : (
+              <div className="text-[11px] text-blue-200/80 font-medium hidden sm:block shrink-0">
+                <span>Viewing all organizations across platform ({companies.length} registered)</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 2. Top Event Switcher & Tab Selector Header */}
       <div className="bg-white border-b border-slate-200/80 px-3 sm:px-4 py-2.5 sm:py-3 shadow-xs">
@@ -665,9 +775,16 @@ export function DashboardPage({ auth }) {
                 <div className="md:col-span-2 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <span className="inline-flex items-center gap-1 bg-[#0A2D59]/10 text-[#0A2D59] text-xs font-bold px-2.5 py-1 rounded-lg border border-[#0A2D59]/20 mb-2">
-                        🟢 Active Event Workspace
-                      </span>
+                      <div className="flex items-center gap-2 flex-wrap mb-2">
+                        <span className="inline-flex items-center gap-1 bg-[#0A2D59]/10 text-[#0A2D59] text-xs font-bold px-2.5 py-1 rounded-lg border border-[#0A2D59]/20">
+                          🟢 Active Event Workspace
+                        </span>
+                        {selectedEvent.companyId?.name && (
+                          <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 text-xs font-bold px-2.5 py-1 rounded-lg border border-slate-200">
+                            🏢 {selectedEvent.companyId.name}
+                          </span>
+                        )}
+                      </div>
                       <h2 className="text-2xl font-extrabold text-[#0A2D59] tracking-tight">{selectedEvent.title}</h2>
                     </div>
                   </div>
@@ -750,11 +867,15 @@ export function DashboardPage({ auth }) {
               </div>
             ) : (
               <div className="bg-white rounded-2xl p-8 border border-slate-200/80 text-center space-y-3 shadow-xs">
-                <p className="text-slate-500 text-sm font-semibold">No events found in your workspace.</p>
+                <p className="text-slate-500 text-sm font-semibold">
+                  {selectedCompanyId !== "all"
+                    ? `No events found for ${companies.find((c) => c._id === selectedCompanyId)?.name || "the selected company"}.`
+                    : "No events found in your workspace."}
+                </p>
                 {canCreateEvent && (
                   <button
                     onClick={() => setCreateEventModalOpen(true)}
-                    className="rounded-xl bg-[#0A2D59] hover:bg-[#082247] px-4 py-2.5 text-xs font-bold text-white shadow-sm"
+                    className="rounded-xl bg-[#0A2D59] hover:bg-[#082247] px-4 py-2.5 text-xs font-bold text-white shadow-sm cursor-pointer"
                   >
                     + Create Your First Event
                   </button>
@@ -864,7 +985,11 @@ export function DashboardPage({ auth }) {
           <div className="space-y-4 animate-fade-in">
             {!selectedEvent ? (
               <div className="bg-white rounded-2xl p-8 border border-slate-200/80 text-center space-y-3 shadow-xs">
-                <p className="text-slate-500 text-sm font-semibold">Please select or create an event to view and manage attendees.</p>
+                <p className="text-slate-500 text-sm font-semibold">
+                  {isSuperAdmin && selectedCompanyId !== "all"
+                    ? `No events found for ${companies.find((c) => c._id === selectedCompanyId)?.name || "this company"}. Please create an event to view and manage attendees.`
+                    : "Please select or create an event to view and manage attendees."}
+                </p>
                 {canCreateEvent && (
                   <button
                     onClick={() => setCreateEventModalOpen(true)}
@@ -1072,7 +1197,11 @@ export function DashboardPage({ auth }) {
           <div className="space-y-6 animate-fade-in">
             {!selectedEvent ? (
               <div className="bg-white rounded-2xl p-8 border border-slate-200/80 text-center space-y-3 shadow-xs">
-                <p className="text-slate-500 text-sm font-semibold">Please select or create an event to view and manage entrance gates.</p>
+                <p className="text-slate-500 text-sm font-semibold">
+                  {isSuperAdmin && selectedCompanyId !== "all"
+                    ? `No events found for ${companies.find((c) => c._id === selectedCompanyId)?.name || "this company"}. Please create an event to view and manage entrance gates.`
+                    : "Please select or create an event to view and manage entrance gates."}
+                </p>
                 {canCreateEvent && (
                   <button
                     onClick={() => setCreateEventModalOpen(true)}
@@ -1195,6 +1324,26 @@ export function DashboardPage({ auth }) {
                       required
                     />
                   </div>
+
+                  {isSuperAdmin && (
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                        Assign Company / Organization
+                      </label>
+                      <select
+                        className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
+                        value={staffForm.companyId || (selectedCompanyId !== "all" ? selectedCompanyId : "")}
+                        onChange={(e) => setStaffForm({ ...staffForm, companyId: e.target.value })}
+                      >
+                        <option value="">Auto-Assign (Based on Active Context or Global)</option>
+                        {companies.map((c) => (
+                          <option key={c._id} value={c._id}>
+                            🏢 {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
@@ -1362,9 +1511,14 @@ export function DashboardPage({ auth }) {
                     return (
                       <div key={staff.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/60 space-y-2">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center flex-wrap gap-1">
+                          <div className="flex items-center flex-wrap gap-1.5">
                             <span className="font-bold text-slate-900 text-xs">{staff.name}</span>
                             {roleBadge}
+                            {isSuperAdmin && staff.companyName && (
+                              <span className="rounded-full px-2 py-0.5 text-[9px] font-bold bg-slate-200/80 text-slate-700 border border-slate-300">
+                                🏢 {staff.companyName}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2">
                             {canEdit && (
@@ -1506,6 +1660,7 @@ export function DashboardPage({ auth }) {
                   <thead className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
                     <tr>
                       <th className="py-3 px-4">Event Title</th>
+                      {isSuperAdmin && <th className="py-3 px-4">Organization</th>}
                       <th className="py-3 px-4">Date & Time</th>
                       <th className="py-3 px-4">Venue Location</th>
                       <th className="py-3 px-4">Status</th>
@@ -1516,7 +1671,7 @@ export function DashboardPage({ auth }) {
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {events.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="py-8 text-center text-slate-400 text-xs italic font-medium">
+                        <td colSpan={isSuperAdmin ? 7 : 6} className="py-8 text-center text-slate-400 text-xs italic font-medium">
                           No events found in your workspace.
                         </td>
                       </tr>
@@ -1555,6 +1710,13 @@ export function DashboardPage({ auth }) {
                                 </p>
                               )}
                             </td>
+                            {isSuperAdmin && (
+                              <td className="py-3.5 px-4 whitespace-nowrap">
+                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                                  🏢 {ev.companyId?.name || "Unassigned"}
+                                </span>
+                              </td>
+                            )}
                             <td className="py-3.5 px-4 font-semibold text-slate-700 whitespace-nowrap">
                               📅 {evDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                             </td>
@@ -1768,6 +1930,26 @@ export function DashboardPage({ auth }) {
             </div>
 
             <form onSubmit={createEvent} className="space-y-3">
+              {isSuperAdmin && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+                    Target Organization / Company
+                  </label>
+                  <select
+                    value={form.companyId || (selectedCompanyId !== "all" ? selectedCompanyId : "")}
+                    onChange={(e) => setForm({ ...form, companyId: e.target.value })}
+                    className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
+                    required
+                  >
+                    <option value="">Select Target Company...</option>
+                    {companies.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        🏢 {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <input
                 type="text"
                 placeholder="Event Title"
@@ -2014,6 +2196,26 @@ export function DashboardPage({ auth }) {
                   className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
                 />
               </div>
+
+              {isSuperAdmin && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+                    Company / Organization
+                  </label>
+                  <select
+                    value={editUserForm.companyId || ""}
+                    onChange={(e) => setEditUserForm({ ...editUserForm, companyId: e.target.value })}
+                    className="w-full rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
+                  >
+                    <option value="">No Company Assigned (Global)</option>
+                    {companies.map((c) => (
+                      <option key={c._id} value={c._id}>
+                        🏢 {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Account Role</label>

@@ -237,11 +237,34 @@ authRouter.get("/staff", requireAuth, requireRole("owner", "co_owner", "event_ad
     const currentCompanyId = req.user.companyId;
 
     if (currentRole === "super_admin") {
-      const users = await User.find()
+      const userFilter = {};
+      if (req.query.companyId && req.query.companyId !== "all") {
+        userFilter.companyId = req.query.companyId;
+      }
+
+      const users = await User.find(userFilter)
         .populate("assignedGateId")
-        .populate("companyId", "name")
+        .populate("companyId", "name slug")
         .sort({ createdAt: -1 })
         .lean();
+
+      const userIds = users.map((u) => u._id);
+      const assignments = await EventAssignment.find({ userId: { $in: userIds } })
+        .populate("eventId", "title")
+        .lean();
+
+      const assignmentsByUser = {};
+      for (const a of assignments) {
+        if (!a || !a.userId) continue;
+        const uid = a.userId.toString();
+        if (!assignmentsByUser[uid]) assignmentsByUser[uid] = [];
+        assignmentsByUser[uid].push({
+          eventId: a.eventId?._id,
+          eventTitle: a.eventId?.title,
+          role: a.role
+        });
+      }
+
       return res.json(
         users.map((u) => ({
           id: u._id,
@@ -249,9 +272,12 @@ authRouter.get("/staff", requireAuth, requireRole("owner", "co_owner", "event_ad
           email: u.email,
           phone: u.phone || "",
           role: u.role,
+          companyId: u.companyId?._id || null,
           companyName: u.companyId?.name || "",
+          companySlug: u.companyId?.slug || "",
           assignedGateId: u.assignedGateId?._id || null,
-          assignedGateName: u.assignedGateId?.name || null
+          assignedGateName: u.assignedGateId?.name || null,
+          assignments: assignmentsByUser[u._id.toString()] || []
         }))
       );
     }
@@ -362,13 +388,20 @@ authRouter.post("/staff", requireAuth, requireRole("owner", "co_owner", "event_a
     const currentRole = req.user.role;
     const currentUserId = req.user.id;
     let currentCompanyId = req.user.companyId;
+    const { name, email, password, phone, role, assignedGateId, assignedEventIds, companyId } = req.body || {};
 
-    if (!currentCompanyId && currentRole !== "super_admin") {
+    if (currentRole === "super_admin") {
+      if (companyId && companyId !== "all") {
+        currentCompanyId = companyId;
+      } else if (!currentCompanyId) {
+        const activeCompany = await Company.findOne({ isActive: true }).sort({ createdAt: 1 });
+        if (activeCompany) currentCompanyId = activeCompany._id.toString();
+      }
+    } else if (!currentCompanyId) {
       const activeCompany = await Company.findOne({ isActive: true }).sort({ createdAt: 1 });
       if (activeCompany) currentCompanyId = activeCompany._id.toString();
     }
 
-    const { name, email, password, phone, role, assignedGateId, assignedEventIds } = req.body || {};
     const normalizedEmail = String(email || "").toLowerCase().trim();
 
     if (!name || !normalizedEmail || !password) {
@@ -391,8 +424,11 @@ authRouter.post("/staff", requireAuth, requireRole("owner", "co_owner", "event_a
       targetRole = "event_staff";
     } else if (currentRole === "co_owner") {
       targetRole = role === "event_admin" ? "event_admin" : "event_staff";
+    } else if (currentRole === "super_admin") {
+      const allowedRoles = ["owner", "co_owner", "event_admin", "event_staff", "super_admin"];
+      targetRole = allowedRoles.includes(role) ? role : "event_staff";
     } else {
-      // Owner or super_admin
+      // Owner
       const allowedRoles = ["co_owner", "event_admin", "event_staff"];
       targetRole = allowedRoles.includes(role) ? role : "event_staff";
     }
@@ -410,8 +446,8 @@ authRouter.post("/staff", requireAuth, requireRole("owner", "co_owner", "event_a
         return res.status(404).json({ message: "Assigned gate not found" });
       }
       const gateEvent = await Event.findById(gate.eventId).lean();
-      if (!gateEvent || gateEvent.companyId?.toString() !== currentCompanyId?.toString()) {
-        return res.status(403).json({ message: "Gate does not belong to your company" });
+      if (gateEvent && currentCompanyId && gateEvent.companyId?.toString() !== currentCompanyId?.toString()) {
+        return res.status(403).json({ message: "Gate does not belong to the selected company" });
       }
       if (currentRole === "event_admin") {
         const managedEventIds = await getManagedEventIdsForUser(currentUserId, currentCompanyId);
@@ -491,7 +527,7 @@ authRouter.put("/staff/:userId", requireAuth, requireRole("owner", "co_owner", "
   const currentRole = req.user.role;
   const currentUserId = req.user.id;
   const currentCompanyId = req.user.companyId;
-  const { name, email, phone, role, assignedGateId, assignedEventIds } = req.body || {};
+  const { name, email, phone, role, assignedGateId, assignedEventIds, companyId } = req.body || {};
 
   try {
     const user = await User.findById(req.params.userId);
@@ -532,6 +568,11 @@ authRouter.put("/staff/:userId", requireAuth, requireRole("owner", "co_owner", "
     if (email) user.email = email.toLowerCase().trim();
     if (phone !== undefined) user.phone = String(phone || "").trim();
 
+    // Allow super admin to reassign company
+    if (currentRole === "super_admin" && companyId && companyId !== "all") {
+      user.companyId = companyId;
+    }
+
     // Role update
     if (role && user.role !== "owner") {
       if (currentRole === "owner" || currentRole === "super_admin") {
@@ -557,10 +598,12 @@ authRouter.put("/staff/:userId", requireAuth, requireRole("owner", "co_owner", "
       }
     }
 
+    const targetCompanyId = (currentRole === "super_admin" && user.companyId) ? user.companyId : currentCompanyId;
+
     if (Array.isArray(assignedEventIds)) {
       const validEvents = await Event.find({
         _id: { $in: assignedEventIds },
-        companyId: currentCompanyId
+        companyId: targetCompanyId
       }).select("_id").lean();
 
       let validIds = validEvents.map((e) => e._id.toString());

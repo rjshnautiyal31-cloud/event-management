@@ -7,6 +7,7 @@ import { publicRouter } from "./routes/public.routes.js";
 import { scanRouter } from "./routes/scan.routes.js";
 import { storyVideoRouter } from "./routes/storyVideo.routes.js";
 import { settingsRouter } from "./routes/settings.routes.js";
+import { companyRouter } from "./routes/company.routes.js";
 import { swaggerSpec } from "./config/swagger.js";
 
 export const app = express();
@@ -34,6 +35,7 @@ app.get("/api-docs.json", (_req, res) => res.json(swaggerSpec));
 
 app.use("/api/auth", authRouter);
 app.use("/api/events", eventRouter);
+app.use("/api/companies", companyRouter);
 app.use("/api/public", publicRouter);
 app.use("/api/scan", scanRouter);
 app.use("/api/story-video", storyVideoRouter);

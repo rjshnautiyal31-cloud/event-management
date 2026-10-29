@@ -107,16 +107,20 @@ A full-stack, enterprise-grade monorepo for multi-tenant company event managemen
   - **1st Priority (Highest): Database Overrides** configured via the Back Office Settings Dashboard in MongoDB (`SystemSetting` collection).
   - **2nd Priority (Fallback): Local `.env` Variables** loaded into `process.env`.
   - **3rd Priority: Built-in Defaults**.
-- **Categorized Configuration Dashboard**:
+- **Zero-File In-Memory Google Cloud Authentication (3-Tier Resolution)**:
+  - **1st Priority**: `GCP_CLIENT_EMAIL` + `GCP_PRIVATE_KEY` configured in Settings or `.env` (passed strictly in-memory via `googleAuthOptions.credentials` to Vertex AI, Lyria, Cloud TTS, and GCS — never written to disk).
+  - **2nd Priority**: Local `gcp-service-account.json` file (if present on disk, loaded into memory).
+  - **3rd Priority**: Google Cloud Application Default Credentials (ADC — zero-key IAM identity when running on Cloud Run / GKE).
+- **Categorized Configuration Dashboard & Configurable AI Models**:
   - `☁️ Cloud Storage`: Switch between Local, AWS S3, Cloudflare R2, and Google Cloud Storage (GCS) with custom endpoints and CDN public domains.
-  - `🤖 AI & Vertex LLM`: Configure Google Gemini API keys, Google Cloud Project ID, Vertex AI regions, and primary LLM engine.
-  - `🎵 Music & Audio`: Toggle between Google DeepMind Lyria 3 Pro, ElevenLabs Music API, Suno, and Google TTS synthesizer.
-  - `🎬 Motion Video`: Configure Gemini Omni 1.1 Flash, Google Veo, or Replicate video generation keys.
+  - `🤖 AI & Vertex LLM`: Configure `GEMINI_API_KEY`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `GCP_CLIENT_EMAIL`, `GCP_PRIVATE_KEY`, primary LLM provider (`LLM_PROVIDER`), and model IDs (`GEMINI_MODEL` default `gemini-2.5-flash`, `GEMINI_IMAGE_MODEL` default `gemini-2.5-flash-image`, `IMAGEN_MODEL` default `imagen-3.0-generate-002`, `FALLBACK_IMAGE_MODEL` default `flux`).
+  - `🎵 Music & Audio`: Toggle between Google DeepMind Lyria, ElevenLabs Music API, Suno, and Google TTS (`MUSIC_PROVIDER`), plus model IDs (`LYRIA_MODEL` default `lyria-3-pro-preview`, `LYRIA_FALLBACK_MODEL` default `lyria-002`, `ELEVENLABS_MUSIC_MODEL` default `music_v1`, `ELEVENLABS_TTS_ENGLISH_MODEL` default `eleven_monolingual_v1`, `ELEVENLABS_TTS_MULTILINGUAL_MODEL` default `eleven_multilingual_v2`).
+  - `🎬 Motion Video`: Configure `VIDEO_PROVIDER` (`google_omni`, `google_veo`, `replicate`, `local_ffmpeg`) and model IDs (`GOOGLE_VIDEO_MODEL` default `gemini-omni-1.1-flash-preview`, `REPLICATE_VIDEO_MODEL`).
   - `📬 Email & Tickets`: Setup Resend API key (recommended on Render) or custom SMTP credentials.
   - `🌐 Network & Queue`: Configure Public API URL, Frontend URL, Redis BullMQ connection, and Cloud Run external rendering worker URL.
 - **Live Diagnostics & Security**:
-  - Built-in **"Test Storage"** and **"Test AI Keys"** actions verify live cloud bucket connectivity and API keys.
-  - Sensitive secrets are masked with show/hide toggles.
+  - Built-in **"Test Storage"** and **"Test AI Keys"** actions verify live cloud bucket connectivity, active credential source (`settings_in_memory`, `local_file`, or `adc`), and configured model IDs.
+  - Sensitive secrets (`GCP_PRIVATE_KEY`, API keys) are masked as `••••••••` with show/hide toggles.
   - 1-tap **"Reset to .env"** button removes DB overrides and seamlessly reverts to environment defaults.
 
 ---
@@ -200,9 +204,27 @@ VIDEO_PROVIDER=google_omni     # "google_omni" | "google_veo" | "local_ffmpeg"
 LLM_PROVIDER=gemini            # "gemini" | "openai"
 
 # Google Cloud / Vertex AI (Lyria 3 Pro, Gemini Omni, Gemini 2.5 Flash)
-GOOGLE_APPLICATION_CREDENTIALS=./gcp-service-account.json
 GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+GOOGLE_CLOUD_LOCATION=us-central1
+# Option 1 (Recommended): In-memory Service Account credentials (or configure via /#/settings)
+GCP_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+GCP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+# Option 2 (Fallback): Local Service Account file (or Cloud Run zero-key ADC)
+# GOOGLE_APPLICATION_CREDENTIALS=./gcp-service-account.json
 GEMINI_API_KEY=your_gemini_api_key_here
+
+# Configurable AI / Music / Video Models (Optional — defaults shown below)
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_IMAGE_MODEL=gemini-2.5-flash-image
+IMAGEN_MODEL=imagen-3.0-generate-002
+FALLBACK_IMAGE_MODEL=flux
+LYRIA_MODEL=lyria-3-pro-preview
+LYRIA_FALLBACK_MODEL=lyria-002
+ELEVENLABS_MUSIC_MODEL=music_v1
+ELEVENLABS_TTS_ENGLISH_MODEL=eleven_monolingual_v1
+ELEVENLABS_TTS_MULTILINGUAL_MODEL=eleven_multilingual_v2
+GOOGLE_VIDEO_MODEL=gemini-omni-1.1-flash-preview
+REPLICATE_VIDEO_MODEL=3f0457e4619da258370163351d3e8f8101a938634ed1fcfd43a6d97c55531d27
 
 # S3-Compatible Cloud Storage (AWS S3 or Cloudflare R2)
 S3_BUCKET=event-media

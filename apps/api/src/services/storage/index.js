@@ -3,7 +3,7 @@ import fsSync from "fs";
 import path from "path";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { Storage as GoogleCloudStorage } from "@google-cloud/storage";
-import { env } from "../../config/env.js";
+import { env, getGoogleCloudCredentials } from "../../config/env.js";
 
 // Helper to determine Content-Type
 function guessMimeType(filename) {
@@ -101,20 +101,15 @@ class S3StorageProvider {
 class GCSStorageProvider {
   constructor() {
     this.name = "gcs";
-    const serviceAccountPath = path.join(process.cwd(), "gcp-service-account.json");
-    
+    const authInfo = getGoogleCloudCredentials();
     const options = {
-      projectId: env.googleCloudProject
+      projectId: env.googleCloudProject || authInfo.projectId
     };
 
-    try {
-      if (process.env.GOOGLE_APPLICATION_CREDENTIALS && fsSync.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
-        options.keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-      } else if (fsSync.existsSync(serviceAccountPath)) {
-        options.keyFilename = serviceAccountPath;
-      }
-      // If neither file exists on disk, GoogleCloudStorage automatically uses Cloud Run Application Default Credentials (ADC)
-    } catch (_) {}
+    if (authInfo.credentials) {
+      options.credentials = authInfo.credentials;
+    }
+    // If no credentials in memory or local file, GoogleCloudStorage automatically uses Cloud Run Application Default Credentials (ADC)
 
     this.storage = new GoogleCloudStorage(options);
     this.bucketName = env.gcsBucket || env.s3Bucket || "event-story-media";

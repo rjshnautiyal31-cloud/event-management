@@ -2,7 +2,7 @@ import { Router } from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { SystemSetting } from "../models/SystemSetting.js";
 import { SETTINGS_CATALOG, CATEGORIES } from "../config/settingsCatalog.js";
-import { env, loadDbSettings, getDbSettingsCache } from "../config/env.js";
+import { env, loadDbSettings, getDbSettingsCache, getGoogleCloudCredentials } from "../config/env.js";
 import { getStorageProvider, resetStorageAdapters, uploadAssetBuffer } from "../services/storage/index.js";
 
 export const settingsRouter = Router();
@@ -17,6 +17,7 @@ settingsRouter.use(requireAuth, requireRole("super_admin"));
 settingsRouter.get("/", async (_req, res) => {
   try {
     const dbCache = getDbSettingsCache();
+    const gcpAuth = getGoogleCloudCredentials();
     const dbDocs = await SystemSetting.find({}).lean();
     const dbDocMap = {};
     for (const doc of dbDocs) {
@@ -49,9 +50,15 @@ settingsRouter.get("/", async (_req, res) => {
       } else if (hasEnvValue) {
         source = "env";
         effectiveValue = envVal;
+      } else if (item.key === "GCP_CLIENT_EMAIL" && gcpAuth.credentials?.client_email) {
+        effectiveValue = gcpAuth.credentials.client_email;
+      } else if (item.key === "GCP_PRIVATE_KEY" && gcpAuth.credentials?.private_key) {
+        effectiveValue = gcpAuth.credentials.private_key;
+      } else if (item.key === "GOOGLE_CLOUD_PROJECT" && gcpAuth.projectId) {
+        effectiveValue = gcpAuth.projectId;
       }
 
-      const isConfigured = Boolean(hasDbValue || hasEnvValue || (item.defaultValue && item.defaultValue !== ""));
+      const isConfigured = Boolean(hasDbValue || hasEnvValue || (effectiveValue && effectiveValue !== ""));
 
       // Mask secrets for display
       let displayValue = effectiveValue;
@@ -196,8 +203,10 @@ settingsRouter.post("/test-connection", async (req, res) => {
     }
 
     if (type === "ai") {
+      const authInfo = getGoogleCloudCredentials();
       const hasKey = Boolean(env.geminiApiKey && !env.geminiApiKey.includes("your_gemini_api_key_here"));
-      const hasProject = Boolean(env.googleCloudProject);
+      const project = env.googleCloudProject || authInfo.projectId;
+      const hasProject = Boolean(project);
 
       if (!hasKey && !hasProject) {
         return res.status(400).json({
@@ -206,11 +215,27 @@ settingsRouter.post("/test-connection", async (req, res) => {
         });
       }
 
+      const credSourceLabel = authInfo.source === "settings_in_memory"
+        ? "In-Memory Service Account (Settings/ENV)"
+        : authInfo.source === "local_file"
+        ? "Service Account File (Loaded in Memory)"
+        : hasProject
+        ? "Google Cloud ADC (IAM Identity)"
+        : "Gemini API Key";
+
       return res.json({
         success: true,
-        message: `AI credentials configured! LLM Provider: ${env.llmProvider}, Project: ${env.googleCloudProject}`,
+        message: `AI configured! Auth: ${credSourceLabel} | Project: ${project || "N/A"} | Models: ${env.geminiModel}, ${env.geminiImageModel}, ${env.lyriaModel}, ${env.googleVideoModel}`,
         llmProvider: env.llmProvider,
-        project: env.googleCloudProject
+        project,
+        credentialSource: authInfo.source,
+        models: {
+          geminiModel: env.geminiModel,
+          geminiImageModel: env.geminiImageModel,
+          imagenModel: env.imagenModel,
+          lyriaModel: env.lyriaModel,
+          googleVideoModel: env.googleVideoModel
+        }
       });
     }
 

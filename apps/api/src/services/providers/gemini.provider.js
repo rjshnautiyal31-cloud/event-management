@@ -1,33 +1,37 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import path from "path";
 import fs from "fs/promises";
-import { env } from "../../config/env.js";
+import { env, getGoogleCloudCredentials } from "../../config/env.js";
 import { uploadAssetBuffer, buildStoryStorageKey } from "../storage/index.js";
 import { getLanguageConfig } from "../../config/languages.js";
 
-import fsSync from "fs";
-
 function getGeminiClient() {
-  const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
-  if (fsSync.existsSync(keyFilename)) {
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
-  }
+  const authInfo = getGoogleCloudCredentials();
+  const project = env.googleCloudProject || authInfo.projectId;
+  const modelName = env.geminiModel || "gemini-2.5-flash";
 
-  if (env.googleCloudProject) {
+  if (project) {
+    const options = {
+      vertexai: true,
+      project,
+      location: env.googleCloudLocation || "us-central1"
+    };
+    if (authInfo.credentials) {
+      options.googleAuthOptions = {
+        credentials: authInfo.credentials,
+        projectId: project
+      };
+    }
     return {
-      ai: new GoogleGenAI({
-        vertexai: true,
-        project: env.googleCloudProject,
-        location: env.googleCloudLocation || "us-central1"
-      }),
-      modelName: "gemini-2.5-flash"
+      ai: new GoogleGenAI(options),
+      modelName
     };
   }
 
   if (env.geminiApiKey && !env.geminiApiKey.includes("your_gemini_api_key_here")) {
     return {
       ai: new GoogleGenAI({ apiKey: env.geminiApiKey }),
-      modelName: "gemini-2.5-flash"
+      modelName
     };
   }
   return null;
@@ -273,12 +277,14 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
     const { ai } = clientInfo;
 
     // 1. Primary: Google Gemini Flash Image (Vertex AI native multimodal image generation)
+    const primaryImageModel = env.geminiImageModel || "gemini-2.5-flash-image";
+    const secondaryImagenModel = env.imagenModel || "imagen-3.0-generate-002";
     try {
-      console.log(`[Google AI Image] Generating high-definition ${aspectRatio} scene frame with gemini-2.5-flash-image for Scene ${sceneNumber}...`);
+      console.log(`[Google AI Image] Generating high-definition ${aspectRatio} scene frame with ${primaryImageModel} for Scene ${sceneNumber}...`);
       const enhancedPrompt = `A photorealistic ${aspectRatio} widescreen cinematic shot, 8k resolution, professional photography, natural lighting: ${visualPrompt}`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-image",
+        model: primaryImageModel,
         contents: enhancedPrompt,
         config: {
           imageConfig: {
@@ -306,15 +312,15 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
         }
       }
     } catch (err) {
-      console.warn(`[Google AI Image] gemini-2.5-flash-image failed (${err.message}), trying Imagen fallback...`);
+      console.warn(`[Google AI Image] ${primaryImageModel} failed (${err.message}), trying Imagen fallback (${secondaryImagenModel})...`);
     }
 
     // 2. Secondary: Google Imagen 3 via generateImages (if publisher model is enabled)
     try {
-      console.log(`[Gemini Imagen 3] Generating ${aspectRatio} scene image for prompt: "${visualPrompt.slice(0, 80)}..."`);
+      console.log(`[Gemini Imagen] Generating ${aspectRatio} scene image with ${secondaryImagenModel} for prompt: "${visualPrompt.slice(0, 80)}..."`);
 
       const response = await ai.models.generateImages({
-        model: "imagen-3.0-generate-002",
+        model: secondaryImagenModel,
         prompt: visualPrompt,
         config: {
           numberOfImages: 1,
@@ -334,11 +340,11 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
           filename
         });
         const uploadedUrl = await uploadAssetBuffer(buffer, storageKey, "image/jpeg");
-        console.log(`[Gemini Imagen 3] Successfully generated Imagen 3 frame: ${uploadedUrl}`);
+        console.log(`[Gemini Imagen] Successfully generated ${secondaryImagenModel} frame: ${uploadedUrl}`);
         return uploadedUrl;
       }
     } catch (err) {
-      console.warn("[Gemini Imagen 3] Imagen direct generation failed:", err.message);
+      console.warn(`[Gemini Imagen] ${secondaryImagenModel} direct generation failed:`, err.message);
     }
   }
 
@@ -347,7 +353,8 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
     const cleanPrompt = encodeURIComponent(visualPrompt.slice(0, 250));
     const seed = Math.floor(Math.random() * 100000);
     const dims = aspectRatio === "9:16" ? "width=1080&height=1920" : (aspectRatio === "1:1" ? "width=1080&height=1080" : "width=1920&height=1080");
-    const aiImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?${dims}&model=flux&nologo=true&private=true&enhance=false&seed=${seed}`;
+    const fallbackModel = encodeURIComponent(env.fallbackImageModel || "flux");
+    const aiImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?${dims}&model=${fallbackModel}&nologo=true&private=true&enhance=false&seed=${seed}`;
 
     console.log(`[AI Image Generator] Fetching high-definition ${dims} scene frame (seed=${seed})...`);
     const controller = new AbortController();

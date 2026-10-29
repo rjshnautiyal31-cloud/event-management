@@ -622,18 +622,42 @@ All system parameters and cloud credentials operate on a strict 2-tier resolutio
 3. **Tier 3: Built-in Defaults**
    - If neither the Database nor `.env` specifies a value, a safe default is applied (e.g., `local` for storage, `memory` for queue, `google_lyria` for music).
 
-### Configurable Categories
+### Configurable Categories & Dynamic Model Selection
 - **☁️ Cloud Storage**: Switch between `local`, `s3`, `r2`, and `gcs`. Set custom S3 endpoints, public CDN domains, bucket names (`GCS_BUCKET`), and credentials.
-- **🤖 AI & Vertex LLM**: Set `GEMINI_API_KEY`, Google Cloud Project ID (`GOOGLE_CLOUD_PROJECT`), Vertex AI region, and default LLM provider.
-- **🎵 Music & Audio**: Set `MUSIC_PROVIDER` (`google_lyria`, `elevenlabs`, `suno`, `google_tts`, `local_synth`) and respective API keys.
-- **🎬 Motion Video**: Set `VIDEO_PROVIDER` (`google_omni`, `google_veo`, `replicate`, `local_ffmpeg`) and Replicate API keys.
+- **🤖 AI & Vertex LLM**:
+  - **Authentication & Project**: Set `GEMINI_API_KEY`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` (default: `us-central1`), `GCP_CLIENT_EMAIL`, and `GCP_PRIVATE_KEY` (masked secret).
+  - **Configurable LLM & Image Models**:
+    - `LLM_PROVIDER`: Primary LLM engine (`gemini` or `openai`, default: `gemini`).
+    - `GEMINI_MODEL`: Primary Gemini model for narrative analysis, storyboard pacing, and lyrics (default: `gemini-2.5-flash`).
+    - `GEMINI_IMAGE_MODEL`: Primary Gemini multimodal image generation model for scene frames (default: `gemini-2.5-flash-image`).
+    - `IMAGEN_MODEL`: Secondary Vertex AI Imagen model fallback (default: `imagen-3.0-generate-002`).
+    - `FALLBACK_IMAGE_MODEL`: Tertiary external image generation fallback model (default: `flux`).
+- **🎵 Music & Audio**:
+  - **Provider & API Keys**: Set `MUSIC_PROVIDER` (`google_lyria`, `elevenlabs`, `suno`, `google_tts`, `local_synth`), `ELEVENLABS_API_KEY`, and `SUNO_API_KEY`.
+  - **Configurable Music & Vocal Models**:
+    - `LYRIA_MODEL`: Primary Google DeepMind Lyria model for full song generation (default: `lyria-3-pro-preview`).
+    - `LYRIA_FALLBACK_MODEL`: Secondary Vertex AI Lyria fallback model (default: `lyria-002`).
+    - `ELEVENLABS_MUSIC_MODEL`: ElevenLabs music generation model ID (default: `music_v1`).
+    - `ELEVENLABS_TTS_ENGLISH_MODEL`: ElevenLabs English vocal model ID (default: `eleven_monolingual_v1`).
+    - `ELEVENLABS_TTS_MULTILINGUAL_MODEL`: ElevenLabs multilingual vocal model ID (default: `eleven_multilingual_v2`).
+- **🎬 Motion Video**:
+  - **Provider & API Keys**: Set `VIDEO_PROVIDER` (`google_omni`, `google_veo`, `replicate`, `local_ffmpeg`) and `REPLICATE_API_KEY`.
+  - **Configurable Video Models**:
+    - `GOOGLE_VIDEO_MODEL`: Google Vertex AI model ID for image-to-video motion generation (default: `gemini-omni-1.1-flash-preview`).
+    - `REPLICATE_VIDEO_MODEL`: Replicate model version hash for Stable Video Diffusion (default: `3f0457e4619da258370163351d3e8f8101a938634ed1fcfd43a6d97c55531d27`).
 - **📬 Email & Tickets**: Set `RESEND_API_KEY` (recommended for Render free tier), `SENDER_EMAIL`, and custom SMTP host, port, user, and password.
 - **🌐 Network & Queue**: Set `PUBLIC_URL`, `FRONTEND_BASE_URL`, `QUEUE_PROVIDER` (`memory` or `redis`), `REDIS_URL`, and optional external video `WORKER_URL`.
 
+### Zero-File In-Memory Google Cloud Authentication (3-Tier Fallback)
+Instead of writing raw `.json` credential files to disk, all Google Cloud SDKs (`@google/genai`, `@google-cloud/storage`, `@google-cloud/text-to-speech`, `google-auth-library`) resolve credentials in-memory using a 3-tier priority chain:
+1. **1st Priority (`settings_in_memory`)**: `GCP_CLIENT_EMAIL` + `GCP_PRIVATE_KEY` configured in the Settings Database (`/#/settings`) or `.env`. Passed strictly in-memory via `googleAuthOptions.credentials` and masked as `••••••••` in the UI.
+2. **2nd Priority (`local_file`)**: Local `gcp-service-account.json` file (if present on disk), loaded into memory as the default baseline.
+3. **3rd Priority (`adc`)**: Google Cloud Application Default Credentials (zero-key IAM identity when running on Cloud Run or GKE).
+
 ### Live Diagnostics & Testing
 - **Test Cloud Storage**: Click **"Test Storage"** in the top action bar. The server uploads a test buffer using the active storage configuration and validates the generated public URL.
-- **Test AI Keys**: Click **"Test AI Keys"** to verify that Gemini API or GCP Vertex AI project credentials are valid.
-- **Reset to .env**: For any setting currently stored in the Database, click **"Reset to .env"** to delete the DB override and immediately revert back to the environment variable.
+- **Test AI Keys**: Click **"Test AI Keys"** to verify active Gemini API or GCP Vertex AI project credentials, view the active credential source (`settings_in_memory`, `local_file`, or `adc`), and inspect the active configured model IDs.
+- **Reset to .env**: For any setting currently stored in the Database, click **"Reset to .env"** to delete the DB override and immediately revert back to the environment variable or built-in default.
 
 
 

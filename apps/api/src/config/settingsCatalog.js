@@ -31,6 +31,26 @@ export const SETTINGS_CATALOG = [
     defaultValue: "us-central1"
   },
   {
+    key: "GCP_CLIENT_EMAIL",
+    category: "ai",
+    label: "GCP Service Account Client Email",
+    description: "In-memory Google Cloud IAM Service Account email (e.g. name@project.iam.gserviceaccount.com). Leave blank to automatically use local gcp-service-account.json or Cloud Run ADC.",
+    type: "text",
+    isSecret: false,
+    envKeys: ["GCP_CLIENT_EMAIL", "GOOGLE_CLIENT_EMAIL"],
+    defaultValue: ""
+  },
+  {
+    key: "GCP_PRIVATE_KEY",
+    category: "ai",
+    label: "GCP Service Account Private Key",
+    description: "In-memory PEM Private Key (-----BEGIN PRIVATE KEY-----...) for Vertex AI, Lyria, TTS, and GCS. Never written to disk. Leave blank to use local gcp-service-account.json or Cloud Run ADC.",
+    type: "password",
+    isSecret: true,
+    envKeys: ["GCP_PRIVATE_KEY", "GOOGLE_PRIVATE_KEY"],
+    defaultValue: ""
+  },
+  {
     key: "LLM_PROVIDER",
     category: "ai",
     label: "Primary LLM Provider",
@@ -40,6 +60,46 @@ export const SETTINGS_CATALOG = [
     isSecret: false,
     envKeys: ["LLM_PROVIDER"],
     defaultValue: "gemini"
+  },
+  {
+    key: "GEMINI_MODEL",
+    category: "ai",
+    label: "Gemini LLM Model",
+    description: "Primary Gemini model used for story analysis, scene storyboarding, and lyric generation.",
+    type: "text",
+    isSecret: false,
+    envKeys: ["GEMINI_MODEL", "GEMINI_LLM_MODEL"],
+    defaultValue: "gemini-2.5-flash"
+  },
+  {
+    key: "GEMINI_IMAGE_MODEL",
+    category: "ai",
+    label: "Primary Scene Image Model (Gemini)",
+    description: "Primary model for generating AI scene illustrations via Gemini multimodal output.",
+    type: "text",
+    isSecret: false,
+    envKeys: ["GEMINI_IMAGE_MODEL"],
+    defaultValue: "gemini-2.5-flash-image"
+  },
+  {
+    key: "IMAGEN_MODEL",
+    category: "ai",
+    label: "Secondary Scene Image Model (Vertex Imagen)",
+    description: "Fallback Vertex AI Imagen model used when the primary Gemini image model is unavailable.",
+    type: "text",
+    isSecret: false,
+    envKeys: ["IMAGEN_MODEL"],
+    defaultValue: "imagen-3.0-generate-002"
+  },
+  {
+    key: "FALLBACK_IMAGE_MODEL",
+    category: "ai",
+    label: "Tertiary Fallback Image Model",
+    description: "External fallback image synthesis model (e.g., flux) if Google image models hit quota limits.",
+    type: "text",
+    isSecret: false,
+    envKeys: ["FALLBACK_IMAGE_MODEL"],
+    defaultValue: "flux"
   },
 
   // --- 2. Music & Audio Generation ---
@@ -55,6 +115,26 @@ export const SETTINGS_CATALOG = [
     defaultValue: "google_lyria"
   },
   {
+    key: "LYRIA_MODEL",
+    category: "music",
+    label: "Google Lyria Primary Model",
+    description: "Primary Google DeepMind Lyria model for full vocal and instrumental music generation.",
+    type: "text",
+    isSecret: false,
+    envKeys: ["LYRIA_MODEL"],
+    defaultValue: "lyria-3-pro-preview"
+  },
+  {
+    key: "LYRIA_FALLBACK_MODEL",
+    category: "music",
+    label: "Google Lyria Fallback Model",
+    description: "Fallback Vertex AI Lyria model used if the primary Lyria model is unavailable in the region.",
+    type: "text",
+    isSecret: false,
+    envKeys: ["LYRIA_FALLBACK_MODEL"],
+    defaultValue: "lyria-002"
+  },
+  {
     key: "ELEVENLABS_API_KEY",
     category: "music",
     label: "ElevenLabs API Key",
@@ -63,6 +143,36 @@ export const SETTINGS_CATALOG = [
     isSecret: true,
     envKeys: ["ELEVENLABS_API_KEY"],
     defaultValue: ""
+  },
+  {
+    key: "ELEVENLABS_MUSIC_MODEL",
+    category: "music",
+    label: "ElevenLabs Music Model",
+    description: "ElevenLabs model ID used for full music track generation (/v1/music).",
+    type: "text",
+    isSecret: false,
+    envKeys: ["ELEVENLABS_MUSIC_MODEL"],
+    defaultValue: "music_v1"
+  },
+  {
+    key: "ELEVENLABS_TTS_ENGLISH_MODEL",
+    category: "music",
+    label: "ElevenLabs English TTS Model",
+    description: "ElevenLabs model ID used for English vocal/narration synthesis.",
+    type: "text",
+    isSecret: false,
+    envKeys: ["ELEVENLABS_TTS_ENGLISH_MODEL"],
+    defaultValue: "eleven_monolingual_v1"
+  },
+  {
+    key: "ELEVENLABS_TTS_MULTILINGUAL_MODEL",
+    category: "music",
+    label: "ElevenLabs Multilingual TTS Model",
+    description: "ElevenLabs model ID used for Hindi, Punjabi, Spanish, and multilingual vocal synthesis.",
+    type: "text",
+    isSecret: false,
+    envKeys: ["ELEVENLABS_TTS_MULTILINGUAL_MODEL"],
+    defaultValue: "eleven_multilingual_v2"
   },
   {
     key: "SUNO_API_KEY",
@@ -88,6 +198,16 @@ export const SETTINGS_CATALOG = [
     defaultValue: "google_omni"
   },
   {
+    key: "GOOGLE_VIDEO_MODEL",
+    category: "video",
+    label: "Google Omni / Veo Video Model",
+    description: "Google Vertex AI model ID used for image-to-video motion generation.",
+    type: "text",
+    isSecret: false,
+    envKeys: ["GOOGLE_VIDEO_MODEL", "GEMINI_VIDEO_MODEL", "VEO_VIDEO_MODEL"],
+    defaultValue: "gemini-omni-1.1-flash-preview"
+  },
+  {
     key: "REPLICATE_API_KEY",
     category: "video",
     label: "Replicate API Key",
@@ -96,6 +216,16 @@ export const SETTINGS_CATALOG = [
     isSecret: true,
     envKeys: ["REPLICATE_API_KEY", "VIDEO_API_KEY"],
     defaultValue: ""
+  },
+  {
+    key: "REPLICATE_VIDEO_MODEL",
+    category: "video",
+    label: "Replicate Video Model Version",
+    description: "Replicate model version hash used for Stable Video Diffusion / motion generation.",
+    type: "text",
+    isSecret: false,
+    envKeys: ["REPLICATE_VIDEO_MODEL"],
+    defaultValue: "3f0457e4619da258370163351d3e8f8101a938634ed1fcfd43a6d97c55531d27"
   },
 
   // --- 4. Cloud Storage ---

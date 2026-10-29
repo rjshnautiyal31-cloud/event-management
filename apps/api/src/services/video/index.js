@@ -2,7 +2,7 @@ import path from "path";
 import fs from "fs/promises";
 import fsSync from "fs";
 import { GoogleGenAI } from "@google/genai";
-import { env } from "../../config/env.js";
+import { env, getGoogleCloudCredentials } from "../../config/env.js";
 import { uploadAssetBuffer, buildStoryStorageKey } from "../storage/index.js";
 
 // Google Cloud Gemini Omni 1.1 Flash AI Video Adapter (Vertex AI Next-Gen Interactions)
@@ -11,20 +11,24 @@ export class GoogleOmniVideoAdapter {
     const cleanPrompt = (promptText || "Cinematic 5-second motion video clip, photorealistic 16:9 widescreen, cinematic camera motion").trim();
 
     try {
-      console.log(`[Google Gemini Omni Video] Authenticating with Vertex AI Service Account...`);
-      const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
-      if (fsSync.existsSync(keyFilename)) {
-        process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
-      }
-
-      const projectId = env.googleCloudProject || process.env.GOOGLE_CLOUD_PROJECT;
-      const ai = new GoogleGenAI({
+      const videoModel = env.googleVideoModel || "gemini-omni-1.1-flash-preview";
+      console.log(`[Google Gemini Omni Video] Authenticating with Vertex AI Service Account for ${videoModel}...`);
+      const authInfo = getGoogleCloudCredentials();
+      const projectId = env.googleCloudProject || authInfo.projectId || process.env.GOOGLE_CLOUD_PROJECT;
+      const genAiOptions = {
         vertexai: true,
         project: projectId,
         location: "global"
-      });
+      };
+      if (authInfo.credentials) {
+        genAiOptions.googleAuthOptions = {
+          credentials: authInfo.credentials,
+          projectId
+        };
+      }
+      const ai = new GoogleGenAI(genAiOptions);
 
-      console.log(`[Google Gemini Omni Video] Generating motion video with gemini-omni-1.1-flash-preview: "${cleanPrompt.slice(0, 80)}..."`);
+      console.log(`[Google Gemini Omni Video] Generating motion video with ${videoModel}: "${cleanPrompt.slice(0, 80)}..."`);
 
       let inputPayload = cleanPrompt;
 
@@ -74,14 +78,14 @@ export class GoogleOmniVideoAdapter {
       let inter = null;
       try {
         inter = await ai.interactions.create({
-          model: "gemini-omni-1.1-flash-preview",
+          model: videoModel,
           input: inputPayload
         });
       } catch (callErr) {
         if (Array.isArray(inputPayload) && inputPayload.length > 1) {
           console.warn("[Google Gemini Omni Video] Multimodal call failed, falling back to cinematic text prompt:", callErr.message);
           inter = await ai.interactions.create({
-            model: "gemini-omni-1.1-flash-preview",
+            model: videoModel,
             input: `Cinematic 5-second 16:9 motion video clip: ${cleanPrompt}. Highly detailed, realistic motion, smooth camera pan, 720p.`
           });
         } else {
@@ -104,7 +108,7 @@ export class GoogleOmniVideoAdapter {
         return publicUrl;
       }
 
-      throw new Error("No output_video returned from gemini-omni-1.1-flash-preview");
+      throw new Error(`No output_video returned from ${videoModel}`);
     } catch (err) {
       console.error("[Google Gemini Omni Video] Error generating video clip:", err.message);
       return imageUrl;
@@ -133,7 +137,7 @@ class ReplicateVideoAdapter {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          version: "3f0457e4619da258370163351d3e8f8101a938634ed1fcfd43a6d97c55531d27",
+          version: env.replicateVideoModel || "3f0457e4619da258370163351d3e8f8101a938634ed1fcfd43a6d97c55531d27",
           input: {
             input_image: imageUrl,
             motion_bucket_id: 127,

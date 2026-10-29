@@ -7,7 +7,7 @@ import ffmpegInstaller from "ffmpeg-static";
 import textToSpeech from "@google-cloud/text-to-speech";
 import { GoogleAuth } from "google-auth-library";
 import { GoogleGenAI } from "@google/genai";
-import { env } from "../../config/env.js";
+import { env, getGoogleCloudCredentials } from "../../config/env.js";
 import { uploadAssetBuffer, buildStoryStorageKey } from "../storage/index.js";
 import { getLanguageConfig, getLanguageGcpVoice } from "../../config/languages.js";
 
@@ -180,12 +180,13 @@ async function fetchGoogleCloudNeuralVocalAudio(lyricsText, tempVocalPath, langu
   if (!cleanLyrics) return false;
 
   const langConfig = getLanguageConfig(language);
-  const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
+  const authInfo = getGoogleCloudCredentials();
 
   try {
     const clientOptions = {};
-    if (fs.existsSync(keyFilename)) {
-      clientOptions.keyFilename = keyFilename;
+    if (authInfo.credentials) {
+      clientOptions.credentials = authInfo.credentials;
+      if (authInfo.projectId) clientOptions.projectId = authInfo.projectId;
     } else if (env.geminiApiKey) {
       clientOptions.apiKey = env.geminiApiKey;
     }
@@ -452,7 +453,7 @@ class ElevenLabsMusicAdapter {
         body: JSON.stringify({
           prompt: promptText,
           music_length_ms: Math.min(600000, Math.max(3000, durationSeconds * 1000)),
-          model_id: "music_v1",
+          model_id: env.elevenLabsMusicModel || "music_v1",
           force_instrumental: false,
           output_format: "mp3_44100_128"
         })
@@ -498,7 +499,9 @@ class ElevenLabsMusicAdapter {
         },
         body: JSON.stringify({
           text: cleanLyrics,
-          model_id: langConfig.code === "en" ? "eleven_monolingual_v1" : "eleven_multilingual_v2",
+          model_id: langConfig.code === "en"
+            ? (env.elevenLabsTtsEnglishModel || "eleven_monolingual_v1")
+            : (env.elevenLabsTtsMultilingualModel || "eleven_multilingual_v2"),
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.75
@@ -590,18 +593,22 @@ export class GoogleLyriaMusicAdapter {
     const langConfig = getLanguageConfig(language);
 
     try {
-      console.log(`[Google Lyria AI Music] Authenticating with Vertex AI for Lyria 3 Pro in ${langConfig.name} (${voiceType})...`);
-      const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
-      if (fs.existsSync(keyFilename)) {
-        process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
-      }
-
-      const projectIdEnv = env.googleCloudProject || process.env.GOOGLE_CLOUD_PROJECT;
-      const ai = new GoogleGenAI({
+      const primaryLyriaModel = env.lyriaModel || "lyria-3-pro-preview";
+      console.log(`[Google Lyria AI Music] Authenticating with Vertex AI for ${primaryLyriaModel} in ${langConfig.name} (${voiceType})...`);
+      const authInfo = getGoogleCloudCredentials();
+      const projectIdEnv = env.googleCloudProject || authInfo.projectId || process.env.GOOGLE_CLOUD_PROJECT;
+      const genAiOptions = {
         vertexai: true,
         project: projectIdEnv,
         location: "global"
-      });
+      };
+      if (authInfo.credentials) {
+        genAiOptions.googleAuthOptions = {
+          credentials: authInfo.credentials,
+          projectId: projectIdEnv
+        };
+      }
+      const ai = new GoogleGenAI(genAiOptions);
 
       let vocalStyleInstruction = "expressive female lead singing vocals";
       if (voiceType === "male") {
@@ -641,9 +648,9 @@ export class GoogleLyriaMusicAdapter {
       // Try Lyria 3 Pro with 1 automatic retry on transient error
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          console.log(`[Google Lyria AI Music] Generating full song with lyria-3-pro-preview (Attempt ${attempt}/2): "${promptInput.slice(0, 100)}..."`);
+          console.log(`[Google Lyria AI Music] Generating full song with ${primaryLyriaModel} (Attempt ${attempt}/2): "${promptInput.slice(0, 100)}..."`);
           interaction = await ai.interactions.create({
-            model: "lyria-3-pro-preview",
+            model: primaryLyriaModel,
             input: promptInput
           });
           if (interaction?.output_audio?.data) {
@@ -651,7 +658,7 @@ export class GoogleLyriaMusicAdapter {
           }
         } catch (callErr) {
           lastLyriaErr = callErr;
-          console.warn(`[Google Lyria AI Music] Lyria 3 Pro attempt ${attempt} failed: ${callErr.message}`);
+          console.warn(`[Google Lyria AI Music] ${primaryLyriaModel} attempt ${attempt} failed: ${callErr.message}`);
           if (attempt === 1) {
             await new Promise((r) => setTimeout(r, 2000));
           }
@@ -678,7 +685,7 @@ export class GoogleLyriaMusicAdapter {
         const realDuration = await getAudioDurationFromFile(outputPath);
         const extractedLyrics = extractLyricsFromLyriaOutput(interaction.output_text);
 
-        console.log(`[Google Lyria AI Music] Lyria 3 Pro created song: ${outputFilename} (${realDuration}s, ${audioBuffer.length} bytes) in ${langConfig.name}`);
+        console.log(`[Google Lyria AI Music] ${primaryLyriaModel} created song: ${outputFilename} (${realDuration}s, ${audioBuffer.length} bytes) in ${langConfig.name}`);
         return {
           audioUrl,
           durationSeconds: realDuration,
@@ -689,25 +696,27 @@ export class GoogleLyriaMusicAdapter {
         };
       }
 
-      throw lastLyriaErr || new Error("No audio payload returned from Lyria 3 Pro interaction");
+      throw lastLyriaErr || new Error(`No audio payload returned from ${primaryLyriaModel} interaction`);
     } catch (err) {
-      console.warn(`[Google Lyria AI Music] Lyria 3 Pro error: ${err.message}. Attempting legacy lyria-002 fallback...`);
+      const fallbackLyriaModel = env.lyriaFallbackModel || "lyria-002";
+      console.warn(`[Google Lyria AI Music] Primary Lyria error: ${err.message}. Attempting legacy ${fallbackLyriaModel} fallback...`);
       try {
-        const keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS || path.join(process.cwd(), "gcp-service-account.json");
+        const authInfo = getGoogleCloudCredentials();
         const authOptions = {
           scopes: ["https://www.googleapis.com/auth/cloud-platform"]
         };
-        if (fs.existsSync(keyFilename)) {
-          authOptions.keyFilename = keyFilename;
+        if (authInfo.credentials) {
+          authOptions.credentials = authInfo.credentials;
+          if (authInfo.projectId) authOptions.projectId = authInfo.projectId;
         }
         const auth = new GoogleAuth(authOptions);
         const client = await auth.getClient();
         const token = await client.getAccessToken();
-        const projectIdEnvResolved = (await auth.getProjectId()) || env.googleCloudProject || process.env.GOOGLE_CLOUD_PROJECT;
-        const location = process.env.GOOGLE_CLOUD_LOCATION || env.googleCloudLocation || "us-central1";
+        const projectIdEnvResolved = (await auth.getProjectId()) || env.googleCloudProject || authInfo.projectId || process.env.GOOGLE_CLOUD_PROJECT;
+        const location = env.googleCloudLocation || process.env.GOOGLE_CLOUD_LOCATION || "us-central1";
 
         const cleanFallbackPrompt = `Cinematic ${mood.toLowerCase()} soundtrack, ${genre.toLowerCase()} melody, celebratory event atmosphere, lush acoustic stereo mix, ${langConfig.name} singing mood`;
-        const response = await fetch(`https://${location}-aiplatform.googleapis.com/v1/projects/${projectIdEnvResolved}/locations/${location}/publishers/google/models/lyria-002:predict`, {
+        const response = await fetch(`https://${location}-aiplatform.googleapis.com/v1/projects/${projectIdEnvResolved}/locations/${location}/publishers/google/models/${fallbackLyriaModel}:predict`, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${token.token}`,
@@ -720,12 +729,12 @@ export class GoogleLyriaMusicAdapter {
         });
 
         if (!response.ok) {
-          throw new Error(`Lyria-002 fallback HTTP ${response.status}`);
+          throw new Error(`${fallbackLyriaModel} fallback HTTP ${response.status}`);
         }
 
         const data = await response.json();
         const audioBase64 = data.predictions?.[0]?.bytesBase64Encoded || data.predictions?.[0]?.audioContent;
-        if (!audioBase64) throw new Error("No audio bytes in lyria-002");
+        if (!audioBase64) throw new Error(`No audio bytes in ${fallbackLyriaModel}`);
 
         const rawWavBuffer = Buffer.from(audioBase64, "base64");
         const bgWavPath = path.join(uploadDir, `lyria_bg_${timestamp}.wav`);

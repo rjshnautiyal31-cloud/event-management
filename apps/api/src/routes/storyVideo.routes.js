@@ -17,6 +17,7 @@ import { getVideoProvider } from "../services/video/index.js";
 import { getStorageProvider, buildStoryStorageKey } from "../services/storage/index.js";
 import { processVideoRenderJob, VIDEO_PRESETS, formatSrtTime, formatVttTime } from "../workers/index.js";
 import { SUPPORTED_LANGUAGES, getLanguageConfig } from "../config/languages.js";
+import { env } from "../config/env.js";
 
 const upload = multer({ storage: multer.memoryStorage() });
 export const storyVideoRouter = Router();
@@ -333,7 +334,7 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
       targetDuration: desiredDuration
     });
 
-    const providerToUse = musicProvider || "google_lyria";
+    const providerToUse = musicProvider || env.musicProvider || "google_lyria";
     const musicEngine = getMusicProvider(providerToUse);
 
     const audioResult = await musicEngine.generateMusic({
@@ -562,7 +563,7 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/veo", async (req, res, n
 
     console.log(`[API Story Video] Generating Gemini Omni 1.1 Flash video clip for Scene ${scene.sceneNumber}: "${promptText.slice(0, 60)}..."`);
 
-    const videoEngine = getVideoProvider("google_omni");
+    const videoEngine = getVideoProvider(req.body?.videoProvider);
     const videoUrl = await videoEngine.generateSceneVideoClip({
       imageUrl: sourceImageUrl,
       promptText,
@@ -811,7 +812,7 @@ storyVideoRouter.post("/projects/:id/scenes/generate-all-veo", async (req, res, 
     }
 
     const storyboard = project.activeStoryboardId;
-    const videoEngine = getVideoProvider("google_omni");
+    const videoEngine = getVideoProvider(req.body?.videoProvider);
     const results = [];
 
     const scenesToProcess = [];

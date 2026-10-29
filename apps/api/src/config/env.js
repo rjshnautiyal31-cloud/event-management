@@ -8,9 +8,10 @@ import { SystemSetting } from "../models/SystemSetting.js";
 dotenv.config();
 
 // 2. In monorepo/local dev, also load apps/api/.env if present (dotenv will not override existing env vars)
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const apiRootDir = path.resolve(currentDir, "../..");
 try {
-  const currentDir = path.dirname(fileURLToPath(import.meta.url));
-  const apiEnvPath = path.resolve(currentDir, "../../.env");
+  const apiEnvPath = path.resolve(apiRootDir, ".env");
   if (fs.existsSync(apiEnvPath)) {
     dotenv.config({ path: apiEnvPath });
   }
@@ -84,7 +85,22 @@ const PROPERTY_CONFIG = {
   geminiApiKey: { envKeys: ["GEMINI_API_KEY"], default: "" },
   googleCloudProject: { envKeys: ["GOOGLE_CLOUD_PROJECT"], default: "" },
   googleCloudLocation: { envKeys: ["GOOGLE_CLOUD_LOCATION"], default: "us-central1" },
+  gcpClientEmail: { envKeys: ["GCP_CLIENT_EMAIL", "GOOGLE_CLIENT_EMAIL"], default: "" },
+  gcpPrivateKey: { envKeys: ["GCP_PRIVATE_KEY", "GOOGLE_PRIVATE_KEY"], default: "" },
   redisUrl: { envKeys: ["REDIS_URL"], default: "redis://127.0.0.1:6379" },
+
+  // Configurable AI / Music / Video Models
+  geminiModel: { envKeys: ["GEMINI_MODEL", "GEMINI_LLM_MODEL"], default: "gemini-2.5-flash" },
+  geminiImageModel: { envKeys: ["GEMINI_IMAGE_MODEL"], default: "gemini-2.5-flash-image" },
+  imagenModel: { envKeys: ["IMAGEN_MODEL"], default: "imagen-3.0-generate-002" },
+  fallbackImageModel: { envKeys: ["FALLBACK_IMAGE_MODEL"], default: "flux" },
+  lyriaModel: { envKeys: ["LYRIA_MODEL"], default: "lyria-3-pro-preview" },
+  lyriaFallbackModel: { envKeys: ["LYRIA_FALLBACK_MODEL"], default: "lyria-002" },
+  elevenLabsMusicModel: { envKeys: ["ELEVENLABS_MUSIC_MODEL"], default: "music_v1" },
+  elevenLabsTtsEnglishModel: { envKeys: ["ELEVENLABS_TTS_ENGLISH_MODEL"], default: "eleven_monolingual_v1" },
+  elevenLabsTtsMultilingualModel: { envKeys: ["ELEVENLABS_TTS_MULTILINGUAL_MODEL"], default: "eleven_multilingual_v2" },
+  googleVideoModel: { envKeys: ["GOOGLE_VIDEO_MODEL", "GEMINI_VIDEO_MODEL", "VEO_VIDEO_MODEL"], default: "gemini-omni-1.1-flash-preview" },
+  replicateVideoModel: { envKeys: ["REPLICATE_VIDEO_MODEL"], default: "3f0457e4619da258370163351d3e8f8101a938634ed1fcfd43a6d97c55531d27" },
 
   // Storage Configurations
   s3Bucket: { envKeys: ["S3_BUCKET"], default: "ai-story-media" },
@@ -176,3 +192,62 @@ export const env = new Proxy(
     }
   }
 );
+
+/**
+ * Resolves Google Cloud Service Account credentials in-memory without writing JSON files to disk.
+ * Priority:
+ *  1. In-memory GCP_CLIENT_EMAIL + GCP_PRIVATE_KEY from Settings DB or .env
+ *  2. Local gcp-service-account.json file (if present on disk, loaded into memory)
+ *  3. Google Cloud Application Default Credentials (ADC) when running on Cloud Run / GKE
+ */
+export function getGoogleCloudCredentials() {
+  // Check local gcp-service-account.json on disk as default baseline if present
+  let localCreds = null;
+  const candidatePaths = [
+    process.env.GOOGLE_APPLICATION_CREDENTIALS ? path.resolve(process.cwd(), process.env.GOOGLE_APPLICATION_CREDENTIALS) : null,
+    path.resolve(process.cwd(), "gcp-service-account.json"),
+    path.resolve(apiRootDir, "gcp-service-account.json")
+  ].filter(Boolean);
+
+  for (const filePath of candidatePaths) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, "utf8");
+        const parsed = JSON.parse(raw);
+        if (parsed.client_email && parsed.private_key) {
+          localCreds = parsed;
+          break;
+        }
+      }
+    } catch {
+      // Ignore invalid or unreadable candidate file and continue fallback chain
+    }
+  }
+
+  const configuredEmail = String(env.gcpClientEmail || "").trim();
+  const configuredKey = String(env.gcpPrivateKey || "").trim();
+
+  const clientEmail = configuredEmail || (localCreds?.client_email ? String(localCreds.client_email).trim() : "");
+  const rawPrivateKey = configuredKey || (localCreds?.private_key ? String(localCreds.private_key).trim() : "");
+
+  if (clientEmail && rawPrivateKey) {
+    const normalizedKey = rawPrivateKey
+      .replace(/^["']|["']$/g, "")
+      .replace(/\\n/g, "\n");
+    return {
+      credentials: {
+        client_email: clientEmail,
+        private_key: normalizedKey
+      },
+      projectId: env.googleCloudProject || localCreds?.project_id || undefined,
+      source: (configuredEmail && configuredKey) ? "settings_in_memory" : "local_file"
+    };
+  }
+
+  // Fallback to Google Cloud ADC (Application Default Credentials)
+  return {
+    credentials: null,
+    projectId: env.googleCloudProject || localCreds?.project_id || undefined,
+    source: "adc"
+  };
+}

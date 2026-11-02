@@ -314,12 +314,9 @@ If you ever want to run the backend completely on Render:
    - `GOOGLE_CLOUD_PROJECT`: `YOUR_GCP_PROJECT_ID`
    - `GOOGLE_CLOUD_LOCATION`: `us-central1`
 3. **Configure Google Cloud Credentials on Render**:
-   - Render does not have GCP IAM Application Default Credentials.
-   - In Render Dashboard → API Service → **Secret Files**:
-     - File Name: `/etc/secrets/gcp-service-account.json`
-     - Contents: Paste the JSON contents of your GCP service account key.
-   - In Environment Variables, add:
-     - `GOOGLE_APPLICATION_CREDENTIALS`: `/etc/secrets/gcp-service-account.json`
+   - Render does not have GCP IAM Application Default Credentials (ADC).
+   - **Recommended (Zero-File In-Memory)**: Configure `GCP_CLIENT_EMAIL` and `GCP_PRIVATE_KEY` directly in the Back Office Settings page (`/#/settings`) or as Render Environment Variables.
+   - **Alternative (Secret File)**: In Render Dashboard → API Service → **Secret Files**, add `/etc/secrets/gcp-service-account.json` and set `GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/gcp-service-account.json`.
 4. **Update Frontend on Render**:
    - Go to your Frontend Static Site → **Environment**.
    - Change `VITE_API_BASE` back to your Render API address:
@@ -333,19 +330,22 @@ If you ever want to run the backend completely on Render:
 
 ---
 
-## Continuous Deployment to Cloud Run on `git push main`
+## Continuous Deployment to Cloud Run
 
-### Option 1: Native Cloud Run Continuous Deployment (Recommended)
+### Option 1: Native Cloud Run Continuous Deployment (Active on `git push main`)
 1. Open Google Cloud Console → **Cloud Run** → Click `event-qr-api`.
 2. Click **"SET UP CONTINUOUS DEPLOYMENT"**.
 3. Select **GitHub** and authorize repo: `rjshnautiyal31-cloud/event-management`.
 4. Branch: `^main$`.
 5. Build Type: **Dockerfile** (path: `/Dockerfile`).
-6. Click **Save**. Cloud Build automatically rebuilds and rolls out updates whenever commits hit `main`.
+6. Click **Save**. Cloud Build automatically rebuilds and rolls out updates inside GCP (using zero service account keys) whenever commits hit `main`.
 
-### Option 2: GitHub Actions Workflow
-The repo includes [`.github/workflows/deploy-cloud-run.yml`](.github/workflows/deploy-cloud-run.yml).
-Add your service account key JSON as a repository secret named `GCP_SA_KEY` under **GitHub Settings → Secrets and variables → Actions**.
+### Option 2: GitHub Actions Workflow (Manual Trigger & Keyless WIF)
+The repo includes [`.github/workflows/deploy-cloud-run.yml`](.github/workflows/deploy-cloud-run.yml):
+- Configured with `on: workflow_dispatch` (manual trigger from the GitHub **Actions** tab) so it does not trigger duplicate parallel deployments alongside Native Cloud Build on `git push`.
+- **Keyless Authentication via Workload Identity Federation (Recommended)**:
+  Set `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` under **GitHub Settings → Secrets and variables → Actions** (no JSON keys stored in GitHub or written to the runner).
+- **Legacy Fallback**: Also supports `GCP_SA_KEY` if WIF is not configured; `.dockerignore` blocks `gha-creds-*.json` and `*service-account*.json` from ever entering the container build context.
 
 ---
 

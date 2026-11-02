@@ -498,8 +498,12 @@ Uses native Google Cloud Storage (5 GB free tier):
 ```env
 STORAGE_PROVIDER=gcs
 GCS_BUCKET=event-media-gcs
-GOOGLE_APPLICATION_CREDENTIALS=./gcp-service-account.json
 GOOGLE_CLOUD_PROJECT=your-gcp-project-id
+# Option 1: In-memory credentials (or configure via /#/settings)
+GCP_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+GCP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+# Option 2: Cloud Run ADC (automatic) or local key file fallback:
+# GOOGLE_APPLICATION_CREDENTIALS=./gcp-service-account.json
 ```
 
 #### Option C: AWS S3
@@ -581,9 +585,9 @@ Because the frontend and backend are completely decoupled, you can switch the ba
    - `GCS_BUCKET`: `your-storage-bucket`
    - `GOOGLE_CLOUD_PROJECT`: `YOUR_GCP_PROJECT_ID`
    - `GOOGLE_APPLICATION_CREDENTIALS`: `/etc/secrets/gcp-service-account.json`
-3. **Upload GCP Key to Render (Secret Files)**:
-   - On Render, open your API Web Service → **Secret Files**.
-   - Add a file `/etc/secrets/gcp-service-account.json` and paste your service account key JSON.
+3. **Configure GCP Credentials on Render**:
+   - **Recommended (Zero-File In-Memory)**: Configure `GCP_CLIENT_EMAIL` and `GCP_PRIVATE_KEY` directly in the Back Office Settings page (`/#/settings`) or as Render Environment Variables.
+   - **Alternative (Secret File)**: On Render, open your API Web Service → **Secret Files**, add `/etc/secrets/gcp-service-account.json`, and set `GOOGLE_APPLICATION_CREDENTIALS=/etc/secrets/gcp-service-account.json`.
 4. **Point Frontend to Render**:
    - In Render Dashboard, open your Frontend Static Site → **Environment**.
    - Change `VITE_API_BASE` to:
@@ -597,9 +601,9 @@ Because the frontend and backend are completely decoupled, you can switch the ba
      gcloud run services update event-qr-api --max-instances=0 --region=us-central1
      ```
 
-### Automated Continuous Deployment on `git push main`
-- **Via Cloud Run Console**: Open Cloud Run → `event-qr-api` → **Set Up Continuous Deployment** → connect GitHub repo `rjshnautiyal31-cloud/event-management` and branch `main`.
-- **Via GitHub Actions**: Add secret `GCP_SA_KEY` to GitHub repo settings; the workflow at [`.github/workflows/deploy-cloud-run.yml`](.github/workflows/deploy-cloud-run.yml) will deploy automatically on every push to `main`.
+### Automated & Manual Deployment to Cloud Run
+- **Native Cloud Run Continuous Deployment (Active on `git push main`)**: Open Cloud Run → `event-qr-api` → **Set Up Continuous Deployment** → connect GitHub repo `rjshnautiyal31-cloud/event-management` and branch `main`. Cloud Build builds `/Dockerfile` directly inside GCP without requiring any exported service account keys.
+- **GitHub Actions Manual Workflow (`workflow_dispatch`)**: The workflow at [`.github/workflows/deploy-cloud-run.yml`](.github/workflows/deploy-cloud-run.yml) is configured for on-demand manual runs from the GitHub **Actions** tab (preventing duplicate deployments on `git push`). It supports keyless **Google Cloud Workload Identity Federation** (`GCP_WORKLOAD_IDENTITY_PROVIDER` + `GCP_SERVICE_ACCOUNT` secrets) with optional `GCP_SA_KEY` fallback, while [`.dockerignore`](.dockerignore) prevents any `gha-creds-*.json` or `*service-account*.json` files from entering the container image.
 
 ---
 

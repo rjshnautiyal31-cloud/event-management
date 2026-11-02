@@ -1,14 +1,13 @@
-name: Deploy API to Google Cloud Run
+name: Deploy API to Google Cloud Run (Manual Fallback)
 
+# Automatic deployments on `git push main` are handled by Native Cloud Run Continuous Deployment (Cloud Build).
+# This workflow is set to manual trigger (`workflow_dispatch`) only to prevent duplicate builds on every push.
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "apps/api/**"
-      - "package*.json"
-      - "Dockerfile"
-      - ".github/workflows/deploy-cloud-run.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   deploy:
@@ -23,7 +22,9 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER && secrets.GCP_SERVICE_ACCOUNT || '' }}
+          credentials_json: ${{ !secrets.GCP_WORKLOAD_IDENTITY_PROVIDER && secrets.GCP_SA_KEY || '' }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2

@@ -25,24 +25,9 @@ export function ProjectStudioPage({ auth, token: propToken }) {
 
   // Multilingual State
   const [languages, setLanguages] = useState([
-    { code: "en", name: "English", nativeName: "English (US)", flag: "🇺🇸" },
+    { code: "en", name: "English", nativeName: "English", flag: "🇺🇸" },
     { code: "hi", name: "Hindi", nativeName: "हिन्दी", flag: "🇮🇳" },
-    { code: "es", name: "Spanish", nativeName: "Español", flag: "🇪🇸" },
-    { code: "fr", name: "French", nativeName: "Français", flag: "🇫🇷" },
-    { code: "de", name: "German", nativeName: "Deutsch", flag: "🇩🇪" },
-    { code: "it", name: "Italian", nativeName: "Italiano", flag: "🇮🇹" },
-    { code: "pt", name: "Portuguese", nativeName: "Português", flag: "🇵🇹" },
-    { code: "ja", name: "Japanese", nativeName: "日本語", flag: "🇯🇵" },
-    { code: "zh", name: "Chinese", nativeName: "中文 (Mandarin)", flag: "🇨🇳" },
-    { code: "ar", name: "Arabic", nativeName: "العربية", flag: "🇸🇦" },
-    { code: "ru", name: "Russian", nativeName: "Русский", flag: "🇷🇺" },
-    { code: "ko", name: "Korean", nativeName: "한국어", flag: "🇰🇷" },
-    { code: "bn", name: "Bengali", nativeName: "বাংলা", flag: "🇮🇳" },
-    { code: "ta", name: "Tamil", nativeName: "தமிழ்", flag: "🇮🇳" },
-    { code: "te", name: "Telugu", nativeName: "తెలుగు", flag: "🇮🇳" },
-    { code: "mr", name: "Marathi", nativeName: "मराठी", flag: "🇮🇳" },
-    { code: "gu", name: "Gujarati", nativeName: "ગુજરાતી", flag: "🇮🇳" },
-    { code: "pa", name: "Punjabi", nativeName: "ਪੰਜਾਬੀ", flag: "🇮🇳" }
+    { code: "hinglish", name: "Hinglish", nativeName: "Hindi + English", flag: "🇮🇳" }
   ]);
   const [selectedLanguage, setSelectedLanguage] = useState("en");
 
@@ -1058,10 +1043,33 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                           onChange={(e) => setSelectedGenre(e.target.value)}
                           className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold bg-white focus:ring-2 focus:ring-[#0A2D59]"
                         >
-                          <option value="Pop">Pop (Vibrant & Catchy)</option>
-                          <option value="Acoustic">Acoustic (Warm & Organic)</option>
-                          <option value="Cinematic">Cinematic (Epic & Orchestral)</option>
-                          <option value="Rock">Rock (Energetic & Dynamic)</option>
+                          <optgroup label="Pop, Dance & Contemporary">
+                            <option value="Pop">Pop (Vibrant & Catchy)</option>
+                            <option value="Indie Pop">Indie Pop (Dreamy & Melodic)</option>
+                            <option value="EDM / Dance Pop">EDM / Dance Pop (High-Energy Club Beats)</option>
+                            <option value="Synthwave / Electro">Synthwave / Electro (Retro-Futuristic)</option>
+                          </optgroup>
+                          <optgroup label="Bollywood, Hinglish & Indian">
+                            <option value="Bollywood Pop">Bollywood Pop (Upbeat & Filmy Hooks)</option>
+                            <option value="Wedding Sangeet / Punjabi Dhol">Wedding Sangeet / Punjabi Dhol (Festive Bhangra)</option>
+                            <option value="Bollywood Romantic">Bollywood Romantic (Soulful Filmy Ballad)</option>
+                            <option value="Sufi / Indie Fusion">Sufi / Indie Fusion (Acoustic Guitar, Tabla & Soul)</option>
+                            <option value="Indian Classical / Traditional">Indian Classical / Traditional (Sitar, Flute & Raga)</option>
+                          </optgroup>
+                          <optgroup label="Acoustic, Folk & Soul">
+                            <option value="Acoustic">Acoustic (Warm & Organic Guitar/Piano)</option>
+                            <option value="Folk / Indie Folk">Folk / Indie Folk (Storytelling & Earthy)</option>
+                            <option value="R&B / Soul">R&B / Soul (Smooth Groove & Expressive Vocals)</option>
+                            <option value="Jazz / Lounge">Jazz / Lounge (Sophisticated Brass & Piano)</option>
+                            <option value="Country">Country (Warm Strumming & Heartfelt)</option>
+                          </optgroup>
+                          <optgroup label="Cinematic, Rock & Urban">
+                            <option value="Cinematic">Cinematic (Epic Orchestral & Score)</option>
+                            <option value="Rock">Rock (Energetic & Dynamic Electric Guitars)</option>
+                            <option value="Hip-Hop / Rap">Hip-Hop / Rap (Rhythmic Flow & Beats)</option>
+                            <option value="Lo-Fi Chill">Lo-Fi Chill (Relaxed Beats & Warm Vinyl)</option>
+                            <option value="Uplifting Choir / Gospel">Uplifting Choir / Gospel (Anthemic & Inspiring)</option>
+                          </optgroup>
                         </select>
                       </div>
 

@@ -289,7 +289,9 @@ storyVideoRouter.post("/projects/:id/analyze", async (req, res, next) => {
     }
 
     const analysisData = await analyzeStoryWithGemini(project.storyText, {
-      language: project.language || "en"
+      language: project.language || "en",
+      directorGuidelines: project.directorGuidelines || "",
+      characters: Array.isArray(project.characters) ? project.characters : []
     });
 
     const analysisDoc = await StoryAnalysis.create({
@@ -331,7 +333,10 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
 
     const lyricsText = await generateLyricsWithGemini(project.activeStoryAnalysisId.summary, targetGenre, {
       language: effectiveLanguage,
-      targetDuration: desiredDuration
+      targetDuration: desiredDuration,
+      storyText: project.storyText || "",
+      directorGuidelines: project.directorGuidelines || "",
+      characters: Array.isArray(project.characters) ? project.characters : []
     });
 
     const providerToUse = musicProvider || env.musicProvider || "google_lyria";
@@ -343,6 +348,7 @@ storyVideoRouter.post("/projects/:id/lyrics", async (req, res, next) => {
       durationSeconds: desiredDuration,
       mood: project.activeStoryAnalysisId.mood || "Upbeat",
       storyContext: project.storyText || project.activeStoryAnalysisId.summary || "",
+      directorGuidelines: project.directorGuidelines || "",
       title: project.title || "",
       projectId: project._id,
       language: effectiveLanguage,

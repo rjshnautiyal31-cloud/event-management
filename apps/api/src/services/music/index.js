@@ -123,7 +123,7 @@ export function createMusicalMelodyWavBuffer(durationSeconds = 30, sampleRate = 
   let tempoSpeed = 3.5;
 
   const normalizedGenre = (genre || "Pop").toLowerCase();
-  if (normalizedGenre.includes("acoustic")) {
+  if (normalizedGenre.includes("acoustic") || normalizedGenre.includes("folk") || normalizedGenre.includes("country") || normalizedGenre.includes("romantic")) {
     chords = [
       [164.81, 196.00, 246.94], // E minor
       [261.63, 329.63, 392.00], // C major
@@ -131,7 +131,7 @@ export function createMusicalMelodyWavBuffer(durationSeconds = 30, sampleRate = 
       [146.83, 185.00, 220.00]  // D major
     ];
     tempoSpeed = 4.2;
-  } else if (normalizedGenre.includes("cinematic") || normalizedGenre.includes("orchestral")) {
+  } else if (normalizedGenre.includes("cinematic") || normalizedGenre.includes("orchestral") || normalizedGenre.includes("gospel") || normalizedGenre.includes("choir")) {
     chords = [
       [146.83, 174.61, 220.00], // D minor
       [116.54, 146.83, 174.61], // Bb major
@@ -139,14 +139,30 @@ export function createMusicalMelodyWavBuffer(durationSeconds = 30, sampleRate = 
       [130.81, 164.81, 196.00]  // C major
     ];
     tempoSpeed = 5.0;
-  } else if (normalizedGenre.includes("rock") || normalizedGenre.includes("energy")) {
+  } else if (normalizedGenre.includes("rock") || normalizedGenre.includes("energy") || normalizedGenre.includes("edm") || normalizedGenre.includes("dance") || normalizedGenre.includes("synth")) {
     chords = [
       [220.00, 261.63, 329.63], // A minor
       [174.61, 220.00, 261.63], // F major
       [261.63, 329.63, 392.00], // C major
       [196.00, 246.94, 293.66]  // G major
     ];
-    tempoSpeed = 2.5;
+    tempoSpeed = 2.4;
+  } else if (normalizedGenre.includes("bollywood") || normalizedGenre.includes("sangeet") || normalizedGenre.includes("bhangra") || normalizedGenre.includes("dhol") || normalizedGenre.includes("sufi") || normalizedGenre.includes("classical") || normalizedGenre.includes("traditional")) {
+    chords = [
+      [146.83, 220.00, 293.66], // D5 / Indian modal root
+      [130.81, 196.00, 261.63], // C major modal
+      [174.61, 220.00, 261.63], // F major
+      [146.83, 185.00, 220.00]  // D major
+    ];
+    tempoSpeed = normalizedGenre.includes("sangeet") || normalizedGenre.includes("dhol") || normalizedGenre.includes("bhangra") ? 2.2 : 3.4;
+  } else if (normalizedGenre.includes("lofi") || normalizedGenre.includes("lo-fi") || normalizedGenre.includes("chill") || normalizedGenre.includes("jazz") || normalizedGenre.includes("r&b") || normalizedGenre.includes("soul")) {
+    chords = [
+      [174.61, 220.00, 261.63, 329.63], // Fmaj7
+      [164.81, 196.00, 246.94, 293.66], // Em7
+      [146.83, 174.61, 220.00, 261.63], // Dm7
+      [130.81, 164.81, 196.00, 246.94]  // Cmaj7
+    ];
+    tempoSpeed = 4.5;
   }
 
   for (let i = 0; i < numSamples; i++) {
@@ -234,7 +250,8 @@ async function fetchFallbackVocalAudio(lyricsText, tempVocalPath, language = "en
     const sentence = sentences[i].trim();
     if (!sentence) continue;
 
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&q=${encodeURIComponent(sentence)}&tl=${encodeURIComponent(langConfig.code || "en")}`;
+    const ttsLang = langConfig.ttsLangCode || (langConfig.code === "hinglish" ? "hi" : langConfig.code) || "en";
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&q=${encodeURIComponent(sentence)}&tl=${encodeURIComponent(ttsLang)}`;
 
     const chunkBuf = await new Promise((resolve) => {
       const chunks = [];
@@ -585,7 +602,7 @@ class ElevenLabsMusicAdapter {
 
 // Google DeepMind Lyria 3 Pro AI Music Adapter (Vertex AI Next-Gen Interactions Model)
 export class GoogleLyriaMusicAdapter {
-  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 180, mood = "Upbeat", storyContext = "", title = "", projectId, language = "en", voiceType = "female", customVoicePrompt = "", customVoiceId = "" }) {
+  async generateMusic({ lyrics = "", genre = "Pop", durationSeconds = 180, mood = "Upbeat", storyContext = "", directorGuidelines = "", title = "", projectId, language = "en", voiceType = "female", customVoicePrompt = "", customVoiceId = "" }) {
     const timestamp = Date.now();
     const uploadDir = path.join(process.cwd(), "uploads");
     await fsPromises.mkdir(uploadDir, { recursive: true });
@@ -628,19 +645,26 @@ export class GoogleLyriaMusicAdapter {
         ? `~${targetSec} seconds (Standard Radio Track format)`
         : `~${targetSec} seconds (Full Studio Song format with intro, verse 1, chorus, verse 2, chorus, bridge, outro)`;
 
+      const vocalLanguageDesc = langConfig.code === "hinglish"
+        ? "Hinglish (modern Bollywood / Indie-Pop blend of conversational Hindi and English sung in Roman script)"
+        : `${langConfig.name} (${langConfig.nativeName})`;
+
       // Construct rich musical prompt incorporating story context and lyrics
       let promptInput = `Song Genre: ${genre} (${mood}).\n`;
       if (title) promptInput += `Title: ${title}.\n`;
       promptInput += `Target Track Duration: ${durationDesc}.\n`;
-      promptInput += `Language of Vocals: ${langConfig.name} (${langConfig.nativeName}).\n`;
+      promptInput += `Language of Vocals: ${vocalLanguageDesc}.\n`;
       promptInput += `Vocal Performance Style: ${vocalStyleInstruction}.\n`;
       if (storyContext && storyContext.trim()) {
         promptInput += `Story Context / Narrative: ${storyContext.trim().slice(0, 1500)}.\n`;
       }
-      if (lyrics && lyrics.trim().length > 10) {
-        promptInput += `Lyrics / Thematic Guide (in ${langConfig.name}):\n${lyrics.trim().slice(0, 1200)}\n`;
+      if (directorGuidelines && directorGuidelines.trim()) {
+        promptInput += `Director Guidelines & Key Themes: ${directorGuidelines.trim().slice(0, 600)}.\n`;
       }
-      promptInput += `Perform an authentic, cohesive song with ${vocalStyleInstruction} in ${langConfig.name}, natural harmonies, evocative instrumentation matching ${genre}. The total length of the performance must be strictly tailored for ${targetSec} seconds.`;
+      if (lyrics && lyrics.trim().length > 10) {
+        promptInput += `Lyrics / Thematic Guide (in ${vocalLanguageDesc}):\n${lyrics.trim().slice(0, 1200)}\n`;
+      }
+      promptInput += `Perform an authentic, cohesive song with ${vocalStyleInstruction} in ${vocalLanguageDesc}, natural harmonies, evocative instrumentation matching ${genre}. The total length of the performance must be strictly tailored for ${targetSec} seconds.`;
 
       let interaction = null;
       let lastLyriaErr = null;

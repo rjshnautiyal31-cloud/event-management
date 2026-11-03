@@ -41,13 +41,15 @@ function getGeminiClient() {
 export async function analyzeStoryWithGemini(storyText, options = {}) {
   const clientInfo = getGeminiClient();
   const language = (typeof options === "string" ? options : options?.language) || "en";
+  const directorGuidelines = typeof options === "object" ? (options?.directorGuidelines || "") : "";
+  const characters = typeof options === "object" && Array.isArray(options?.characters) ? options.characters : [];
   const langConfig = getLanguageConfig(language);
 
   const mockAnalysis = {
     summary: `A memorable event celebration filled with joy, connection, and cherished memories. (${langConfig.name})`,
     emotionalArc: ["Excited arrival & anticipation", "Heartfelt connection & shared laughs", "Inspiring celebration & farewell"],
     themes: ["Connection", "Celebration", "Memories"],
-    suggestedGenres: ["Pop", "Acoustic", "Cinematic"],
+    suggestedGenres: ["Pop", "Bollywood Pop", "Acoustic", "Cinematic"],
     mood: "Uplifting",
     keyMoments: [
       { momentNumber: 1, description: "Opening moments", visualIdea: "Cinematic wide shot of an elegant event venue glowing under warm morning sunlight, 8k resolution, professional photography", suggestedDurationSeconds: 5 },
@@ -59,9 +61,25 @@ export async function analyzeStoryWithGemini(storyText, options = {}) {
   if (!clientInfo) return mockAnalysis;
 
   try {
+    const langInstruction = langConfig.code === "hinglish"
+      ? "Hinglish (conversational blend of Hindi and English written in Roman/Latin script)"
+      : `${langConfig.name} (${langConfig.nativeName})`;
+
+    let extraContext = "";
+    if (characters.length > 0) {
+      const charList = characters
+        .filter((c) => c && c.name)
+        .map((c) => `${c.name}${c.role ? ` (${c.role})` : ""}`)
+        .join(", ");
+      if (charList) extraContext += `\nKey Cast / People: ${charList}.`;
+    }
+    if (directorGuidelines && directorGuidelines.trim()) {
+      extraContext += `\nDirector Guidelines & Key Highlights: "${directorGuidelines.trim()}".`;
+    }
+
     const prompt = `Analyze the following event story for an AI music video project.
-The target language for this project is ${langConfig.name} (${langConfig.nativeName}).
-Provide a concise narrative summary (max 3 sentences in ${langConfig.name}), emotional arc (3 stages in ${langConfig.name}), 3 key themes (in ${langConfig.name}), mood, and exactly 4 to 6 key visual moments for scene image generation (photorealistic 16:9 cinematic visual descriptions written in English so visual generation models render optimal quality) with duration estimates (5-8 seconds each):
+The target language for this project is ${langInstruction}.
+Provide a concise narrative summary (max 3 sentences in ${langInstruction}), emotional arc (3 stages in ${langInstruction}), 3 key themes (in ${langInstruction}), mood, and exactly 4 to 6 key visual moments for scene image generation (photorealistic 16:9 cinematic visual descriptions written in English so visual generation models render optimal quality) with duration estimates (5-8 seconds each):${extraContext}
 
 ${storyText.slice(0, 5000)}`;
 
@@ -108,12 +126,15 @@ export async function generateLyricsWithGemini(storySummary, targetGenre, option
   const clientInfo = getGeminiClient();
   const language = (typeof options === "string" ? options : options?.language) || "en";
   const targetDuration = (typeof options === "object" ? Number(options?.targetDuration) : 180) || 180;
+  const directorGuidelines = typeof options === "object" ? (options?.directorGuidelines || "") : "";
+  const characters = typeof options === "object" && Array.isArray(options?.characters) ? options.characters : [];
+  const storyText = typeof options === "object" ? (options?.storyText || "") : "";
   const langConfig = getLanguageConfig(language);
 
   const mockLyrics = langConfig.code === "hi"
     ? `[Verse 1]\nखुशियों का यह समां है यहाँ\nयादों का एक नया कारवां\nसाथ मिलकर मनाएं ये त्योहार\nदिलों में भरा है सच्चा प्यार\n\n[Chorus]\nये हमारा जश्न, हमारी है दास्तां\nसंग हमारे सारा आसमां\nगीत गाए दिल, झूमे जहां\nये हमारा जश्न, हमारी है दास्तां\n\n[Verse 2]\nहर चेहरे पर एक नई मुस्कान\nअपनों से मिलकर बने पहचान\nसपनों को मिली आज नई उड़ान\n\n[Chorus]\nये हमारा जश्न, हमारी है दास्तां\nसंग हमारे सारा आसमां\n\n[Bridge]\nवक्त ये ठहर जाए यहीं कहीं\nखूबसूरत इतनी ये जिंदगी\n\n[Outro]\nसदा रहे ये प्यार का जहां\nहमारा जश्न, हमारी दास्तां।`
-    : langConfig.code === "es"
-    ? `[Verse 1]\nUn momento especial que brilla hoy\nCon recuerdos que guardo donde voy\nCaminando juntos hacia el sol\nCelebrando con todo el corazón\n\n[Chorus]\nEsta es nuestra fiesta, nuestro cantar\nUnidos para siempre recordar\nBajo las estrellas vamos a soñar\nNuestra historia nunca va a acabar\n\n[Verse 2]\nCada sonrisa que vemos brillar\nEs una luz que nos guiará\n\n[Chorus]\nEsta es nuestra fiesta, nuestro cantar\nUnidos para siempre recordar\n\n[Outro]\nJuntos hasta el final.`
+    : langConfig.code === "hinglish"
+    ? `[Verse 1]\nDil ki har beat pe chhaya hai yeh nasha\nFriends and family saath, dekho kaisa hai samaa\nEvery smile shining bright under starlit skies\nKhushiyon ke pal hain, no more goodbyes\n\n[Chorus]\nYeh hai apna celebration, tonight we shine\nHar ek lamha hai magical, forever divine\nNacho gaao dil khol ke, let the music play\nYeh yaadein rahengi humesha, every single day\n\n[Verse 2]\nHansi aur baatein, wohlights ka jahaan\nTogether we are writing apni nayi dastaan\nEvery moment feels like a dream come true\nDil se dil mile hain, me and you\n\n[Bridge]\nWaqt tham jaaye bas yahin kahin\nLife looks so beautiful, dekho toh sahi\n\n[Chorus]\nYeh hai apna celebration, tonight we shine\nHar ek lamha hai magical, forever divine\n\n[Outro]\nForever together, dil se dil tak.`
     : `[Verse 1]\nGathered here today in light\nMemories so clear and bright\nEvery laughter, every friend\nA golden moment that will never end\n\n[Chorus]\nThis is our event, our time to shine\nShared moments forever divine\nTogether we stand, together we sing\nJoy and triumph is the song we bring\n\n[Verse 2]\nLooking back at where we came\nEvery step and every name\nA celebration of what we share\nLove and unity everywhere\n\n[Bridge]\nLet this night continue on\nEven after shadows are gone\n\n[Chorus]\nThis is our event, our time to shine\nShared moments forever divine\n\n[Outro]\nForever remembered, together as one.`;
 
   if (!clientInfo) return mockLyrics;
@@ -121,10 +142,31 @@ export async function generateLyricsWithGemini(storySummary, targetGenre, option
   try {
     const isShortClip = targetDuration <= 45;
     const isMediumTrack = targetDuration <= 90;
+    const isHinglish = langConfig.code === "hinglish";
+    const langDisplay = isHinglish
+      ? "Hinglish (modern Bollywood / Indie-Pop blend of conversational Hindi and English in Roman script)"
+      : `${langConfig.name} (${langConfig.nativeName})`;
+
+    let extraSongContext = "";
+    if (storyText && storyText.trim() && storyText.trim() !== storySummary.trim()) {
+      extraSongContext += `\nFull Story Context: "${storyText.trim().slice(0, 1200)}"`;
+    }
+    if (characters.length > 0) {
+      const charNames = characters
+        .filter((c) => c && c.name)
+        .map((c) => `${c.name}${c.role ? ` (${c.role})` : ""}`)
+        .join(", ");
+      if (charNames) {
+        extraSongContext += `\nFeatured People / Cast: ${charNames}.`;
+      }
+    }
+    if (directorGuidelines && directorGuidelines.trim()) {
+      extraSongContext += `\nDirector Guidelines & Key Moments to Reflect in the Song: "${directorGuidelines.trim()}".`;
+    }
 
     let prompt = "";
     if (isShortClip) {
-      prompt = `Write very short, punchy song lyrics in ${langConfig.name} (${langConfig.nativeName}) based on this story summary: "${storySummary}".
+      prompt = `Write very short, punchy song lyrics in ${langDisplay} based on this story summary: "${storySummary}".${extraSongContext}
 Genre style: ${targetGenre}.
 Target Duration: exactly ~${targetDuration} seconds (Short Social Clip / Reel format).
 CRITICAL REQUIREMENT: The lyrics must be very brief, with strictly 25 to 35 words TOTAL across the entire song, so it can be sung or spoken within ~20 seconds with musical intro and outro.
@@ -135,20 +177,22 @@ Output only formatted lyrics:
 [Chorus]
 (2 short, catchy lines)`;
     } else if (isMediumTrack) {
-      prompt = `Write concise structured song lyrics (Verse 1, Chorus, Verse 2, Outro) in ${langConfig.name} (${langConfig.nativeName}) based on this story summary: "${storySummary}".
+      prompt = `Write concise structured song lyrics (Verse 1, Chorus, Verse 2, Outro) in ${langDisplay} based on this story summary: "${storySummary}".${extraSongContext}
 Genre style: ${targetGenre}.
 Target Duration: ~${targetDuration} seconds.
 Total length requirement: Around 60-80 words total so it completes in ~60-90 seconds.
 Output only formatted song lyrics with section headers [Verse 1], [Chorus], [Verse 2], [Outro].`;
     } else {
-      prompt = `Write structured full-length song lyrics (Verse 1, Chorus, Verse 2, Chorus, Bridge, Chorus, Outro) in ${langConfig.name} (${langConfig.nativeName}) based on this story summary: "${storySummary}".
+      prompt = `Write structured full-length song lyrics (Verse 1, Chorus, Verse 2, Chorus, Bridge, Chorus, Outro) in ${langDisplay} based on this story summary: "${storySummary}".${extraSongContext}
 Genre style: ${targetGenre}.
 Target Duration: ~${targetDuration} seconds (~3 min full studio song).
 Compose rich, narrative verses with around 130-180 words so it sustains a complete 2.5 to 3 minute musical performance.
 Output only formatted song lyrics with section headers [Verse 1], [Chorus], [Verse 2], [Chorus], [Bridge], [Outro].`;
     }
 
-    if (langConfig.code !== "en") {
+    if (isHinglish) {
+      prompt += `\nImportant: Write the lyrics in authentic Hinglish — a catchy, modern Bollywood / Indie-Pop blend of conversational Hindi and English written strictly in Roman/Latin alphabet (do NOT use Devanagari script). Naturally weave heartfelt Hindi phrases (e.g., "Dil ki dhadkan", "Yaadon ka safar", "Jashn ki raat") with English phrases and hooks with natural rhyme and musical meter.`;
+    } else if (langConfig.code !== "en") {
       prompt += `\nImportant: Write the lyrics authentically in ${langConfig.name} (${langConfig.nativeName}) with natural rhyme and musical meter.`;
     }
 

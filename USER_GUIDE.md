@@ -474,26 +474,14 @@ When deploying to cloud platforms like **Render's Free Web Service**:
 - **512 MB RAM Ceiling**: Standard FFmpeg video rendering can consume >800 MB RAM for 1080p video, causing the platform to kill the process (`SIGKILL - Out of Memory`).
 - **15-Minute Inactivity Sleep**: Free instances spin down after 15 minutes of inactivity, terminating any long-running in-memory jobs.
 
-### Multi-Cloud Storage Configuration
-The system features a universal storage adapter supporting four storage backends configured via environment variables:
+### Cloud Storage Configuration
+The system features a storage adapter supporting two storage backends configured via environment variables or the Back Office Settings (`/#/settings`):
 
-#### Option A: Cloudflare R2 (Recommended — 100% Free with 0 Egress Fees)
-Cloudflare R2 provides 10 GB free monthly storage with zero egress fees:
-```env
-STORAGE_PROVIDER=s3
-S3_ENDPOINT=https://<your_cloudflare_account_id>.r2.cloudflarestorage.com
-S3_BUCKET=event-media
-S3_REGION=auto
-AWS_ACCESS_KEY_ID=<your_r2_access_key>
-AWS_SECRET_ACCESS_KEY=<your_r2_secret_key>
-S3_PUBLIC_DOMAIN=https://pub-<hash>.r2.dev
-```
-
-#### Option B: Google Cloud Storage (GCS)
+#### Option A: Google Cloud Storage (GCS) — Recommended for Production
 Uses native Google Cloud Storage (5 GB free tier):
 ```env
 STORAGE_PROVIDER=gcs
-GCS_BUCKET=event-media-gcs
+GCS_BUCKET=qr-event-story-media
 GOOGLE_CLOUD_PROJECT=your-gcp-project-id
 # Option 1: In-memory credentials (or configure via /#/settings)
 GCP_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
@@ -502,17 +490,7 @@ GCP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 # GOOGLE_APPLICATION_CREDENTIALS=./gcp-service-account.json
 ```
 
-#### Option C: AWS S3
-Standard Amazon S3 storage:
-```env
-STORAGE_PROVIDER=s3
-S3_BUCKET=your-aws-bucket
-S3_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_aws_key
-AWS_SECRET_ACCESS_KEY=your_aws_secret
-```
-
-#### Option D: Local Disk (Local Development)
+#### Option B: Local Disk (Local Development)
 ```env
 STORAGE_PROVIDER=local
 PUBLIC_URL=http://localhost:4000
@@ -623,7 +601,7 @@ All system parameters and cloud credentials operate on a strict 2-tier resolutio
    - If neither the Database nor `.env` specifies a value, a safe default is applied (e.g., `local` for storage, `memory` for queue, `google_lyria` for music).
 
 ### Configurable Categories & Dynamic Model Selection
-- **☁️ Cloud Storage**: Switch between `local`, `s3`, `r2`, and `gcs`. Set custom S3 endpoints, public CDN domains, bucket names (`GCS_BUCKET`), and credentials.
+- **☁️ Cloud Storage**: Switch between `local` and `gcs` (Google Cloud Storage) and configure the bucket name (`GCS_BUCKET`).
 - **🤖 AI & Vertex LLM**:
   - **Authentication & Project**: Set `GEMINI_API_KEY`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` (default: `us-central1`), `GCP_CLIENT_EMAIL`, and `GCP_PRIVATE_KEY` (masked secret).
   - **Configurable LLM & Image Models**:

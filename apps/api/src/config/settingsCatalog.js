@@ -233,72 +233,12 @@ export const SETTINGS_CATALOG = [
     key: "STORAGE_PROVIDER",
     category: "storage",
     label: "Storage Backend Provider",
-    description: "Media storage destination for photos, audio tracks, and rendered MP4 files.",
+    description: "Media storage destination for photos, audio tracks, and rendered MP4 files (Local disk or Google Cloud Storage).",
     type: "select",
-    options: ["local", "s3", "r2", "gcs"],
+    options: ["local", "gcs"],
     isSecret: false,
     envKeys: ["STORAGE_PROVIDER"],
     defaultValue: "local"
-  },
-  {
-    key: "S3_BUCKET",
-    category: "storage",
-    label: "S3 / Cloudflare R2 Bucket Name",
-    description: "Bucket name for storing media assets.",
-    type: "text",
-    isSecret: false,
-    envKeys: ["S3_BUCKET"],
-    defaultValue: "event-media"
-  },
-  {
-    key: "S3_REGION",
-    category: "storage",
-    label: "S3 Region",
-    description: "S3 bucket region (e.g. us-east-1). Use 'auto' for Cloudflare R2.",
-    type: "text",
-    isSecret: false,
-    envKeys: ["S3_REGION"],
-    defaultValue: "auto"
-  },
-  {
-    key: "S3_ENDPOINT",
-    category: "storage",
-    label: "S3 Custom Endpoint",
-    description: "Custom S3 endpoint URL (e.g., https://<account_id>.r2.cloudflarestorage.com for Cloudflare R2).",
-    type: "text",
-    isSecret: false,
-    envKeys: ["S3_ENDPOINT"],
-    defaultValue: ""
-  },
-  {
-    key: "S3_PUBLIC_DOMAIN",
-    category: "storage",
-    label: "S3 / R2 Public Domain",
-    description: "Public domain or CDN URL prefix for assets (e.g., https://pub-xxxx.r2.dev).",
-    type: "text",
-    isSecret: false,
-    envKeys: ["S3_PUBLIC_DOMAIN"],
-    defaultValue: ""
-  },
-  {
-    key: "AWS_ACCESS_KEY_ID",
-    category: "storage",
-    label: "AWS / R2 Access Key ID",
-    description: "Storage Access Key ID for AWS S3 or Cloudflare R2.",
-    type: "text",
-    isSecret: false,
-    envKeys: ["AWS_ACCESS_KEY_ID"],
-    defaultValue: ""
-  },
-  {
-    key: "AWS_SECRET_ACCESS_KEY",
-    category: "storage",
-    label: "AWS / R2 Secret Access Key",
-    description: "Storage Secret Access Key for AWS S3 or Cloudflare R2.",
-    type: "password",
-    isSecret: true,
-    envKeys: ["AWS_SECRET_ACCESS_KEY"],
-    defaultValue: ""
   },
   {
     key: "GCS_BUCKET",

@@ -263,7 +263,7 @@ export function SettingsPage({ auth }) {
                 Environment & System Settings
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 font-medium max-w-2xl mt-1.5">
-                Manage cloud providers, AI models, S3/R2/GCS storage credentials, and API parameters.
+                Manage cloud providers, AI models, Google Cloud Storage (GCS) credentials, and API parameters.
                 <strong className="text-slate-700 ml-1">Settings stored in the Database take 1st Priority</strong> over local <code className="bg-slate-100 px-1 py-0.5 rounded text-xs text-[#0A2D59]">.env</code> fallback values.
               </p>
             </div>

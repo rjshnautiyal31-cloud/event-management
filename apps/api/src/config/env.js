@@ -103,12 +103,6 @@ const PROPERTY_CONFIG = {
   replicateVideoModel: { envKeys: ["REPLICATE_VIDEO_MODEL"], default: "3f0457e4619da258370163351d3e8f8101a938634ed1fcfd43a6d97c55531d27" },
 
   // Storage Configurations
-  s3Bucket: { envKeys: ["S3_BUCKET"], default: "ai-story-media" },
-  s3Region: { envKeys: ["S3_REGION"], default: "auto" },
-  s3Endpoint: { envKeys: ["S3_ENDPOINT"], default: "" },
-  s3PublicDomain: { envKeys: ["S3_PUBLIC_DOMAIN"], default: "" },
-  awsAccessKeyId: { envKeys: ["AWS_ACCESS_KEY_ID"], default: "" },
-  awsSecretAccessKey: { envKeys: ["AWS_SECRET_ACCESS_KEY"], default: "" },
   gcsBucket: { envKeys: ["GCS_BUCKET"], default: "qr-event-story-media" },
 
   // External Worker & Environment

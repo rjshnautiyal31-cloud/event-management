@@ -84,7 +84,7 @@ A full-stack, enterprise-grade monorepo for multi-tenant company event managemen
   - Generates authentic musical song compositions using **Google DeepMind Lyria 3 Pro / Lyria 2** (`lyria-3-pro-preview`), ElevenLabs Music API, Suno, or local synthetic fallback.
   - Features intelligent prompt conditioning, automatic Lyria retry on rate limits, and transparent fallback indicator badges in the UI.
 - **Phase 3: Event Photos & Pure AI Motion Video Generation**:
-  - Upload event photos and media assets stored locally, in **AWS S3**, **Cloudflare R2**, or **Google Cloud Storage (GCS)**.
+  - Upload event photos and media assets stored locally or in **Google Cloud Storage (GCS)**.
   - Generates realistic 5-second 16:9 cinematic motion video clips using **Google Gemini Omni 1.1 Flash** (`gemini-omni-1.1-flash-preview`) or Google Veo.
 - **Phase 4: Lyric-Synchronized Scene Storyboard & Granular Scene Editor (Level 2 Control)**:
   - Automatically calculates scene durations (~5-6s each) matching the exact song audio duration so clips never loop or freeze.
@@ -105,7 +105,7 @@ A full-stack, enterprise-grade monorepo for multi-tenant company event managemen
     - **Dual Subtitle Downloads**: One-click downloads for both `.srt` (for VLC, Premiere, DaVinci, CapCut) and `.vtt` (for web video & YouTube).
 - **Render Free Tier Optimized & Pluggable Storage**:
   - Automatically limits FFmpeg to single-threaded low-memory streaming (`-threads 1`, `-preset veryfast`, `-bufsize 512k`) on Render Free Tier to stay safely within 512 MB RAM limits.
-  - Universal multi-cloud storage adapter supporting **Local disk**, **AWS S3**, **Cloudflare R2** (zero egress fees), and **Google Cloud Storage (GCS)**.
+  - Pluggable storage adapter supporting **Local disk (`local`)** and **Google Cloud Storage (`gcs`)**.
 
 ### 4. Back Office Settings & Dynamic Configuration (`/#/settings`)
 - **Dual-Tier Precedence Hierarchy**:
@@ -117,7 +117,7 @@ A full-stack, enterprise-grade monorepo for multi-tenant company event managemen
   - **2nd Priority**: Local `gcp-service-account.json` file (if present on disk, loaded into memory).
   - **3rd Priority**: Google Cloud Application Default Credentials (ADC — zero-key IAM identity when running on Cloud Run / GKE).
 - **Categorized Configuration Dashboard & Configurable AI Models**:
-  - `☁️ Cloud Storage`: Switch between Local, AWS S3, Cloudflare R2, and Google Cloud Storage (GCS) with custom endpoints and CDN public domains.
+  - `☁️ Cloud Storage`: Switch between **Local (`local`)** and **Google Cloud Storage (`gcs`)** and configure `GCS_BUCKET`.
   - `🤖 AI & Vertex LLM`: Configure `GEMINI_API_KEY`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, `GCP_CLIENT_EMAIL`, `GCP_PRIVATE_KEY`, primary LLM provider (`LLM_PROVIDER`), and model IDs (`GEMINI_MODEL` default `gemini-2.5-flash`, `GEMINI_IMAGE_MODEL` default `gemini-2.5-flash-image`, `IMAGEN_MODEL` default `imagen-3.0-generate-002`, `FALLBACK_IMAGE_MODEL` default `flux`).
   - `🎵 Music & Audio`: Toggle between Google DeepMind Lyria, ElevenLabs Music API, Suno, and Google TTS (`MUSIC_PROVIDER`), plus model IDs (`LYRIA_MODEL` default `lyria-3-pro-preview`, `LYRIA_FALLBACK_MODEL` default `lyria-002`, `ELEVENLABS_MUSIC_MODEL` default `music_v1`, `ELEVENLABS_TTS_ENGLISH_MODEL` default `eleven_monolingual_v1`, `ELEVENLABS_TTS_MULTILINGUAL_MODEL` default `eleven_multilingual_v2`).
   - `🎬 Motion Video`: Configure `VIDEO_PROVIDER` (`google_omni`, `google_veo`, `replicate`, `local_ffmpeg`) and model IDs (`GOOGLE_VIDEO_MODEL` default `gemini-omni-1.1-flash-preview`, `REPLICATE_VIDEO_MODEL`).
@@ -202,7 +202,7 @@ JWT_SECRET=dev-secret-change-me
 ADMIN_SETUP_KEY=setup-admin
 
 # Pluggable Providers
-STORAGE_PROVIDER=local        # "local" | "s3" | "r2" | "gcs"
+STORAGE_PROVIDER=local        # "local" | "gcs"
 QUEUE_PROVIDER=memory          # "memory" | "redis"
 MUSIC_PROVIDER=google_lyria    # "google_lyria" | "elevenlabs" | "suno" | "local_synth"
 VIDEO_PROVIDER=google_omni     # "google_omni" | "google_veo" | "local_ffmpeg"
@@ -231,17 +231,8 @@ ELEVENLABS_TTS_MULTILINGUAL_MODEL=eleven_multilingual_v2
 GOOGLE_VIDEO_MODEL=gemini-omni-1.1-flash-preview
 REPLICATE_VIDEO_MODEL=3f0457e4619da258370163351d3e8f8101a938634ed1fcfd43a6d97c55531d27
 
-# S3-Compatible Cloud Storage (AWS S3 or Cloudflare R2)
-S3_BUCKET=event-media
-S3_REGION=auto                 # "auto" for Cloudflare R2, or "us-east-1" for AWS S3
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
-# For Cloudflare R2 (Zero egress fees):
-# S3_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com
-# S3_PUBLIC_DOMAIN=https://pub-<hash>.r2.dev
-
 # Google Cloud Storage (GCS)
-GCS_BUCKET=event-media-gcs
+GCS_BUCKET=qr-event-story-media
 
 # Resend / Email Config
 RESEND_API_KEY=re_your_api_key

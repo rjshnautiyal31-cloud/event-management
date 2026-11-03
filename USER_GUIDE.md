@@ -280,23 +280,16 @@ Navigate to **`/#/studio`** (accessible from the top navigation bar or drawer me
 ```
 
 ### 10.1 Multilingual Story-to-Song-to-Video Engine
-The studio natively supports **10 major global languages**:
-- 🇺🇸 **English** (en)
-- 🇮🇳 **Hindi (हिन्दी)** (hi)
-- 🇪🇸 **Spanish (Español)** (es)
-- 🇫🇷 **French (Français)** (fr)
-- 🇩🇪 **German (Deutsch)** (de)
-- 🇯🇵 **Japanese (日本語)** (ja)
-- 🇨🇳 **Chinese (中文)** (zh)
-- 🇸🇦 **Arabic (العربية)** (ar)
-- 🇧🇷 **Portuguese (Português)** (pt)
-- 🇧🇩 **Bengali (বাংলা)** (bn)
+The studio natively supports **3 focused languages**:
+- 🇺🇸 **English** (`en`)
+- 🇮🇳 **Hindi (हिन्दी)** (`hi` — Devanagari script)
+- 🇮🇳 **Hinglish (Hindi + English)** (`hinglish` — modern Bollywood / Indie-Pop blend of conversational Hindi and English written & sung in Roman script)
 
-**How Multilingual Generation Works**:
+**How Multilingual & Hinglish Generation Works**:
 1. Select your target language during project creation or in the top-right language picker in **Tab 1**.
-2. **Native Lyrics & Script**: Gemini Flash 2.5 crafts rhythmic, rhyming lyrics in the chosen language and native script (e.g., Devanagari for Hindi, Pinyin/Hanzi for Chinese).
-3. **Vocal Singing & Synthesis**: The vocal synthesis models adapt to the language's phonetics and accent patterns.
-4. **Synchronized Subtitles**: Captions burned into the final video preserve the native typography and lyrics.
+2. **Native & Roman-Script Lyrics**: Gemini 2.5 Flash crafts rhythmic, rhyming lyrics in the chosen language — Devanagari script for **Hindi**, and catchy Roman-script Hindi + English hooks for **Hinglish** (e.g., *"Dil ki dhadkan"*, *"Jashn ki raat"*).
+3. **Vocal Singing & Synthesis**: Vocal synthesis models (Google DeepMind Lyria 3 Pro, ElevenLabs Multilingual v2, and Google Cloud `en-IN`/`hi-IN` Neural2 voices) adapt to the language's phonetics and Indian/English accent patterns.
+4. **Synchronized Subtitles**: Captions embedded into the final video preserve the exact lyrics.
 5. **Cross-Lingual Visual Prompts**: Storyboard visual directions for AI video and image engines are generated in English to maximize fidelity with models like Google Gemini Omni 1.1 Flash and Google Imagen 3.
 
 ---
@@ -324,28 +317,31 @@ The studio supports two distinct rendering and visual paradigms:
    - Provide their **Role in Event** and specific **Visual Appearance & Attire** (e.g. *30yo Indian man with short black hair, wearing a cream silk sherwani with red turban*).
    - **Why This Matters**: Generative AI models often change character faces and clothes between clips. By defining your cast here, Gemini systematically injects these visual descriptors into every scene featuring that character, preserving visual identity throughout the entire video.
 4. **🎬 Director Guidelines & Must-Have Scenes**:
-   - Provide directives for specific moments you want featured (e.g. *1. Grand welcome. 2. Stage garland exchange. 3. Family champagne toast. 4. Lantern lighting at dusk.*).
-   - Gemini prioritizes these moments when laying out the chronological timeline.
+   - Provide directives for specific moments, mood, or themes you want featured (e.g. *1. Grand welcome. 2. Stage garland exchange. 3. Family champagne toast. 4. Lantern lighting at dusk.*).
+   - Gemini and Lyria use these guidelines across **story analysis, song lyric creation, musical synthesis, and chronological storyboard generation**.
 5. Click **"Analyze Story Narrative"** to generate an executive summary, emotional arc, and thematic tags.
 
 ---
 
-### Stage 2: AI Song Lyrics, Vocal Voice Selection & Duration Control
+### Stage 2: AI Song Lyrics, 19 Musical Styles, Vocal Voice Selection & Duration Control
 Switch to **Tab 2: AI Lyrics & Audio**:
 1. **Music Engine**:
    - 🌟 **Google DeepMind Lyria 3 Pro** (`lyria-3-pro-preview`): State-of-the-art vocal composition and acoustic production.
    - 🎵 **ElevenLabs Music Synthesis**: Polished studio pop, acoustic, and electronic production.
    - 🎸 **Suno AI**: Melodic song synthesis.
    - 🔊 **Google Cloud Neural2 TTS**: High-fidelity speech synthesis over rhythmically synchronized backing beats.
-2. **Vocal Voice Selection**:
+2. **Musical Style / Genre (19 Styles Across 4 Categories)**:
+   - **Pop, Dance & Contemporary**: `Pop`, `Indie Pop`, `EDM / Dance Pop`, `Synthwave / Electro`
+   - **Bollywood, Hinglish & Indian**: `Bollywood Pop`, `Wedding Sangeet / Punjabi Dhol`, `Bollywood Romantic`, `Sufi / Indie Fusion`, `Indian Classical / Traditional`
+   - **Acoustic, Folk & Soul**: `Acoustic`, `Folk / Indie Folk`, `R&B / Soul`, `Jazz / Lounge`, `Country`
+   - **Cinematic, Rock & Urban**: `Cinematic`, `Rock`, `Hip-Hop / Rap`, `Lo-Fi Chill`, `Uplifting Choir / Gospel`
+3. **Vocal Voice Selection**:
    - 👩 **Female Vocalist**: Emotive soprano / alto lead vocals.
    - 👨 **Male Vocalist**: Warm tenor / baritone lead vocals.
    - 👥 **Duet / Harmonized Ensemble**: Harmonious dual vocal arrangement.
-   - 🎙️ **Custom Vocal Persona**: Freely type any vocal style (e.g., *husky delta blues singer*, *ethereal operatic choir*, *energetic K-pop vocalist*).
-3. **Musical Style / Genre**:
-   - 🎸 Acoustic / Folk • 🎹 Cinematic Orchestral • 🎤 Pop / Uplifting • ⚡ Epic Rock • 🥁 Lo-Fi Chill • 🎷 Jazz / Soul • 🪕 Traditional / Cultural.
+   - 🎙️ **Custom Vocal Persona**: Freely type any vocal style (e.g., *husky delta blues singer*, *ethereal operatic choir*, *energetic Bollywood playback vocalist*).
 4. **Audio Song Duration Control**:
-   - Choose between **15s, 30s, 45s, 60s, 90s, 120s, up to 180s (3 full minutes)**.
+   - Choose between **30s, 60s, 90s, up to 180s (3 full minutes)**.
    - The AI writes structured lyrics (*Verses, Chorus, Bridge, Outro*) tailored to fill the target time window.
 5. Click **"Generate AI Song & Vocals"**:
    - Includes automatic retry if a model is temporarily rate-limited.
@@ -439,14 +435,14 @@ Here is a practical reference example you can follow step-by-step in the Studio:
 
 #### 1. Tab 1: Story Narrative
 - **Project Title**: `Aarav & Maya: The Royal Udaipur Wedding`
-- **Language**: English (or Hindi, Spanish, etc.)
+- **Language**: Hinglish (or English, Hindi)
 - **Target Duration**: 60 Seconds
 - **Story Narrative**:
   > *"Maya and Aarav celebrated their destination wedding at the Lake Palace in Udaipur. Surrounded by marble arches and glowing lanterns at sunset, family and lifelong friends gathered from across the world. The festivities featured a joyful Sangeet dance night, an emotional pheras ceremony with flower petal showers, and an unforgettable starlit celebration with sparklers by the palace fountain."*
 - Click **"Analyze Story Narrative"**.
 
 #### 2. Tab 2: Song Lyrics & Audio
-- **Music Genre**: Acoustic Pop (or Cinematic)
+- **Music Genre**: Wedding Sangeet / Punjabi Dhol (or Bollywood Romantic, Acoustic, Cinematic)
 - **Vocal Style**: Duet (or Female / Male)
 - Click **"Generate Structured Lyrics"** to inspect verses and chorus.
 - Click **"Generate AI Song & Vocals"** to produce the 60-second synchronized musical track.

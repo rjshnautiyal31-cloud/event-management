@@ -66,16 +66,21 @@ A full-stack, enterprise-grade monorepo for multi-tenant company event managemen
 ### 3. AI Story-to-Song-to-Video Studio (`/#/studio`)
 - **Event-Scoped AI Stories & Multi-Video Support**:
   - Associate multiple AI story projects per event. Restrictable via Event ACL (`owner`, `co_owner`, `event_admin`, `super_admin`).
-- **Multilingual Narrative & Audio Synthesis (10+ Languages)**:
-  - Generate story analysis, poetic song lyrics, singing vocals, visual storyboards, and burned subtitles in **English**, **Hindi (हिन्दी)**, **Spanish (Español)**, **French (Français)**, **German (Deutsch)**, **Japanese (日本語)**, **Chinese (中文)**, **Arabic (العربية)**, **Portuguese (Português)**, and **Bengali (বাংলা)**.
-  - Native script rendering (Devanagari, Hanzi, Arabic, etc.) with automatic cross-lingual visual translation for AI video generators.
+- **Multilingual Narrative & Audio Synthesis (English, Hindi & Hinglish)**:
+  - Generate story analysis, poetic song lyrics, singing vocals, visual storyboards, and burned subtitles in **🇺🇸 English (`en`)**, **🇮🇳 Hindi (`hi` — हिन्दी)**, and **🇮🇳 Hinglish (`hinglish` — modern Bollywood / Indie-Pop blend of conversational Hindi and English written & sung in Roman script)**.
+  - Native script rendering (Devanagari for Hindi, Roman script for Hinglish/English) with automatic cross-lingual visual translation for AI video generators.
 - **Phase 1: Story Narrative Analysis & Character Cast Bible (Level 1 Control)**:
   - Analyzes raw event text/narrative using **Google Gemini 2.5 Flash** via Vertex AI to extract story summary, emotional arc, key themes, and visual scene prompts.
-  - **👥 Cast & Characters Consistency Guide**: Define recurring characters with Name, Role, and Physical Appearance & Attire (e.g. *Rahul • Groom: 30yo man in cream sherwani and red safa*). Gemini weaves these exact visual anchors into every scene prompt featuring them to ensure facial and outfit consistency across AI video renders.
-  - **🎬 Director Guidelines & Must-Have Scenes**: Provide specific camera directions, required milestones, or must-have moments (e.g. *garland exchange, champagne toast, lantern release*) that Gemini prioritizes during timeline generation.
-- **Phase 2: AI Lyrics, Vocal Voice Selection & Duration Control**:
+  - **👥 Cast & Characters Consistency Guide**: Define recurring characters with Name, Role, and Physical Appearance & Attire (e.g. *Rahul • Groom: 30yo man in cream sherwani and red safa*). Gemini weaves these exact visual anchors into story analysis, song lyrics, and every scene prompt featuring them.
+  - **🎬 Director Guidelines & Must-Have Scenes**: Provide specific camera directions, required milestones, or must-have moments (e.g. *garland exchange, champagne toast, lantern release*) that Gemini prioritizes across **story analysis, song lyric creation, musical mood, and storyboard timeline generation**.
+- **Phase 2: AI Lyrics, 19 Musical Styles, Vocal Voice Selection & Duration Control**:
+  - **19 Musical Styles Across 4 Categories**:
+    - *Pop, Dance & Contemporary*: `Pop`, `Indie Pop`, `EDM / Dance Pop`, `Synthwave / Electro`
+    - *Bollywood, Hinglish & Indian*: `Bollywood Pop`, `Wedding Sangeet / Punjabi Dhol`, `Bollywood Romantic`, `Sufi / Indie Fusion`, `Indian Classical / Traditional`
+    - *Acoustic, Folk & Soul*: `Acoustic`, `Folk / Indie Folk`, `R&B / Soul`, `Jazz / Lounge`, `Country`
+    - *Cinematic, Rock & Urban*: `Cinematic`, `Rock`, `Hip-Hop / Rap`, `Lo-Fi Chill`, `Uplifting Choir / Gospel`
   - **Vocalist Voice Selection**: Choose between **👩 Female Vocalist**, **👨 Male Vocalist**, **👥 Duet / Harmonized Ensemble**, or **🎙️ Custom Vocal Persona** (e.g., *warm acoustic contralto*, *husky rock baritone*, *Indian classical female vocals*).
-  - **Flexible Duration Control**: Select audio target length from **15s, 30s, 45s, 60s, 90s, 120s up to 180s (3 full minutes)**.
+  - **Flexible Duration Control**: Select audio target length from **30s, 60s, 90s up to 180s (3 full minutes)**.
   - Generates authentic musical song compositions using **Google DeepMind Lyria 3 Pro / Lyria 2** (`lyria-3-pro-preview`), ElevenLabs Music API, Suno, or local synthetic fallback.
   - Features intelligent prompt conditioning, automatic Lyria retry on rate limits, and transparent fallback indicator badges in the UI.
 - **Phase 3: Event Photos & Pure AI Motion Video Generation**:

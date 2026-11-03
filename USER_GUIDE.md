@@ -599,7 +599,7 @@ Because the frontend and backend are completely decoupled, you can switch the ba
 
 ### Automated & Manual Deployment to Cloud Run
 - **Native Cloud Run Continuous Deployment (Active on `git push main`)**: Open Cloud Run → `event-qr-api` → **Set Up Continuous Deployment** → connect GitHub repo `rjshnautiyal31-cloud/event-management` and branch `main`. Cloud Build builds `/Dockerfile` directly inside GCP without requiring any exported service account keys.
-- **GitHub Actions Manual Workflow (`workflow_dispatch`)**: The workflow at [`.github/workflows/deploy-cloud-run.yml`](.github/workflows/deploy-cloud-run.yml) is configured for on-demand manual runs from the GitHub **Actions** tab (preventing duplicate deployments on `git push`). It supports keyless **Google Cloud Workload Identity Federation** (`GCP_WORKLOAD_IDENTITY_PROVIDER` + `GCP_SERVICE_ACCOUNT` secrets) with optional `GCP_SA_KEY` fallback, while [`.dockerignore`](.dockerignore) prevents any `gha-creds-*.json` or `*service-account*.json` files from entering the container image.
+- **GitHub Actions Manual Workflow (`workflow_dispatch`)**: The workflow at [`.github/workflows/deploy-cloud-run.yml`](.github/workflows/deploy-cloud-run.yml) is configured for on-demand manual runs from the GitHub **Actions** tab (preventing duplicate deployments on `git push`). It uses 100% keyless **Google Cloud Workload Identity Federation** (`GCP_WORKLOAD_IDENTITY_PROVIDER` + `GCP_SERVICE_ACCOUNT` secrets), while [`.dockerignore`](.dockerignore) prevents any `gha-creds-*.json` or `*service-account*.json` files from entering the container image.
 
 ---
 

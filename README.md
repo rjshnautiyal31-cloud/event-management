@@ -345,12 +345,11 @@ If you ever want to run the backend completely on Render:
 5. Build Type: **Dockerfile** (path: `/Dockerfile`).
 6. Click **Save**. Cloud Build automatically rebuilds and rolls out updates inside GCP (using zero service account keys) whenever commits hit `main`.
 
-### Option 2: GitHub Actions Workflow (Manual Trigger & Keyless WIF)
+### Option 2: GitHub Actions Workflow (Manual Trigger & Keyless WIF Only)
 The repo includes [`.github/workflows/deploy-cloud-run.yml`](.github/workflows/deploy-cloud-run.yml):
 - Configured with `on: workflow_dispatch` (manual trigger from the GitHub **Actions** tab) so it does not trigger duplicate parallel deployments alongside Native Cloud Build on `git push`.
-- **Keyless Authentication via Workload Identity Federation (Recommended)**:
-  Set `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` under **GitHub Settings → Secrets and variables → Actions** (no JSON keys stored in GitHub or written to the runner).
-- **Legacy Fallback**: Also supports `GCP_SA_KEY` if WIF is not configured; `.dockerignore` blocks `gha-creds-*.json` and `*service-account*.json` from ever entering the container build context.
+- **100% Keyless Authentication via Workload Identity Federation**:
+  Uses `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` under **GitHub Settings → Secrets and variables → Actions** (no static JSON service account keys stored in GitHub), and [`.dockerignore`](.dockerignore) blocks `gha-creds-*.json` and `*service-account*.json` from ever entering the container build context.
 
 ---
 

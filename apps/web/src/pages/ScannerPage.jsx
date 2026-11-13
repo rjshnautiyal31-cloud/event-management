@@ -1,15 +1,16 @@
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { api } from "../api";
-import { Navbar } from "../components/Navbar.jsx";
+import { AppShell } from "../components/Navbar.jsx";
+import { Icon } from "../components/Icons.jsx";
 
 export function ScannerPage({ auth }) {
-  const isSuperAdmin = auth.user?.role === "admin" || auth.user?.role === "super_admin";
   const [result, setResult] = useState(null);
-  const [gateNumber, setGateNumber] = useState(auth.user?.assignedGateName || "Gate A");
+  const [gateNumber, setGateNumber] = useState(
+    auth.user?.assignedGateName || "Gate A"
+  );
   const [isProcessing, setIsProcessing] = useState(false);
-  
+
   const isProcessingRef = useRef(false);
   const cooldownTimeoutRef = useRef(null);
   const scannerRef = useRef(null);
@@ -49,7 +50,7 @@ export function ScannerPage({ auth }) {
           setResult({ status: "invalid", message: err.message });
         }
       },
-      (error) => {
+      () => {
         // Silent error to prevent cluttering console
       }
     );
@@ -65,52 +66,87 @@ export function ScannerPage({ auth }) {
   }, [gateNumber, auth.token]);
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-12">
-      {/* Shared Navbar Header & Hamburger Menu */}
-      <Navbar auth={auth} />
+    <AppShell auth={auth} pageTitle="Entrance Scanner">
+      <main className="flex-1 w-full max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-5 animate-scale-up">
+        {/* Page Heading */}
+        <div className="ui-hero-card p-6 sm:p-7 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-[28px] sm:text-[32px] font-bold text-primary leading-tight">
+              Entrance Scanner
+            </h1>
+            <p className="text-sm text-body mt-1">
+              Validate attendee QR passes in real time with double-scan protection.
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-2 self-start sm:self-center px-3.5 py-1.5 rounded-full bg-surface/85 border border-theme text-xs font-bold text-primary">
+            <span
+              className={`h-2.5 w-2.5 rounded-full ${
+                isProcessing ? "bg-warning animate-pulse" : "bg-success animate-pulse"
+              }`}
+            />
+            <span>{isProcessing ? "Paused" : "Live Ready"}</span>
+          </span>
+        </div>
 
-      <div className="mx-auto max-w-lg px-4 sm:px-6 mt-6 space-y-5 animate-scale-up">
         {/* Real-time Scan Result Alerts with Cooldown UI */}
         {result && (
           <div
-            className={`rounded-2xl border p-4 shadow-sm transition-all duration-300 ${
+            className={`rounded-card border p-5 sm:p-6 shadow-soft transition-all duration-300 ${
               result.status === "granted"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-950 shadow-emerald-50/20"
+                ? "border-success/35 bg-success-tint text-heading"
                 : result.status === "already_checked_in"
-                  ? "border-amber-200 bg-amber-50 text-amber-950 shadow-amber-50/20"
-                  : "border-red-200 bg-red-50 text-red-950 shadow-red-50/20"
+                  ? "border-warning/35 bg-warning-tint text-heading"
+                  : "border-danger/35 bg-danger-tint text-heading"
             }`}
           >
-            <div className="flex items-start gap-3">
-              <span className="text-xl">
-                {result.status === "granted" ? "🟢" : result.status === "already_checked_in" ? "🟡" : "🔴"}
+            <div className="flex items-start gap-3.5">
+              <span
+                className={`h-10 w-10 shrink-0 rounded-full flex items-center justify-center ${
+                  result.status === "granted"
+                    ? "bg-success text-white"
+                    : result.status === "already_checked_in"
+                      ? "bg-warning text-white"
+                      : "bg-danger text-white"
+                }`}
+              >
+                <Icon
+                  name={result.status === "granted" ? "check" : "alert"}
+                  className="w-5 h-5"
+                />
               </span>
               <div className="flex-1 min-w-0">
-                <p className="font-extrabold text-base tracking-tight leading-snug">
+                <p className="font-bold text-lg text-heading leading-snug">
                   {result.message || "Scan result"}
                 </p>
                 {result.checkedInAt && (
-                  <p className="text-xs font-semibold opacity-80 mt-1">
-                    📅 Checked in: {new Date(result.checkedInAt).toLocaleString()}
+                  <p className="text-xs font-medium text-body mt-1 inline-flex items-center gap-1.5">
+                    <Icon name="clock" className="w-3.5 h-3.5 text-primary" />
+                    <span>
+                      Checked in: {new Date(result.checkedInAt).toLocaleString()}
+                    </span>
                   </p>
                 )}
                 {result.attendee?.name && (
-                  <div className="text-sm mt-3 border-t pt-2.5 border-current/10 space-y-0.5">
-                    <p className="font-bold">Attendee: {result.attendee.name}</p>
-                    <p className="text-xs opacity-80">{result.attendee.email}</p>
+                  <div className="text-sm mt-3.5 border-t border-theme/80 pt-3 space-y-0.5">
+                    <p className="font-bold text-heading">
+                      Attendee: {result.attendee.name}
+                    </p>
+                    <p className="text-xs text-muted">{result.attendee.email}</p>
                   </div>
                 )}
-                
+
                 {/* Visual Cooldown Controls */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-3 border-t border-current/10">
-                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-75 animate-pulse">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 pt-3.5 border-t border-theme/80">
+                  <span className="text-xs font-semibold text-muted animate-pulse">
                     Scanner Paused (Avoiding Double-Scans)
                   </span>
                   <button
+                    type="button"
                     onClick={resetScanner}
-                    className="rounded-xl font-bold text-xs uppercase tracking-wider px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all border border-slate-950 whitespace-nowrap text-center min-w-[140px] shadow-slate-900/10"
+                    className="ui-btn-primary-sm min-w-[160px]"
                   >
-                    Scan Next Now ➔
+                    <span>Scan Next Now</span>
+                    <Icon name="arrow-right" className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -119,48 +155,64 @@ export function ScannerPage({ auth }) {
         )}
 
         {/* Gate Configuration Card */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-2">
-          <div className="flex items-center gap-1.5">
-            <span className="text-base">📍</span>
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              Validator Gate Location
-            </label>
-          </div>
+        <div className="ui-card p-6 space-y-2.5">
+          <label className="ui-label flex items-center gap-2 mb-0">
+            <span className="h-8 w-8 rounded-tile bg-primary-soft text-primary flex items-center justify-center">
+              <Icon name="pin" className="w-4 h-4" />
+            </span>
+            <span>Validator Gate Location</span>
+          </label>
           <input
-            className="w-full rounded-lg border border-slate-200 p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all bg-slate-50 font-semibold text-slate-800"
+            className="ui-input"
             value={gateNumber}
             onChange={(e) => setGateNumber(e.target.value)}
-            disabled={!!auth.user?.assignedGateName} // Lock if assigned directly by Admin
+            disabled={!!auth.user?.assignedGateName}
             placeholder="Gate Number"
           />
           {auth.user?.assignedGateName && (
-            <p className="text-[10px] font-semibold text-slate-400 italic">
-              ℹ️ Locked by Admin to your assigned post.
+            <p className="text-[13px] text-muted">
+              Assigned gate location is locked by Admin and cannot be changed.
             </p>
           )}
         </div>
 
         {/* Scanner Lens Card */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-violet-600" />
-          <div className="flex items-center gap-1.5 mb-3 px-1">
-            <span className={`h-2.5 w-2.5 rounded-full ${isProcessing ? "bg-amber-500 animate-pulse" : "bg-red-500 animate-pulse"}`} />
-            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              {isProcessing ? "Scanner Lens is Paused..." : "Camera Live Validation Lens"}
+        <div className="ui-container p-5 sm:p-6 relative overflow-hidden">
+          <div className="flex items-center justify-between gap-2 mb-4 px-1">
+            <div className="flex items-center gap-2">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  isProcessing
+                    ? "bg-warning animate-pulse"
+                    : "bg-success animate-pulse"
+                }`}
+              />
+              <span className="text-sm font-bold text-heading">
+                {isProcessing
+                  ? "Scanner Lens is Paused..."
+                  : "Camera Live Validation Lens"}
+              </span>
+            </div>
+            <span className="px-2.5 py-1 rounded-full bg-primary-tint text-primary text-xs font-semibold border border-theme">
+              {gateNumber}
             </span>
           </div>
-          
-          <div className={`rounded-xl overflow-hidden border border-slate-100 bg-slate-900 aspect-square flex items-center justify-center transition-all duration-300 ${isProcessing ? "opacity-30 scale-[0.98]" : "opacity-100"}`}>
-            <div id="qr-reader" className="w-full h-full bg-slate-900" />
+
+          <div
+            className={`rounded-[20px] overflow-hidden border border-pastel-lavender bg-[#1D123F] aspect-square flex items-center justify-center transition-all duration-300 ${
+              isProcessing ? "opacity-35 scale-[0.985]" : "opacity-100"
+            }`}
+          >
+            <div id="qr-reader" className="w-full h-full bg-[#1D123F]" />
           </div>
 
-          <div className="mt-3.5 text-center border-t border-slate-50 pt-2.5">
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+          <div className="mt-4 text-center border-t border-theme pt-3">
+            <p className="text-xs text-muted font-medium">
               Powered by Rajesh Nautiyal
             </p>
           </div>
         </div>
-      </div>
-    </div>
+      </main>
+    </AppShell>
   );
 }

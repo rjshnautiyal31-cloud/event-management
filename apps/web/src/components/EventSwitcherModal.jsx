@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Icon } from "./Icons.jsx";
 
 export function EventSwitcherModal({
   isOpen,
@@ -13,7 +14,7 @@ export function EventSwitcherModal({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [copiedSlug, setCopiedSlug] = useState("");
-  
+
   // Pinned event IDs stored in localStorage
   const [pinnedIds, setPinnedIds] = useState(() => {
     try {
@@ -60,14 +61,12 @@ export function EventSwitcherModal({
     setPage(1);
   }, [search, category, pageSize]);
 
-  // Determine event timing category
   const todayStr = new Date().toISOString().split("T")[0];
 
   const processedEvents = useMemo(() => {
     const query = search.trim().toLowerCase();
-    
+
     return events.filter((ev) => {
-      // 1. Text Search Filter
       const matchesQuery =
         !query ||
         ev.title?.toLowerCase().includes(query) ||
@@ -77,7 +76,6 @@ export function EventSwitcherModal({
 
       if (!matchesQuery) return false;
 
-      // 2. Category Tab Filter
       const evDateStr = new Date(ev.date).toISOString().split("T")[0];
       const isPast = evDateStr < todayStr;
 
@@ -86,13 +84,11 @@ export function EventSwitcherModal({
       } else if (category === "past") {
         return isPast;
       } else {
-        // "upcoming" includes today & future events
         return !isPast;
       }
     });
   }, [events, search, category, pinnedIds, todayStr]);
 
-  // Pagination calculation
   const totalPages = Math.ceil(processedEvents.length / pageSize) || 1;
   const paginatedEvents = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -110,46 +106,46 @@ export function EventSwitcherModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-fade-in overflow-y-auto">
-      {/* Click backdrop to close */}
-      <div className="absolute inset-0" onClick={onClose} />
+    <div className="fixed inset-0 z-50 bg-heading/45 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-fade-in overflow-y-auto">
+      <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
 
-      {/* Modal Container */}
-      <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] z-10 animate-scale-up font-sans my-auto">
-        
-        {/* Top Header Banner */}
-        <div className="bg-[#0A2D59] text-white px-4 sm:px-5 py-3 sm:py-4 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-            <span className="text-base sm:text-lg shrink-0">⚡</span>
+      <div className="relative w-full max-w-2xl bg-surface border border-theme rounded-container shadow-soft overflow-hidden flex flex-col max-h-[88vh] z-10 animate-scale-up my-auto">
+        {/* Hero Header */}
+        <div className="bg-hero-gradient border-b border-theme px-5 sm:px-6 py-4 sm:py-5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-11 w-11 shrink-0 rounded-tile bg-primary text-white flex items-center justify-center shadow-subtle">
+              <Icon name="calendar" className="w-5 h-5" />
+            </div>
             <div className="min-w-0">
-              <h2 className="text-xs sm:text-sm font-black text-white tracking-tight leading-tight truncate">
+              <h2 className="text-lg sm:text-xl font-bold text-primary leading-tight truncate">
                 Event Switcher
               </h2>
-              <p className="text-[10px] sm:text-[11px] text-slate-300 font-medium mt-0.5 truncate hidden xs:block sm:block">
+              <p className="text-xs sm:text-sm text-muted truncate">
                 Search and switch between managed events
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <span className="hidden sm:inline-block px-2 py-0.5 rounded-lg bg-white/10 border border-white/20 text-[10px] font-mono font-bold text-slate-200">
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="hidden sm:inline-flex items-center px-3 py-1 rounded-full bg-surface/80 border border-theme text-xs font-semibold text-primary">
               ⌘K / Ctrl+K
             </span>
             <button
+              type="button"
               onClick={onClose}
-              className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-xs transition-colors cursor-pointer"
+              className="h-11 w-11 rounded-full bg-surface hover:bg-primary-soft border border-theme text-heading flex items-center justify-center transition-colors cursor-pointer"
               aria-label="Close Modal"
             >
-              ✕
+              <Icon name="close" className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Search Input Section */}
-        <div className="p-3 sm:p-4 border-b border-slate-100 bg-slate-50 space-y-2.5 sm:space-y-3">
+        {/* Search & Filter Tabs */}
+        <div className="px-5 sm:px-6 pt-4 pb-0 border-b border-theme bg-surface space-y-3">
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
-              🔍
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted">
+              <Icon name="search" className="w-5 h-5" />
             </span>
             <input
               type="text"
@@ -157,52 +153,45 @@ export function EventSwitcherModal({
               placeholder="Search by title, location venue, or date..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl sm:rounded-2xl bg-white border border-slate-200 pl-9 sm:pl-10 pr-9 sm:pr-10 py-2.5 sm:py-3 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59] shadow-2xs transition-all placeholder:text-slate-400"
+              className="ui-input pl-11 pr-11"
             />
             {search && (
               <button
+                type="button"
                 onClick={() => setSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold text-xs"
+                className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full hover:bg-primary-tint text-muted hover:text-heading flex items-center justify-center cursor-pointer"
+                aria-label="Clear search"
               >
-                ✕
+                <Icon name="close" className="w-4 h-4" />
               </button>
             )}
           </div>
 
-          {/* Categorized Filter Tabs */}
-          <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 max-w-full">
-            <div className="flex items-center gap-1 bg-slate-200/80 p-1 rounded-xl shrink-0">
+          <div className="flex items-center justify-between gap-3">
+            <div className="ui-tabs-bar border-b-0 flex-1">
               <button
+                type="button"
                 onClick={() => setCategory("upcoming")}
-                className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                  category === "upcoming"
-                    ? "bg-white text-[#0A2D59] shadow-2xs border border-slate-200"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
+                className={`ui-tab ${category === "upcoming" ? "ui-tab-active" : "ui-tab-inactive"}`}
               >
-                ⚡ Active & Upcoming
+                Active &amp; Upcoming
               </button>
               <button
+                type="button"
                 onClick={() => setCategory("past")}
-                className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                  category === "past"
-                    ? "bg-white text-[#0A2D59] shadow-2xs border border-slate-200"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
+                className={`ui-tab ${category === "past" ? "ui-tab-active" : "ui-tab-inactive"}`}
               >
-                🕒 Past
+                Past
               </button>
               <button
+                type="button"
                 onClick={() => setCategory("pinned")}
-                className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-bold transition-all shrink-0 flex items-center gap-1 cursor-pointer ${
-                  category === "pinned"
-                    ? "bg-white text-[#0A2D59] shadow-2xs border border-slate-200"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
+                className={`ui-tab ${category === "pinned" ? "ui-tab-active" : "ui-tab-inactive"}`}
               >
-                <span>⭐ Pinned</span>
+                <Icon name="star" className="w-4 h-4" filled={category === "pinned"} />
+                <span>Pinned</span>
                 {pinnedIds.length > 0 && (
-                  <span className="bg-[#0A2D59]/10 text-[#0A2D59] text-[9px] sm:text-[10px] px-1.5 rounded-full font-black">
+                  <span className="px-2 py-0.5 rounded-full bg-pastel-lavender/70 text-primary text-xs font-bold">
                     {pinnedIds.length}
                   </span>
                 )}
@@ -211,26 +200,29 @@ export function EventSwitcherModal({
 
             {onOpenCreateModal && (
               <button
+                type="button"
                 onClick={() => {
                   onClose();
                   onOpenCreateModal();
                 }}
-                className="shrink-0 rounded-xl bg-[#0A2D59] hover:bg-[#082247] text-white px-2.5 sm:px-3 py-1 sm:py-1.5 text-[11px] sm:text-xs font-bold shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
+                className="ui-btn-pill mb-2 shrink-0"
               >
-                <span>+</span>
+                <Icon name="plus" className="w-4 h-4" />
                 <span>New Event</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* Event Roster List Container */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5 max-h-[50vh]">
+        {/* Event Roster List */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 bg-page max-h-[48vh]">
           {paginatedEvents.length === 0 ? (
-            <div className="text-center py-8 sm:py-10 px-4 space-y-2">
-              <span className="text-2xl sm:text-3xl">🗓️</span>
-              <p className="text-xs font-bold text-slate-700">No events found matching your filter</p>
-              <p className="text-[11px] text-slate-400">
+            <div className="ui-card p-8 text-center space-y-2">
+              <div className="mx-auto h-12 w-12 rounded-full bg-primary-soft text-primary flex items-center justify-center">
+                <Icon name="calendar" className="w-6 h-6" />
+              </div>
+              <p className="text-base font-bold text-heading">No events found matching your filter</p>
+              <p className="text-sm text-muted">
                 Try searching with a different keyword or create a new event.
               </p>
             </div>
@@ -250,86 +242,97 @@ export function EventSwitcherModal({
                     onSelectEvent(ev._id);
                     onClose();
                   }}
-                  className={`p-3 sm:p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 ${
+                  className={`p-4 rounded-card border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                     isSelected
-                      ? "bg-[#0A2D59]/5 border-[#0A2D59] shadow-xs"
-                      : "bg-white border-slate-200/80 hover:border-slate-300 hover:shadow-2xs"
+                      ? "bg-primary-soft border-primary shadow-subtle"
+                      : "bg-surface border-theme hover:border-primary/40 hover:bg-primary-tint/40"
                   }`}
                 >
-                  <div className="space-y-1 flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                      <span className="font-extrabold text-xs text-slate-900 break-words">
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-[15px] text-heading break-words">
                         {ev.title}
                       </span>
 
-                      {/* Event Status Badges */}
                       {isToday ? (
-                        <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[9px] sm:text-[10px] font-black tracking-wide uppercase border border-emerald-200">
-                          🟢 Live Today
+                        <span className="ui-chip bg-success-tint text-emerald-800 border-success/30">
+                          <span className="h-2 w-2 rounded-full bg-success" />
+                          Live Today
                         </span>
                       ) : isPast ? (
-                        <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[9px] sm:text-[10px] font-bold tracking-wide uppercase border border-slate-200">
-                          🏁 Ended
+                        <span className="ui-chip bg-primary-tint text-muted border-theme">
+                          Ended
                         </span>
                       ) : (
-                        <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[9px] sm:text-[10px] font-bold tracking-wide uppercase border border-blue-200">
-                          🗓 Upcoming
+                        <span className="ui-chip bg-pastel-blue text-primary border-pastel-lavender">
+                          Upcoming
                         </span>
                       )}
 
                       {isSelected && (
-                        <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-[#0A2D59] text-white text-[9px] sm:text-[10px] font-black uppercase">
+                        <span className="ui-chip bg-primary text-white border-primary">
                           Active
                         </span>
                       )}
 
                       {ev.companyId?.name && (
-                        <span className="px-1.5 sm:px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[9px] sm:text-[10px] font-bold border border-slate-200">
-                          🏢 {ev.companyId.name}
+                        <span className="ui-chip bg-surface text-body border-theme">
+                          {ev.companyId.name}
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-[11px] font-medium text-slate-500 flex-wrap">
-                      <span className="flex items-center gap-1 font-semibold text-slate-700">
-                        <span>📅</span>
-                        <span>{evDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-                        <span>•</span>
-                        <span>{evDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>
+                    <div className="flex items-center gap-3 text-xs sm:text-[13px] text-muted flex-wrap">
+                      <span className="inline-flex items-center gap-1.5 font-medium text-body">
+                        <Icon name="calendar" className="w-3.5 h-3.5 text-primary" />
+                        <span>
+                          {evDate.toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric"
+                          })}
+                        </span>
+                        <span>·</span>
+                        <span>
+                          {evDate.toLocaleTimeString("en-US", {
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          })}
+                        </span>
                       </span>
 
                       {ev.location && (
-                        <span className="flex items-center gap-1 text-slate-600 truncate max-w-[150px] sm:max-w-[200px]">
-                          <span>📍</span>
+                        <span className="inline-flex items-center gap-1 text-muted truncate max-w-[220px]">
+                          <Icon name="pin" className="w-3.5 h-3.5 text-primary" />
                           <span className="truncate">{ev.location}</span>
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Right Action Buttons */}
-                  <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                     <button
                       type="button"
                       onClick={(e) => togglePin(ev._id, e)}
-                      className={`p-1.5 rounded-xl border text-xs transition-colors cursor-pointer ${
+                      className={`h-11 w-11 rounded-full border flex items-center justify-center transition-colors cursor-pointer ${
                         isPinned
-                          ? "bg-amber-50 border-amber-300 text-amber-600"
-                          : "bg-slate-50 border-slate-200 text-slate-400 hover:text-amber-500"
+                          ? "bg-pastel-peach border-warning/40 text-warning"
+                          : "bg-surface border-theme text-muted hover:text-primary hover:border-primary/40"
                       }`}
                       title={isPinned ? "Unpin Event" : "Pin Event to Top"}
+                      aria-label={isPinned ? "Unpin Event" : "Pin Event"}
                     >
-                      {isPinned ? "⭐" : "☆"}
+                      <Icon name="star" className="w-4 h-4" filled={isPinned} />
                     </button>
 
                     {ev.publicSlug && (
                       <button
                         type="button"
                         onClick={(e) => copyPublicLink(ev.publicSlug, e)}
-                        className="px-2 sm:px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] sm:text-[11px] font-bold border border-slate-200/80 transition-colors flex items-center gap-1 cursor-pointer"
+                        className="ui-btn-secondary-sm rounded-full px-3.5"
                         title="Copy Public Guest Registration URL"
                       >
-                        <span>🔗</span>
+                        <Icon name="link" className="w-4 h-4 text-primary" />
                         <span>{copiedSlug === ev.publicSlug ? "Copied!" : "Link"}</span>
                       </button>
                     )}
@@ -340,11 +343,11 @@ export function EventSwitcherModal({
                         onSelectEvent(ev._id);
                         onClose();
                       }}
-                      className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                      className={
                         isSelected
-                          ? "bg-[#0A2D59] text-white shadow-2xs"
-                          : "bg-slate-100 hover:bg-[#0A2D59] hover:text-white text-slate-700 border border-slate-200"
-                      }`}
+                          ? "ui-btn-primary-sm rounded-full px-4"
+                          : "ui-btn-secondary-sm rounded-full px-4 hover:bg-primary hover:text-white hover:border-primary"
+                      }
                     >
                       {isSelected ? "Selected ✓" : "Switch Event"}
                     </button>
@@ -356,47 +359,48 @@ export function EventSwitcherModal({
         </div>
 
         {/* Footer Pagination Controls */}
-        <div className="p-3 sm:p-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3 text-[11px] sm:text-xs font-semibold text-slate-600">
-          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5 sm:gap-2">
+        <div className="px-5 py-3.5 bg-surface border-t border-theme flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm text-muted">
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
             <span>Show:</span>
             <select
               value={pageSize}
               onChange={(e) => setPageSize(Number(e.target.value))}
-              className="bg-white border border-slate-200 rounded-lg px-2 py-0.5 sm:py-1 text-[11px] sm:text-xs font-bold text-slate-800 focus:outline-none"
+              className="min-h-[38px] bg-primary-tint border border-theme rounded-tile px-2.5 py-1 text-xs font-bold text-heading focus:outline-none focus:border-primary"
             >
               <option value={5}>5</option>
               <option value={10}>10</option>
               <option value={25}>25</option>
               <option value={50}>50</option>
             </select>
-            <span className="text-slate-400">|</span>
-            <span className="text-center">
+            <span>·</span>
+            <span>
               {processedEvents.length > 0 ? (page - 1) * pageSize + 1 : 0}–
               {Math.min(page * pageSize, processedEvents.length)} of {processedEvents.length} Events
             </span>
           </div>
 
-          <div className="flex items-center gap-1 sm:gap-1.5">
+          <div className="flex items-center gap-2">
             <button
+              type="button"
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="px-2 sm:px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-[11px] sm:text-xs font-bold cursor-pointer"
+              className="ui-btn-secondary-sm min-h-[40px] px-3.5 rounded-full"
             >
-              ◀ Prev
+              Prev
             </button>
-            <span className="px-1.5 sm:px-2 text-[11px] sm:text-xs font-bold text-[#0A2D59]">
+            <span className="px-2 text-xs sm:text-sm font-bold text-primary">
               Page {page} of {totalPages}
             </span>
             <button
+              type="button"
               disabled={page >= totalPages}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="px-2 sm:px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-[11px] sm:text-xs font-bold cursor-pointer"
+              className="ui-btn-secondary-sm min-h-[40px] px-3.5 rounded-full"
             >
-              Next ▶
+              Next
             </button>
           </div>
         </div>
-
       </div>
     </div>
   );

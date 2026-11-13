@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Navigate } from "react-router-dom";
-import { Navbar } from "../components/Navbar.jsx";
+import { AppShell } from "../components/Navbar.jsx";
+import { Icon } from "../components/Icons.jsx";
 import { api } from "../api.js";
 
 export function SettingsPage({ auth }) {
@@ -42,7 +43,10 @@ export function SettingsPage({ auth }) {
       setFormData(formInit);
       setOriginalData(origInit);
     } catch (err) {
-      setStatusMessage({ type: "error", text: err.message || "Failed to load settings" });
+      setStatusMessage({
+        type: "error",
+        text: err.message || "Failed to load settings"
+      });
     } finally {
       setLoading(false);
     }
@@ -115,7 +119,10 @@ export function SettingsPage({ auth }) {
       // Refresh list to update source badges
       await fetchSettings();
     } catch (err) {
-      setStatusMessage({ type: "error", text: err.message || "Failed to save settings" });
+      setStatusMessage({
+        type: "error",
+        text: err.message || "Failed to save settings"
+      });
     } finally {
       setSaving(false);
     }
@@ -123,7 +130,11 @@ export function SettingsPage({ auth }) {
 
   // Reset a specific key to .env default
   const handleResetToEnv = async (key) => {
-    if (!window.confirm(`Are you sure you want to remove the Database override for "${key}" and revert to the .env fallback value?`)) {
+    if (
+      !window.confirm(
+        `Are you sure you want to remove the Database override for "${key}" and revert to the .env fallback value?`
+      )
+    ) {
       return;
     }
 
@@ -138,7 +149,10 @@ export function SettingsPage({ auth }) {
       setStatusMessage({ type: "success", text: res.message });
       await fetchSettings();
     } catch (err) {
-      setStatusMessage({ type: "error", text: err.message || `Failed to reset ${key}` });
+      setStatusMessage({
+        type: "error",
+        text: err.message || `Failed to reset ${key}`
+      });
     } finally {
       setSaving(false);
     }
@@ -207,18 +221,15 @@ export function SettingsPage({ auth }) {
   // Filter settings
   const filteredSettings = useMemo(() => {
     return settingsList.filter((item) => {
-      // Category filter
       if (selectedCategory !== "all" && item.category !== selectedCategory) {
         return false;
       }
-      // Source filter
       if (sourceFilter === "database" && item.source !== "database") {
         return false;
       }
       if (sourceFilter === "env" && item.source !== "env") {
         return false;
       }
-      // Search filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesKey = item.key.toLowerCase().includes(q);
@@ -243,50 +254,57 @@ export function SettingsPage({ auth }) {
     return { dbCount, envCount, defaultCount, total: settingsList.length };
   }, [settingsList]);
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
-      <Navbar auth={auth} />
+  const dbPct = stats.total > 0 ? Math.round((stats.dbCount / stats.total) * 100) : 0;
+  const envPct = stats.total > 0 ? Math.round((stats.envCount / stats.total) * 100) : 0;
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 space-y-6">
-        {/* Header Section */}
-        <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200/80 shadow-xs relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-[#0A2D59]/5 to-transparent rounded-full blur-2xl pointer-events-none" />
-          
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0A2D59]/10 text-[#0A2D59] text-xs font-bold mb-2">
-                <span>⚙️ System Configuration</span>
-                <span>•</span>
-                <span>Dual-Tier Engine</span>
+  return (
+    <AppShell auth={auth} pageTitle="System Settings">
+      <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-24 space-y-6 animate-fade-in">
+        {/* Summary Card (2px Indigo Border + Primary-Tint Background + Progress Legend) */}
+        <div className="rounded-container border-2 border-primary bg-primary-tint p-6 sm:p-8 shadow-soft space-y-6">
+          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-primary-soft border border-pastel-lavender text-primary text-xs font-bold">
+                <Icon name="settings" className="w-3.5 h-3.5" />
+                <span>System Configuration • Dual-Tier Engine</span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black text-[#0A2D59] tracking-tight">
-                Environment & System Settings
+              <h1 className="text-[28px] sm:text-[32px] font-bold text-primary leading-tight">
+                Environment &amp; System Settings
               </h1>
-              <p className="text-xs sm:text-sm text-slate-500 font-medium max-w-2xl mt-1.5">
-                Manage cloud providers, AI models, Google Cloud Storage (GCS) credentials, and API parameters.
-                <strong className="text-slate-700 ml-1">Settings stored in the Database take 1st Priority</strong> over local <code className="bg-slate-100 px-1 py-0.5 rounded text-xs text-[#0A2D59]">.env</code> fallback values.
+              <p className="text-sm text-body max-w-2xl leading-relaxed">
+                Manage cloud providers, AI models, Google Cloud Storage (GCS) credentials, and API parameters.{" "}
+                <strong className="text-heading font-semibold">
+                  Settings stored in the Database take 1st Priority
+                </strong>{" "}
+                over local{" "}
+                <code className="bg-surface px-1.5 py-0.5 rounded-md border border-theme text-xs text-primary font-mono">
+                  .env
+                </code>{" "}
+                fallback values.
               </p>
             </div>
 
-            {/* Test Actions */}
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={handleTestStorage}
                 disabled={testingStorage || loading}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer disabled:opacity-50"
+                className="ui-btn-secondary-sm"
               >
-                <span>{testingStorage ? "⏳" : "☁️"}</span>
-                <span>{testingStorage ? "Testing Storage..." : "Test Storage"}</span>
+                <Icon name="globe" className="w-4 h-4 text-primary" />
+                <span>
+                  {testingStorage ? "Testing Storage..." : "Test Storage"}
+                </span>
               </button>
 
               <button
                 type="button"
                 onClick={handleTestAi}
                 disabled={testingAi || loading}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer disabled:opacity-50"
+                className="ui-btn-secondary-sm"
               >
-                <span>{testingAi ? "⏳" : "🤖"}</span>
+                <Icon name="sparkles" className="w-4 h-4 text-primary" />
                 <span>{testingAi ? "Testing AI..." : "Test AI Keys"}</span>
               </button>
 
@@ -294,41 +312,97 @@ export function SettingsPage({ auth }) {
                 type="button"
                 onClick={handleSave}
                 disabled={saving || loading || modifiedCount === 0}
-                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white transition-all shadow-sm ${
-                  modifiedCount > 0
-                    ? "bg-[#0A2D59] hover:bg-[#082247] shadow-[#0A2D59]/20 cursor-pointer active:scale-95"
-                    : "bg-slate-300 text-slate-500 cursor-not-allowed"
-                }`}
+                className="ui-btn-primary-sm"
               >
-                <span>{saving ? "⏳" : "💾"}</span>
-                <span>{saving ? "Saving..." : `Save Changes ${modifiedCount > 0 ? `(${modifiedCount})` : ""}`}</span>
+                <Icon name="check" className="w-4 h-4" />
+                <span>
+                  {saving
+                    ? "Saving..."
+                    : `Save Changes ${modifiedCount > 0 ? `(${modifiedCount})` : ""}`}
+                </span>
               </button>
             </div>
           </div>
 
-          {/* Stats Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-slate-100">
-            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/60">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Settings</span>
-              <p className="text-xl font-black text-[#0A2D59] mt-0.5">{stats.total}</p>
-            </div>
-            <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-200/60">
-              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                Database (BO) Active
+          {/* Rounded Progress Bar + Legend */}
+          <div className="space-y-2.5 pt-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted font-medium">
+                Active Configuration Coverage
               </span>
-              <p className="text-xl font-black text-emerald-800 mt-0.5">{stats.dbCount} <span className="text-xs font-normal text-emerald-600">1st Priority</span></p>
-            </div>
-            <div className="bg-amber-50 rounded-xl p-3 border border-amber-200/60">
-              <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-amber-500" />
-                .env Fallbacks Active
+              <span className="font-bold text-heading">
+                {stats.dbCount + stats.envCount} / {stats.total} Configured
               </span>
-              <p className="text-xl font-black text-amber-800 mt-0.5">{stats.envCount} <span className="text-xs font-normal text-amber-600">2nd Priority</span></p>
             </div>
-            <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/60">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Default / Unset</span>
-              <p className="text-xl font-black text-slate-600 mt-0.5">{stats.defaultCount}</p>
+            <div className="h-3.5 w-full rounded-full bg-surface border border-theme overflow-hidden flex">
+              <div
+                className="h-full bg-primary transition-all duration-500"
+                style={{ width: `${dbPct}%` }}
+                title={`Database (BO): ${stats.dbCount}`}
+              />
+              <div
+                className="h-full bg-accent-violet transition-all duration-500"
+                style={{ width: `${envPct}%` }}
+                title={`.env Fallbacks: ${stats.envCount}`}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-5 text-xs text-body pt-0.5">
+              <span className="inline-flex items-center gap-2 font-medium">
+                <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+                <span>Database (BO) Override ({stats.dbCount})</span>
+              </span>
+              <span className="inline-flex items-center gap-2 font-medium">
+                <span className="h-2.5 w-2.5 rounded-full bg-accent-violet" />
+                <span>.env Fallback ({stats.envCount})</span>
+              </span>
+              <span className="inline-flex items-center gap-2 text-muted">
+                <span className="h-2.5 w-2.5 rounded-full bg-surface border border-theme" />
+                <span>Default / Unset ({stats.defaultCount})</span>
+              </span>
+            </div>
+          </div>
+
+          {/* 4 Stat Tiles */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 pt-2">
+            <div className="bg-surface rounded-[18px] p-4 border border-theme">
+              <span className="text-xs font-semibold text-muted">
+                Total Settings
+              </span>
+              <p className="text-2xl font-bold text-primary mt-1">
+                {stats.total}
+              </p>
+            </div>
+            <div className="bg-pastel-mint/70 rounded-[18px] p-4 border border-theme">
+              <span className="text-xs font-semibold text-heading flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                <span>Database (BO)</span>
+              </span>
+              <p className="text-2xl font-bold text-heading mt-1">
+                {stats.dbCount}{" "}
+                <span className="text-xs font-medium text-muted">
+                  1st Priority
+                </span>
+              </p>
+            </div>
+            <div className="bg-pastel-peach/65 rounded-[18px] p-4 border border-theme">
+              <span className="text-xs font-semibold text-heading flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-warning" />
+                <span>.env Fallbacks</span>
+              </span>
+              <p className="text-2xl font-bold text-heading mt-1">
+                {stats.envCount}{" "}
+                <span className="text-xs font-medium text-muted">
+                  2nd Priority
+                </span>
+              </p>
+            </div>
+            <div className="bg-surface rounded-[18px] p-4 border border-theme">
+              <span className="text-xs font-semibold text-muted">
+                Default / Unset
+              </span>
+              <p className="text-2xl font-bold text-body mt-1">
+                {stats.defaultCount}
+              </p>
             </div>
           </div>
         </div>
@@ -336,114 +410,153 @@ export function SettingsPage({ auth }) {
         {/* Status & Diagnostics Banners */}
         {statusMessage && (
           <div
-            className={`p-4 rounded-xl text-xs font-semibold flex items-center justify-between border ${
+            className={`p-4 rounded-card text-sm font-semibold flex items-center justify-between border ${
               statusMessage.type === "success"
-                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                : "bg-rose-50 text-rose-800 border-rose-200"
+                ? "bg-success-tint text-heading border-success/35"
+                : "bg-danger-tint text-danger border-danger/30"
             }`}
           >
-            <div className="flex items-center gap-2">
-              <span>{statusMessage.type === "success" ? "✅" : "❌"}</span>
+            <div className="flex items-center gap-2.5">
+              <Icon
+                name={statusMessage.type === "success" ? "check-circle" : "alert"}
+                className={`w-5 h-5 shrink-0 ${
+                  statusMessage.type === "success" ? "text-success" : "text-danger"
+                }`}
+              />
               <span>{statusMessage.text}</span>
             </div>
             <button
+              type="button"
               onClick={() => setStatusMessage(null)}
-              className="text-slate-400 hover:text-slate-600 cursor-pointer text-sm font-bold"
+              className="h-9 w-9 rounded-full hover:bg-surface/60 flex items-center justify-center text-muted hover:text-heading cursor-pointer"
+              aria-label="Dismiss status message"
             >
-              ✕
+              <Icon name="close" className="w-4 h-4" />
             </button>
           </div>
         )}
 
         {connectionResult && (
           <div
-            className={`p-4 rounded-xl text-xs font-semibold border ${
+            className={`p-5 rounded-card text-sm border ${
               connectionResult.success
-                ? "bg-blue-50 text-blue-900 border-blue-200"
-                : "bg-rose-50 text-rose-800 border-rose-200"
+                ? "bg-primary-soft/70 text-heading border-pastel-lavender"
+                : "bg-danger-tint text-danger border-danger/30"
             }`}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span>{connectionResult.success ? "🎉" : "⚠️"}</span>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <Icon
+                  name={connectionResult.success ? "check-circle" : "alert"}
+                  className={`w-5 h-5 shrink-0 ${
+                    connectionResult.success ? "text-primary" : "text-danger"
+                  }`}
+                />
                 <span className="font-bold">{connectionResult.message}</span>
               </div>
               <button
+                type="button"
                 onClick={() => setConnectionResult(null)}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer text-sm font-bold"
+                className="h-9 w-9 rounded-full hover:bg-surface/60 flex items-center justify-center text-muted hover:text-heading cursor-pointer"
+                aria-label="Dismiss connection test result"
               >
-                ✕
+                <Icon name="close" className="w-4 h-4" />
               </button>
             </div>
             {connectionResult.details && (
-              <p className="mt-1 text-[11px] text-blue-700 font-mono break-all">
+              <p className="mt-2 text-xs text-primary font-mono break-all bg-surface/80 px-3 py-2 rounded-tile border border-theme">
                 {connectionResult.details}
               </p>
             )}
           </div>
         )}
 
-        {/* Priority Explanation Callout */}
-        <div className="bg-gradient-to-r from-[#0A2D59]/5 via-white to-[#0A2D59]/5 rounded-xl p-4 border border-[#0A2D59]/15 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-start gap-2.5">
-            <span className="text-lg">💡</span>
-            <div>
-              <p className="font-bold text-[#0A2D59]">Priority Resolution Hierarchy</p>
-              <p className="text-slate-600 text-[11px] mt-0.5">
-                <strong>1. Database (BO):</strong> Values saved here in the Back Office override everything.<br />
-                <strong>2. Local .env:</strong> If a variable is not defined in the database, the server uses its <code className="bg-slate-100 px-1 rounded">.env</code> variable.<br />
-                <strong>3. Built-in Default:</strong> Used if neither Database nor <code className="bg-slate-100 px-1 rounded">.env</code> is specified.
+        {/* Priority Resolution Details Card (24px white card, 2-col muted label / bold value grid) */}
+        <div className="ui-card p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-theme">
+            <h2 className="text-lg font-bold text-heading">
+              Priority Resolution Hierarchy
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="ui-chip bg-pastel-mint border-theme text-heading">
+                <span className="h-2 w-2 rounded-full bg-success" />
+                <span>Database Override</span>
+              </span>
+              <span className="ui-chip bg-pastel-peach border-theme text-heading">
+                <span className="h-2 w-2 rounded-full bg-warning" />
+                <span>.env Fallback</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div className="p-3.5 rounded-[16px] bg-primary-tint/70 border border-theme">
+              <p className="text-xs text-muted font-medium">1st Priority</p>
+              <p className="font-bold text-heading mt-0.5">Database (BO)</p>
+              <p className="text-xs text-body mt-1">
+                Values saved here in the Back Office override everything.
+              </p>
+            </div>
+            <div className="p-3.5 rounded-[16px] bg-primary-tint/70 border border-theme">
+              <p className="text-xs text-muted font-medium">2nd Priority</p>
+              <p className="font-bold text-heading mt-0.5">Local .env</p>
+              <p className="text-xs text-body mt-1">
+                Used automatically when a variable is not overridden in the database.
+              </p>
+            </div>
+            <div className="p-3.5 rounded-[16px] bg-primary-tint/70 border border-theme">
+              <p className="text-xs text-muted font-medium">3rd Priority</p>
+              <p className="font-bold text-heading mt-0.5">Built-in Default</p>
+              <p className="text-xs text-body mt-1">
+                Used when neither Database nor .env specifies a value.
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
-              🟢 Database Override
-            </span>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
-              🟡 .env Fallback
-            </span>
-          </div>
         </div>
 
-        {/* Filter & Search Bar */}
-        <div className="bg-white rounded-xl p-3 border border-slate-200/80 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-3">
-          {/* Category Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-none">
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setSelectedCategory(cat.id)}
-                className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                  selectedCategory === cat.id
-                    ? "bg-[#0A2D59] text-white shadow-2xs shadow-[#0A2D59]/20"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                <span>{cat.icon}</span>
-                <span>{cat.label}</span>
-              </button>
-            ))}
+        {/* Category Tabs + Search & Source Filter */}
+        <div className="ui-card p-5 space-y-4">
+          <div className="ui-tabs-bar" role="tablist" aria-label="Settings Categories">
+            {categories.map((cat) => {
+              const active = selectedCategory === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`ui-tab ${
+                    active ? "ui-tab-active" : "ui-tab-inactive"
+                  }`}
+                >
+                  <span>{cat.icon}</span>
+                  <span>{cat.label}</span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* Search & Source Filter */}
-          <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
-            <div className="relative flex-1 md:w-56">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="relative flex-1">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none">
+                <Icon name="search" className="w-4 h-4" />
+              </span>
               <input
                 type="text"
-                placeholder="Search settings..."
+                placeholder="Search settings by key, label, or description..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
+                className="ui-input pl-10 pr-10"
               />
-              <span className="absolute left-2.5 top-2 text-slate-400 text-xs">🔍</span>
               {searchQuery && (
                 <button
+                  type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-1.5 text-slate-400 hover:text-slate-600 text-xs"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full hover:bg-primary-tint flex items-center justify-center text-muted hover:text-heading cursor-pointer"
+                  aria-label="Clear search"
                 >
-                  ✕
+                  <Icon name="close" className="w-4 h-4" />
                 </button>
               )}
             </div>
@@ -451,26 +564,37 @@ export function SettingsPage({ auth }) {
             <select
               value={sourceFilter}
               onChange={(e) => setSourceFilter(e.target.value)}
-              className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20"
+              className="ui-select sm:w-60"
+              aria-label="Filter by setting source"
             >
               <option value="all">All Sources</option>
-              <option value="database">🟢 Database (BO) Only</option>
-              <option value="env">🟡 .env Fallback Only</option>
+              <option value="database">Database (BO) Only</option>
+              <option value="env">.env Fallback Only</option>
             </select>
           </div>
         </div>
 
         {/* Settings Grid / Cards */}
         {loading ? (
-          <div className="bg-white rounded-2xl p-12 text-center border border-slate-200/80">
-            <div className="inline-block animate-spin text-2xl mb-2">⏳</div>
-            <p className="text-xs font-bold text-slate-600">Loading system settings...</p>
+          <div className="ui-card p-12 text-center space-y-2">
+            <div className="mx-auto h-12 w-12 rounded-full bg-primary-soft text-primary flex items-center justify-center animate-pulse">
+              <Icon name="settings" className="w-6 h-6" />
+            </div>
+            <p className="text-sm font-bold text-heading">
+              Loading system settings...
+            </p>
           </div>
         ) : filteredSettings.length === 0 ? (
-          <div className="bg-white rounded-2xl p-12 text-center border border-slate-200/80">
-            <p className="text-2xl mb-2">🔍</p>
-            <p className="text-sm font-bold text-slate-700">No settings found matching your filters</p>
-            <p className="text-xs text-slate-400 mt-1">Try clearing your search query or selecting a different category.</p>
+          <div className="ui-card p-12 text-center space-y-2">
+            <div className="mx-auto h-12 w-12 rounded-full bg-primary-tint text-primary flex items-center justify-center">
+              <Icon name="search" className="w-6 h-6" />
+            </div>
+            <p className="text-base font-bold text-heading">
+              No settings found matching your filters
+            </p>
+            <p className="text-sm text-muted">
+              Try clearing your search query or selecting a different category.
+            </p>
           </div>
         ) : (
           <form onSubmit={handleSave} className="space-y-4">
@@ -482,42 +606,53 @@ export function SettingsPage({ auth }) {
                 return (
                   <div
                     key={item.key}
-                    className={`bg-white rounded-xl p-5 border transition-all relative ${
+                    className={`rounded-card bg-surface p-6 transition-all relative ${
                       isModified
-                        ? "border-[#0A2D59] ring-2 ring-[#0A2D59]/10 shadow-xs"
-                        : "border-slate-200/80 hover:border-slate-300"
+                        ? "border-2 border-primary shadow-soft bg-primary-tint/30"
+                        : "border border-theme shadow-subtle hover:border-primary/35"
                     }`}
                   >
                     {/* Header: Label + Badges */}
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-bold text-slate-900">{item.label}</h3>
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="text-base font-bold text-heading leading-snug">
+                            {item.label}
+                          </label>
                           {isModified && (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-100 text-blue-700">
+                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-primary-soft text-primary border border-pastel-lavender">
                               Modified
                             </span>
                           )}
                         </div>
-                        <code className="text-[11px] font-mono text-[#0A2D59] font-bold block mt-0.5">
+                        <code className="text-xs font-mono text-primary font-semibold block mt-1 truncate">
                           {item.key}
                         </code>
                       </div>
 
                       {/* Source Badge */}
-                      <div className="flex flex-col items-end gap-1 shrink-0">
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
                         {item.source === "database" ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200" title="Active value is configured in Database (1st Priority)">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                            Database (BO)
+                          <span
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-pastel-mint text-heading border border-theme"
+                            title="Active value is configured in Database (1st Priority)"
+                          >
+                            <span className="h-2 w-2 rounded-full bg-success" />
+                            <span>Database (BO)</span>
                           </span>
                         ) : item.source === "env" ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200" title="Falling back to environment variable (.env)">
-                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                            .env Fallback
+                          <span
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-pastel-peach text-heading border border-theme"
+                            title="Falling back to environment variable (.env)"
+                          >
+                            <span className="h-2 w-2 rounded-full bg-warning" />
+                            <span>.env Fallback</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 border border-slate-200" title="Using default or unconfigured value">
+                          <span
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-primary-tint text-muted border border-theme"
+                            title="Using default or unconfigured value"
+                          >
                             Default / Unset
                           </span>
                         )}
@@ -526,7 +661,7 @@ export function SettingsPage({ auth }) {
                           <button
                             type="button"
                             onClick={() => handleResetToEnv(item.key)}
-                            className="text-[10px] text-slate-400 hover:text-rose-600 underline cursor-pointer"
+                            className="text-xs text-muted hover:text-danger underline cursor-pointer"
                             title="Remove Database override and revert to .env fallback"
                           >
                             Reset to .env
@@ -536,7 +671,7 @@ export function SettingsPage({ auth }) {
                     </div>
 
                     {/* Description */}
-                    <p className="text-xs text-slate-500 font-medium mb-3 min-h-[32px]">
+                    <p className="text-[13px] text-muted mb-4 min-h-[36px] leading-relaxed">
                       {item.description}
                     </p>
 
@@ -546,7 +681,7 @@ export function SettingsPage({ auth }) {
                         <select
                           value={formData[item.key] || ""}
                           onChange={(e) => handleChange(item.key, e.target.value)}
-                          className="w-full text-xs font-semibold px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
+                          className="ui-select"
                         >
                           {item.options.map((opt) => (
                             <option key={opt} value={opt}>
@@ -559,17 +694,29 @@ export function SettingsPage({ auth }) {
                           <input
                             type={isSecretVisible ? "text" : "password"}
                             value={formData[item.key] || ""}
-                            onChange={(e) => handleChange(item.key, e.target.value)}
-                            placeholder={item.isConfigured ? "•••••••• (Configured)" : "Enter secret key..."}
-                            className="w-full text-xs font-mono px-3 py-2 pr-10 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
+                            onChange={(e) =>
+                              handleChange(item.key, e.target.value)
+                            }
+                            placeholder={
+                              item.isConfigured
+                                ? "•••••••• (Configured)"
+                                : "Enter secret key..."
+                            }
+                            className="ui-input font-mono pr-12"
                           />
                           <button
                             type="button"
                             onClick={() => toggleShowSecret(item.key)}
-                            className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer p-0.5"
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 h-11 w-11 rounded-tile hover:bg-primary-tint text-primary flex items-center justify-center cursor-pointer"
                             title={isSecretVisible ? "Hide Secret" : "Show Secret"}
+                            aria-label={
+                              isSecretVisible ? "Hide Secret" : "Show Secret"
+                            }
                           >
-                            {isSecretVisible ? "🙈" : "👁️"}
+                            <Icon
+                              name={isSecretVisible ? "eye-off" : "eye"}
+                              className="w-4 h-4"
+                            />
                           </button>
                         </div>
                       ) : (
@@ -578,7 +725,7 @@ export function SettingsPage({ auth }) {
                           value={formData[item.key] || ""}
                           onChange={(e) => handleChange(item.key, e.target.value)}
                           placeholder={`Default: ${item.defaultValue || "empty"}`}
-                          className="w-full text-xs font-medium px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#0A2D59]/20 focus:border-[#0A2D59]"
+                          className="ui-input"
                         />
                       )}
                     </div>
@@ -589,31 +736,34 @@ export function SettingsPage({ auth }) {
 
             {/* Sticky Bottom Save Bar */}
             {modifiedCount > 0 && (
-              <div className="sticky bottom-4 z-20 bg-[#0A2D59] text-white p-4 rounded-2xl shadow-xl flex items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-2">
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-lg bg-white/10 flex items-center justify-center font-bold text-sm">
+              <div className="sticky bottom-4 z-20 bg-primary text-white p-4 sm:p-5 rounded-card shadow-soft flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in">
+                <div className="flex items-center gap-3.5">
+                  <div className="h-10 w-10 rounded-tile bg-white/15 flex items-center justify-center font-bold text-base shrink-0">
                     {modifiedCount}
                   </div>
                   <div>
-                    <p className="text-xs font-bold leading-tight">Unsaved Settings Changes</p>
-                    <p className="text-[11px] text-slate-300">
-                      You have {modifiedCount} modified setting{modifiedCount > 1 ? "s" : ""}. Click Save to apply to Database.
+                    <p className="text-sm font-bold leading-tight text-white">
+                      Unsaved Settings Changes
+                    </p>
+                    <p className="text-xs text-primary-soft/90 mt-0.5">
+                      You have {modifiedCount} modified setting
+                      {modifiedCount > 1 ? "s" : ""}. Click Save to apply to Database.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
                   <button
                     type="button"
                     onClick={() => setFormData({ ...originalData })}
-                    className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                    className="min-h-[44px] px-4 py-2 rounded-control text-sm font-semibold text-primary-soft hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                   >
                     Discard
                   </button>
                   <button
                     type="submit"
                     disabled={saving}
-                    className="px-4 py-1.5 rounded-xl text-xs font-black bg-white text-[#0A2D59] hover:bg-slate-100 transition-transform active:scale-95 shadow-sm cursor-pointer"
+                    className="min-h-[44px] px-5 py-2 rounded-control text-sm font-bold bg-surface text-primary hover:bg-primary-soft transition-all cursor-pointer"
                   >
                     {saving ? "Saving..." : "Save Settings to DB"}
                   </button>
@@ -623,6 +773,6 @@ export function SettingsPage({ auth }) {
           </form>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }

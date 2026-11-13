@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
+import { Icon } from "../components/Icons.jsx";
 
 export function PublicRegistrationPage() {
   const { slug } = useParams();
@@ -32,123 +33,147 @@ export function PublicRegistrationPage() {
   const isExpired = event ? new Date() > new Date(event.date) : false;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <span className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-indigo-600 text-white font-bold text-xl shadow-md shadow-indigo-200">
-          🎟️
+    <div className="min-h-screen bg-page flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 font-sans">
+      <div className="sm:mx-auto sm:w-full sm:max-w-lg text-center">
+        <span className="inline-flex items-center justify-center h-14 w-14 rounded-tile bg-indigo-tile text-white font-bold shadow-soft">
+          <Icon name="qr" className="w-6 h-6" />
         </span>
-        <h2 className="mt-4 text-center text-3xl font-extrabold text-slate-900 tracking-tight">
+        <h2 className="mt-4 text-center text-[30px] sm:text-[34px] font-bold text-primary leading-tight">
           Event Registration
         </h2>
-        <p className="mt-2 text-center text-sm text-slate-600 font-medium">
-          {isExpired ? "Registration is closed for this event." : "Register to claim your unique scan-ready QR entrance ticket"}
+        <p className="mt-2 text-center text-[15px] text-muted">
+          {isExpired
+            ? "Registration is closed for this event."
+            : "Register to claim your unique scan-ready QR entrance ticket"}
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-xl animate-scale-up">
-        <div className="bg-white shadow-md rounded-2xl border border-slate-100 relative overflow-hidden p-6 md:p-8 space-y-6">
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 to-violet-600" />
-
+      <div className="mt-7 sm:mx-auto sm:w-full sm:max-w-xl animate-scale-up">
+        <div className="ui-container overflow-hidden">
           {event && (
-            <div className="border-b border-slate-100 pb-4 text-center sm:text-left">
-              <h1 className="text-xl font-bold text-slate-950">{event.title}</h1>
-              <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wider mt-1.5 flex flex-wrap items-center justify-center sm:justify-start gap-3">
-                <span className="flex items-center gap-1">📅 {new Date(event.date).toLocaleString()}</span>
-                <span className="hidden sm:inline text-slate-300">•</span>
-                <span className="flex items-center gap-1">📍 {event.location}</span>
-              </p>
+            <div className="bg-hero-gradient border-b border-theme px-6 py-6 sm:px-8 text-center sm:text-left">
+              <h1 className="text-2xl font-bold text-heading leading-snug">
+                {event.title}
+              </h1>
+              <div className="mt-2.5 flex flex-wrap items-center justify-center sm:justify-start gap-2.5 text-xs font-semibold text-primary">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface/80 border border-theme">
+                  <Icon name="calendar" className="w-3.5 h-3.5 text-primary" />
+                  <span>{new Date(event.date).toLocaleString()}</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface/80 border border-theme">
+                  <Icon name="pin" className="w-3.5 h-3.5 text-primary" />
+                  <span>{event.location}</span>
+                </span>
+              </div>
               {event.description && (
-                <p className="text-sm text-slate-500 mt-3 border-t pt-3 border-slate-50 leading-relaxed">
+                <p className="text-sm text-body mt-3.5 pt-3.5 border-t border-theme/70 leading-relaxed">
                   {event.description}
                 </p>
               )}
             </div>
           )}
 
-          {!result ? (
-            isExpired ? (
-              <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 text-sm font-semibold text-amber-800 text-center">
-                This event has expired. Registration is no longer available.
-              </div>
-            ) : (
-              <form className="space-y-4" onSubmit={handleSubmit}>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Full Name
-                </label>
-                <input
-                  className="w-full rounded-lg border border-slate-200 p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400"
-                  placeholder="John Doe"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Email Address
-                </label>
-                <input
-                  className="w-full rounded-lg border border-slate-200 p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400"
-                  placeholder="john@example.com"
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Phone Number (Optional)
-                </label>
-                <input
-                  className="w-full rounded-lg border border-slate-200 p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400"
-                  placeholder="+1 (555) 000-0000"
-                  value={form.phoneNumber}
-                  onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })}
-                />
-              </div>
-
-              <button className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 transition-colors py-3 text-white font-semibold text-sm shadow-sm shadow-indigo-100 flex items-center justify-center gap-1.5 mt-2">
-                <span>Complete Registration & Claim Ticket</span>
-                <span className="text-xs">🎟️</span>
-              </button>
-            </form>
-            )
-          ) : (
-            <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-6 flex flex-col items-center text-center space-y-4 animate-scale-up relative">
-              <div className="absolute -left-3 top-1/2 transform -translate-y-1/2 w-6 h-6 bg-slate-50 border-r border-slate-200 rounded-full" />
-              <div className="absolute -right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 bg-slate-50 border-l border-slate-200 rounded-full" />
-              
-              <div>
-                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 font-bold text-lg">
-                  ✓
+          <div className="p-6 sm:p-8 space-y-6">
+            {!result ? (
+              isExpired ? (
+                <div className="p-5 rounded-card bg-warning-tint border border-warning/30 text-sm font-semibold text-warning text-center">
+                  This event has expired. Registration is no longer available.
                 </div>
-                <p className="mt-2.5 text-base font-bold text-slate-900">Your QR Ticket is Ready!</p>
-                <p className="text-xs text-slate-500 mt-1">A copy of this ticket has been emailed to you.</p>
-              </div>
+              ) : (
+                <form className="space-y-5" onSubmit={handleSubmit}>
+                  <div>
+                    <label className="ui-label">Full Name</label>
+                    <input
+                      className="ui-input"
+                      placeholder="John Doe"
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      required
+                    />
+                  </div>
 
-              <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                <img className="max-w-[220px] aspect-square" src={result.qrCodeDataUrl} alt="QR Ticket" />
-              </div>
+                  <div>
+                    <label className="ui-label">Email Address</label>
+                    <input
+                      className="ui-input"
+                      placeholder="john@example.com"
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      required
+                    />
+                  </div>
 
-              <div className="text-xs font-mono text-slate-600 bg-white px-3 py-1.5 rounded border border-slate-200 shadow-sm select-all">
-                Ticket ID: <span className="font-semibold text-slate-900">{result.ticketUuid}</span>
-              </div>
-            </div>
-          )}
+                  <div>
+                    <label className="ui-label">Phone Number (Optional)</label>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary-tint border border-theme text-xs font-semibold text-primary pointer-events-none">
+                        <Icon name="phone" className="w-3.5 h-3.5" />
+                        <span>Tel</span>
+                      </span>
+                      <input
+                        className="ui-input pl-18"
+                        style={{ paddingLeft: "4.5rem" }}
+                        placeholder="+1 (555) 000-0000"
+                        value={form.phoneNumber}
+                        onChange={(e) =>
+                          setForm({ ...form, phoneNumber: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
 
-          {error && (
-            <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-xs font-semibold text-red-700 flex items-center gap-1.5">
-              <span>⚠️</span>
-              <span>{error}</span>
-            </div>
-          )}
+                  <div className="pt-1">
+                    <button type="submit" className="ui-btn-primary w-full">
+                      <span>Complete Registration &amp; Claim Ticket</span>
+                      <Icon name="qr" className="w-4 h-4" />
+                    </button>
+                  </div>
+                </form>
+              )
+            ) : (
+              <div className="rounded-card border-2 border-dashed border-pastel-lavender bg-primary-tint p-6 sm:p-7 flex flex-col items-center text-center space-y-5 animate-scale-up relative">
+                <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-surface border-r border-pastel-lavender rounded-full" />
+                <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-surface border-l border-pastel-lavender rounded-full" />
+
+                <div>
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success-tint border border-success/30 text-success">
+                    <Icon name="check" className="w-6 h-6" />
+                  </div>
+                  <p className="mt-3 text-lg font-bold text-heading">
+                    Your QR Ticket is Ready!
+                  </p>
+                  <p className="text-sm text-muted mt-1">
+                    A copy of this ticket has been emailed to you.
+                  </p>
+                </div>
+
+                <div className="bg-surface p-4 rounded-card border border-theme shadow-subtle">
+                  <img
+                    className="max-w-[220px] aspect-square"
+                    src={result.qrCodeDataUrl}
+                    alt="QR Ticket"
+                  />
+                </div>
+
+                <div className="text-xs font-mono text-body bg-surface px-4 py-2 rounded-full border border-theme shadow-subtle select-all">
+                  Ticket ID:{" "}
+                  <span className="font-bold text-primary">
+                    {result.ticketUuid}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div className="p-3.5 rounded-control bg-danger-tint border border-danger/25 text-sm font-semibold text-danger flex items-center gap-2">
+                <Icon name="alert" className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
-

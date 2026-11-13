@@ -2,81 +2,232 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+:root {
+  /* Core Brand & Surface Tokens */
+  --color-primary: #34206F;
+  --color-primary-dark: #2A1860;
+  --color-primary-soft: #EDE9F6;
+  --color-primary-tint: #F5F2FB;
+  --color-accent-violet: #A89BD0;
+  --color-page-bg: #FAF9FD;
+  --color-surface: #FFFFFF;
+
+  /* Pastel Category Accents */
+  --color-pastel-lavender: #D9CCF5;
+  --color-pastel-blue: #F3F4FC;
+  --color-pastel-peach: #FDE6D3;
+  --color-pastel-mint: #E5F3EE;
+
+  /* Typography Colors */
+  --color-text-heading: #2A1860;
+  --color-text-body: #4A4A5C;
+  --color-text-muted: #8A8A9C;
+
+  /* Borders & Semantic Feedback */
+  --color-border: #E6E3EE;
+  --color-danger: #D32F2F;
+  --color-danger-tint: #FDF1F1;
+  --color-success: #22C55E;
+  --color-success-tint: #ECFDF5;
+  --color-warning: #D97706;
+  --color-warning-tint: #FFFBEB;
+  --color-badge-dark: rgba(40, 30, 60, 0.62);
+
+  /* Gradients */
+  --gradient-hero: linear-gradient(135deg, #EDE6FA 0%, #F7E9F8 50%, #E8EEFD 100%);
+  --gradient-mint-fade: linear-gradient(180deg, #FFFFFF 0%, #E5F3EE 100%);
+  --gradient-indigo-tile: linear-gradient(135deg, #34206F 0%, #5839B0 100%);
 }
 
-/* Professional QR Scanner Overrides */
+@layer base {
+  html {
+    background-color: var(--color-page-bg);
+    color: var(--color-text-body);
+    font-family: "Lexend", "Outfit", "Poppins", system-ui, -apple-system, sans-serif;
+    letter-spacing: 0.012em;
+  }
+
+  body {
+    background-color: var(--color-page-bg);
+    color: var(--color-text-body);
+    font-family: "Lexend", "Outfit", "Poppins", system-ui, -apple-system, sans-serif;
+    letter-spacing: 0.012em;
+    line-height: 1.5;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--color-text-heading);
+    letter-spacing: 0.01em;
+  }
+}
+
+@layer components {
+  /* Cards & Containers */
+  .ui-card {
+    @apply bg-surface rounded-card border border-theme shadow-soft;
+  }
+
+  .ui-container {
+    @apply bg-surface rounded-container border border-theme shadow-soft;
+  }
+
+  .ui-hero-card {
+    background: var(--gradient-hero);
+    @apply rounded-container border border-theme shadow-soft;
+  }
+
+  /* Form Controls (52-56px height, 14px radius, 1px border) */
+  .ui-label {
+    @apply block text-[15px] sm:text-base font-bold text-heading mb-2;
+  }
+
+  .ui-label-sm {
+    @apply block text-sm font-semibold text-heading mb-1.5;
+  }
+
+  .ui-input {
+    @apply w-full min-h-[52px] rounded-control bg-surface border border-theme px-4 py-3 text-[15px] font-medium text-heading placeholder:text-muted transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:bg-primary-tint disabled:text-muted disabled:cursor-not-allowed read-only:bg-primary-tint read-only:text-muted;
+  }
+
+  .ui-input-compact {
+    @apply w-full min-h-[46px] rounded-control bg-surface border border-theme px-3.5 py-2.5 text-sm font-medium text-heading placeholder:text-muted transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:bg-primary-tint disabled:text-muted;
+  }
+
+  .ui-select {
+    @apply w-full min-h-[52px] rounded-control bg-surface border border-theme px-4 py-3 text-[15px] font-medium text-heading transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:bg-primary-tint disabled:text-muted cursor-pointer;
+  }
+
+  .ui-select-compact {
+    @apply min-h-[44px] rounded-control bg-surface border border-theme px-3.5 py-2 text-sm font-semibold text-heading transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 cursor-pointer;
+  }
+
+  .ui-textarea {
+    @apply w-full rounded-control bg-surface border border-theme px-4 py-3 text-[15px] font-normal text-heading placeholder:text-muted transition-all focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15;
+  }
+
+  /* Buttons (48-56px height, 14px radius; touch targets >= 44px) */
+  .ui-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 min-h-[50px] px-5 py-3 rounded-control bg-primary hover:bg-primary-dark text-white font-semibold text-[15px] transition-all shadow-subtle cursor-pointer active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:bg-accent-violet disabled:text-white/95 disabled:opacity-80 disabled:cursor-not-allowed disabled:active:scale-100;
+  }
+
+  .ui-btn-primary-sm {
+    @apply inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 rounded-control bg-primary hover:bg-primary-dark text-white font-semibold text-sm transition-all shadow-subtle cursor-pointer active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:bg-accent-violet disabled:text-white/95 disabled:opacity-80 disabled:cursor-not-allowed;
+  }
+
+  .ui-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 min-h-[50px] px-5 py-3 rounded-control bg-surface hover:bg-primary-tint text-heading font-semibold text-[15px] border border-theme hover:border-primary/30 transition-all cursor-pointer active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .ui-btn-secondary-sm {
+    @apply inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 rounded-control bg-surface hover:bg-primary-tint text-heading font-semibold text-sm border border-theme hover:border-primary/30 transition-all cursor-pointer active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .ui-btn-pill {
+    @apply inline-flex items-center justify-center gap-1.5 min-h-[40px] px-4 py-1.5 rounded-full bg-primary hover:bg-primary-dark text-white font-semibold text-xs sm:text-sm transition-all cursor-pointer active:scale-[0.98] disabled:bg-accent-violet disabled:opacity-80;
+  }
+
+  .ui-btn-danger {
+    @apply inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 rounded-control bg-danger-tint hover:bg-danger/15 text-danger font-semibold text-sm border border-danger/25 transition-all cursor-pointer;
+  }
+
+  /* Horizontally Scrollable Tab Bar */
+  .ui-tabs-bar {
+    @apply flex items-center gap-2 overflow-x-auto border-b border-theme pb-0 scrollbar-none;
+  }
+
+  .ui-tab {
+    @apply relative inline-flex items-center gap-2 min-h-[46px] px-4 py-2.5 rounded-t-2xl text-sm sm:text-[15px] font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0;
+  }
+
+  .ui-tab-active {
+    @apply bg-primary-soft text-primary font-bold after:content-[''] after:absolute after:left-2 after:right-2 after:bottom-0 after:h-[2px] after:bg-primary after:rounded-full;
+  }
+
+  .ui-tab-inactive {
+    @apply text-muted hover:text-heading hover:bg-primary-tint/70;
+  }
+
+  .ui-tab-danger {
+    @apply text-danger hover:bg-danger-tint;
+  }
+
+  /* Category Translucent Badges & Soft Chips */
+  .ui-badge-overlay {
+    background-color: var(--color-badge-dark);
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-[0.08em] text-white backdrop-blur-xs;
+  }
+
+  .ui-chip {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border;
+  }
+}
+
+/* QR Scanner Overrides Aligned to Deep Indigo & Lavender Tokens */
 #qr-reader {
   border: none !important;
-  color: #e2e8f0 !important; /* slate-200 */
+  color: #EDE9F6 !important;
   font-family: inherit !important;
 }
 
-#qr-reader h1, 
-#qr-reader h2, 
-#qr-reader h3, 
-#qr-reader span, 
-#qr-reader div, 
+#qr-reader h1,
+#qr-reader h2,
+#qr-reader h3,
+#qr-reader span,
+#qr-reader div,
 #qr-reader p,
 #qr-reader b {
-  color: #e2e8f0 !important;
+  color: #EDE9F6 !important;
 }
 
-/* Turn boring standard buttons into modern Indigo Pill actions */
 #qr-reader button {
-  background-color: #4f46e5 !important; /* Indigo-600 */
-  color: #ffffff !important;
-  padding: 0.6rem 1.2rem !important;
-  border-radius: 0.5rem !important;
-  font-weight: 700 !important;
-  font-size: 0.75rem !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
+  background-color: var(--color-primary) !important;
+  color: #FFFFFF !important;
+  padding: 0.7rem 1.35rem !important;
+  min-height: 44px !important;
+  border-radius: 9999px !important;
+  font-weight: 600 !important;
+  font-size: 0.8125rem !important;
+  letter-spacing: 0.02em !important;
   border: none !important;
   cursor: pointer !important;
-  box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.1), 0 2px 4px -2px rgba(79, 70, 229, 0.1) !important;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 0 8px 24px rgba(52, 32, 111, 0.22) !important;
+  transition: all 0.2s ease !important;
 }
 
 #qr-reader button:hover {
-  background-color: #4338ca !important; /* Indigo-700 */
+  background-color: var(--color-primary-dark) !important;
   transform: translateY(-1px) !important;
-  box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.2) !important;
 }
 
-/* Style the Camera selection dropdowns */
 #qr-reader select {
-  background-color: #1e293b !important; /* Slate-800 */
-  border: 1px solid #334155 !important; /* Slate-700 */
-  color: #f1f5f9 !important;
-  border-radius: 0.5rem !important;
-  padding: 0.5rem 1rem !important;
-  font-size: 0.75rem !important;
+  background-color: #2A1860 !important;
+  border: 1px solid rgba(217, 204, 245, 0.3) !important;
+  color: #FAF9FD !important;
+  border-radius: 14px !important;
+  padding: 0.6rem 1rem !important;
+  min-height: 44px !important;
+  font-size: 0.8125rem !important;
   font-weight: 600 !important;
   outline: none !important;
   cursor: pointer !important;
   margin: 0.5rem 0 !important;
-  transition: border-color 0.15s ease !important;
 }
 
 #qr-reader select:focus {
-  border-color: #6366f1 !important; /* Indigo-500 */
+  border-color: var(--color-pastel-lavender) !important;
 }
 
-/* Hide the "Powered by HTML5-QRCode" and "Report Issues" remarks entirely */
 #qr-reader a {
   display: none !important;
 }
 
-/* Stylize the scanner helper image icon */
 #qr-reader img {
   filter: invert(1) brightness(1.5) !important;
-  opacity: 0.5 !important;
+  opacity: 0.6 !important;
   max-width: 80px !important;
 }
 
-/* App Shell Mobile Animations */
+/* Smooth Shell & Modal Animations */
 @keyframes slideUp {
   from {
     transform: translateY(100%);
@@ -88,10 +239,19 @@ body {
   }
 }
 
+@keyframes slideRight {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: scale(0.98);
+    transform: scale(0.985);
   }
   to {
     opacity: 1;
@@ -100,14 +260,22 @@ body {
 }
 
 .animate-slide-up {
-  animation: slideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideUp 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-right {
+  animation: slideRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-fade-in {
   animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Scrollbar hidden utility */
+.animate-scale-up {
+  animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Scrollbar Hidden Utility */
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
@@ -115,4 +283,3 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
-

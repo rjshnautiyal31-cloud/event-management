@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api, API_BASE } from "../api.js";
 import { AppShell } from "../components/Navbar.jsx";
 import { Icon } from "../components/Icons.jsx";
@@ -6,6 +6,7 @@ import { EventSwitcherModal } from "../components/EventSwitcherModal.jsx";
 
 export function ProjectStudioPage({ auth, token: propToken }) {
   const token = auth?.token || propToken;
+  const castSectionRef = useRef(null);
   const [events, setEvents] = useState([]);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [projects, setProjects] = useState([]);
@@ -147,12 +148,14 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     loadLanguages();
   }, []);
 
-  // Global keyboard shortcut ⌘K / Ctrl+K for Event Switcher
+  // Global keyboard shortcuts: ⌘K / Ctrl+K for Event Switcher, Escape for Create Story Modal
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setSwitcherModalOpen((prev) => !prev);
+      } else if (e.key === "Escape") {
+        setShowCreateModal(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -942,6 +945,230 @@ export function ProjectStudioPage({ auth, token: propToken }) {
         }}
       />
 
+      {/* Modal: New Event Story Project (Anchored to Viewport Outside <main>) */}
+      {showCreateModal && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowCreateModal(false);
+          }}
+          className="fixed inset-0 z-50 bg-heading/45 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-story-modal-title"
+        >
+          <div className="bg-surface rounded-container max-w-lg w-full shadow-soft flex flex-col max-h-[90vh] my-auto overflow-hidden border border-theme animate-scale-up">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-theme shrink-0 bg-hero-gradient">
+              <h3
+                id="create-story-modal-title"
+                className="text-lg font-bold text-primary truncate pr-2"
+              >
+                Create AI Story for "{selectedEvent?.title}"
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="h-10 w-10 rounded-tile bg-surface/85 hover:bg-surface border border-theme text-primary flex items-center justify-center transition-colors shrink-0 cursor-pointer"
+                aria-label="Close"
+              >
+                <Icon name="close" className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleCreateProject}
+              className="flex flex-col flex-1 min-h-0 overflow-hidden"
+            >
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+                <div>
+                  <label className="ui-label-sm">Story Title</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Highlights & Key Moments"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    className="ui-input"
+                  />
+                </div>
+
+                <div>
+                  <label className="ui-label-sm">
+                    Language for Song &amp; Video
+                  </label>
+                  <select
+                    value={newLanguage}
+                    onChange={(e) => setNewLanguage(e.target.value)}
+                    className="ui-select"
+                  >
+                    {languages.map((l) => (
+                      <option key={l.code} value={l.code}>
+                        {l.flag} {l.name} ({l.nativeName})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted mt-1">
+                    Lyrics, singing vocals, and synchronized subtitles will be generated in this language.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="ui-label-sm">
+                    Story Narrative / Event Memories
+                  </label>
+                  <textarea
+                    required
+                    rows={4}
+                    placeholder="Type or paste the story, speech, or summary of this event..."
+                    value={newStory}
+                    onChange={(e) => setNewTitleStory(e.target.value)}
+                    className="ui-textarea"
+                  />
+                </div>
+
+                {/* Cast & Characters (Visual Consistency) */}
+                <div className="bg-primary-tint border border-theme p-4 rounded-card space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-bold text-heading flex items-center gap-1.5">
+                        <Icon
+                          name="users"
+                          className="w-4 h-4 text-primary"
+                        />
+                        <span>Cast &amp; Characters (Optional)</span>
+                      </span>
+                      <p className="text-xs text-muted mt-0.5">
+                        Helps AI render consistent faces &amp; attire across all video scenes.
+                      </p>
+                    </div>
+                    {newCharacters.length > 0 && (
+                      <span className="ui-chip bg-primary-soft border-pastel-lavender text-primary">
+                        {newCharacters.length} added
+                      </span>
+                    )}
+                  </div>
+
+                  {newCharacters.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {newCharacters.map((c, i) => (
+                        <span
+                          key={i}
+                          className="inline-flex items-center gap-1.5 bg-surface border border-theme text-heading text-xs font-semibold px-3 py-1 rounded-full"
+                        >
+                          <span>{c.name}</span>
+                          {c.role && (
+                            <span className="text-muted text-[11px]">
+                              ({c.role})
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setNewCharacters((prev) =>
+                                prev.filter((_, idx) => idx !== i)
+                              )
+                            }
+                            className="text-muted hover:text-danger ml-0.5 font-bold cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input
+                      type="text"
+                      placeholder="Name (e.g. Rahul)"
+                      value={newCharName}
+                      onChange={(e) => setNewCharName(e.target.value)}
+                      className="ui-input-compact text-xs"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Role (e.g. Groom)"
+                      value={newCharRole}
+                      onChange={(e) => setNewCharRole(e.target.value)}
+                      className="ui-input-compact text-xs"
+                    />
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        placeholder="Appearance / Attire"
+                        value={newCharDesc}
+                        onChange={(e) => setNewCharDesc(e.target.value)}
+                        className="ui-input-compact text-xs flex-1 min-w-0"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!newCharName.trim()) return;
+                          setNewCharacters((prev) => [
+                            ...prev,
+                            {
+                              name: newCharName.trim(),
+                              role: newCharRole.trim(),
+                              visualDescription: newCharDesc.trim()
+                            }
+                          ]);
+                          setNewCharName("");
+                          setNewCharRole("");
+                          setNewCharDesc("");
+                        }}
+                        className="ui-btn-secondary-sm px-3 text-xs shrink-0"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Director Guidelines & Must-Have Scenes */}
+                <div>
+                  <label className="ui-label-sm flex items-center gap-1.5">
+                    <Icon name="studio" className="w-4 h-4 text-primary" />
+                    <span>
+                      Director Guidelines &amp; Must-Have Scenes (Optional)
+                    </span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. Include stage garland exchange, grand cake cutting, and family toast..."
+                    value={newDirectorGuidelines}
+                    onChange={(e) =>
+                      setNewDirectorGuidelines(e.target.value)
+                    }
+                    className="ui-textarea text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Modal Sticky Footer */}
+              <div className="flex justify-end gap-2.5 px-6 py-4 border-t border-theme shrink-0 bg-primary-tint/60">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="ui-btn-secondary-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="ui-btn-primary-sm"
+                >
+                  <Icon name="sparkles" className="w-4 h-4" />
+                  <span>
+                    {loading ? "Creating..." : "Create Story Project"}
+                  </span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-7 sm:py-9 pb-20 space-y-8 animate-fade-in">
         {/* Centered Bold Two-Line Indigo Heading + Event Context Bar */}
         <div className="text-center space-y-4 max-w-2xl mx-auto">
@@ -960,39 +1187,38 @@ export function ProjectStudioPage({ auth, token: propToken }) {
             Generate AI lyrics, studio music tracks, synchronized storyboards, and MP4 videos for your events.
           </p>
 
-          {/* Event Context Pill Bar */}
-          <div className="inline-flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 bg-surface p-2 rounded-card sm:rounded-full border border-theme shadow-subtle w-full sm:w-auto max-w-xl mx-auto">
-            <div className="flex items-center gap-2 pl-3 pr-1 flex-1 min-w-0">
-              <Icon
-                name="calendar"
-                className="w-4 h-4 text-primary shrink-0"
-              />
-              <span className="text-xs font-bold text-muted uppercase tracking-wider shrink-0">
-                Event:
-              </span>
-              <select
-                value={selectedEventId}
-                onChange={(e) => setSelectedEventId(e.target.value)}
-                className="bg-transparent text-heading text-sm font-bold py-1.5 pr-2 focus:outline-none flex-1 min-w-0 truncate cursor-pointer"
-                aria-label="Select Event for Studio"
-              >
-                {events.map((ev) => (
-                  <option key={ev._id} value={ev._id}>
-                    {ev.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowCreateModal(true)}
-              disabled={!selectedEventId}
-              className="ui-btn-pill min-h-[42px] px-5 shrink-0"
+          {/* Event Context Pill Bar (Event Selection Only) */}
+          <div className="inline-flex items-center gap-2.5 bg-surface px-4 py-2 rounded-full border border-theme shadow-subtle w-full sm:w-auto max-w-xl mx-auto">
+            <Icon
+              name="calendar"
+              className="w-4 h-4 text-primary shrink-0"
+            />
+            <span className="text-xs font-bold text-muted uppercase tracking-wider shrink-0">
+              Event:
+            </span>
+            <select
+              value={selectedEventId}
+              onChange={(e) => setSelectedEventId(e.target.value)}
+              className="bg-transparent text-heading text-sm font-bold py-1.5 pr-2 focus:outline-none flex-1 min-w-0 truncate cursor-pointer"
+              aria-label="Select Event for Studio"
             >
-              <Icon name="plus" className="w-4 h-4" />
-              <span>New Story</span>
-            </button>
+              {events.map((ev) => (
+                <option key={ev._id} value={ev._id}>
+                  {ev.title}
+                </option>
+              ))}
+            </select>
+            {events.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setSwitcherModalOpen(true)}
+                className="hidden sm:inline-flex items-center gap-1 px-3 py-1 rounded-full bg-primary-tint hover:bg-primary-soft border border-theme text-xs font-bold text-primary transition-colors shrink-0 cursor-pointer"
+                title="Quick Switch Event (⌘K)"
+              >
+                <span>Switch</span>
+                <span className="text-[11px] text-muted">⌘K</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1034,30 +1260,30 @@ export function ProjectStudioPage({ auth, token: propToken }) {
           </div>
         )}
 
-        {/* Story Projects Selector Strip */}
-        <div className="ui-card p-5 space-y-3.5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-bold text-heading">
-                {selectedEvent ? selectedEvent.title : "Event"} Stories (
-                {projects.length})
-              </h2>
-              <p className="text-xs text-muted">
-                Multiple stories and rendered videos per event are supported.
-              </p>
+        {/* Story Projects Selector Strip (Shown when stories exist; houses the single + New Story CTA) */}
+        {projects.length > 0 && (
+          <div className="ui-card p-5 space-y-3.5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-heading">
+                  {selectedEvent ? selectedEvent.title : "Event"} Stories (
+                  {projects.length})
+                </h2>
+                <p className="text-xs text-muted">
+                  Multiple stories and rendered videos per event are supported.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(true)}
+                disabled={!selectedEventId}
+                className="ui-btn-pill min-h-[42px] px-5 shrink-0"
+              >
+                <Icon name="plus" className="w-4 h-4" />
+                <span>New Story</span>
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowCreateModal(true)}
-              disabled={!selectedEventId}
-              className="ui-btn-secondary-sm text-primary shrink-0"
-            >
-              <Icon name="plus" className="w-4 h-4" />
-              <span>Add Story</span>
-            </button>
-          </div>
 
-          {projects.length > 0 ? (
             <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none">
               {projects.map((proj) => {
                 const isSelected = activeProject?._id === proj._id;
@@ -1096,13 +1322,8 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                 );
               })}
             </div>
-          ) : (
-            <div className="text-center py-6 bg-primary-tint/60 rounded-card border border-dashed border-pastel-lavender text-muted text-sm">
-              No stories created for this event yet. Click{" "}
-              <strong className="text-primary">"+ New Story"</strong> to start your first project.
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Studio Workspace */}
         {activeProject ? (
@@ -1144,10 +1365,10 @@ export function ProjectStudioPage({ auth, token: propToken }) {
               <div className="space-y-7">
                 {/* Big Rounded Prompt Card (28px radius, 1px border, soft shadow) */}
                 <div className="ui-container p-6 sm:p-8 space-y-6">
-                  {/* Top Row: Tilted Dashed-Border "Add" Tiles + Project Title Badge */}
+                  {/* Top Row: Tilted Dashed-Border Contextual "Add" Tiles + Project Title Badge */}
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-theme">
                     <div className="flex flex-wrap items-center gap-3.5 pt-1">
-                      {/* Tilted Mint Add Tile */}
+                      {/* Tilted Mint Add Tile: Upload Event Photos for Current Story */}
                       <button
                         type="button"
                         onClick={() => setActiveTab("media")}
@@ -1164,16 +1385,26 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                         </span>
                       </button>
 
-                      {/* Tilted Lavender Add Tile */}
+                      {/* Tilted Lavender Add Tile: Jump to Cast & Director Guidelines for Current Story */}
                       <button
                         type="button"
-                        onClick={() => setShowCreateModal(true)}
+                        onClick={() =>
+                          castSectionRef.current?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "start"
+                          })
+                        }
                         className="inline-flex items-center gap-2.5 px-4 py-3 rounded-[18px] bg-primary-soft border-2 border-dashed border-primary/30 text-primary text-xs sm:text-sm font-bold rotate-2 hover:rotate-0 transition-transform cursor-pointer shadow-subtle"
                       >
                         <span className="h-7 w-7 rounded-full bg-surface text-primary flex items-center justify-center shadow-2xs">
-                          <Icon name="plus" className="w-4 h-4" />
+                          <Icon name="users" className="w-4 h-4" />
                         </span>
-                        <span>New Story</span>
+                        <span>
+                          Cast &amp; Guidelines{" "}
+                          {projectCharacters.length > 0
+                            ? `(${projectCharacters.length})`
+                            : ""}
+                        </span>
                       </button>
                     </div>
 
@@ -1334,7 +1565,10 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                 )}
 
                 {/* Cast & Characters (Visual Consistency Anchor) */}
-                <div className="ui-card p-6 sm:p-7 space-y-5">
+                <div
+                  ref={castSectionRef}
+                  className="ui-card p-6 sm:p-7 space-y-5 scroll-mt-20"
+                >
                   <div>
                     <div className="flex items-center gap-2.5 flex-wrap">
                       <h4 className="font-bold text-heading text-lg flex items-center gap-2">
@@ -2895,30 +3129,20 @@ export function ProjectStudioPage({ auth, token: propToken }) {
         ) : (
           /* Empty State Prompt Card when no Story Project exists yet */
           <div className="ui-container p-8 sm:p-12 text-center space-y-5">
-            <div className="flex items-center justify-center gap-4 pb-2">
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(true)}
-                disabled={!selectedEventId}
-                className="inline-flex items-center gap-2 px-4 py-3 rounded-[18px] bg-pastel-mint border-2 border-dashed border-primary/25 text-heading text-xs sm:text-sm font-bold -rotate-2 hover:rotate-0 transition-transform cursor-pointer"
-              >
-                <Icon name="plus" className="w-4 h-4 text-primary" />
-                <span>Add Story Narrative</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCreateModal(true)}
-                disabled={!selectedEventId}
-                className="inline-flex items-center gap-2 px-4 py-3 rounded-[18px] bg-primary-soft border-2 border-dashed border-primary/30 text-primary text-xs sm:text-sm font-bold rotate-2 hover:rotate-0 transition-transform cursor-pointer"
-              >
-                <Icon name="plus" className="w-4 h-4 text-primary" />
-                <span>Add Cast &amp; Directives</span>
-              </button>
+            <div className="flex flex-wrap items-center justify-center gap-3.5 pb-2">
+              <span className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[18px] bg-pastel-mint border-2 border-dashed border-primary/20 text-heading text-xs sm:text-sm font-bold -rotate-2">
+                <Icon name="music" className="w-4 h-4 text-primary" />
+                <span>AI Lyrics &amp; Vocals</span>
+              </span>
+              <span className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[18px] bg-primary-soft border-2 border-dashed border-primary/25 text-primary text-xs sm:text-sm font-bold rotate-2">
+                <Icon name="users" className="w-4 h-4 text-primary" />
+                <span>Cast &amp; Scene Directives</span>
+              </span>
             </div>
 
             <div className="max-w-md mx-auto space-y-2">
               <h3 className="text-xl font-bold text-heading">
-                Select or create a story project for this event
+                No stories created for this event yet
               </h3>
               <p className="text-sm text-muted">
                 Turn event memories, speeches, or schedules into a studio vocal song and synchronized MP4 cinema highlight.
@@ -2934,224 +3158,6 @@ export function ProjectStudioPage({ auth, token: propToken }) {
               <Icon name="sparkles" className="w-5 h-5" />
               <span>Create First Story Project</span>
             </button>
-          </div>
-        )}
-
-        {/* Modal: New Event Story Project */}
-        {showCreateModal && (
-          <div
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setShowCreateModal(false);
-            }}
-            className="fixed inset-0 bg-heading/45 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto"
-          >
-            <div className="bg-surface rounded-container max-w-lg w-full shadow-soft flex flex-col max-h-[90vh] my-auto overflow-hidden border border-theme animate-scale-up">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-theme shrink-0 bg-hero-gradient">
-                <h3 className="text-lg font-bold text-primary truncate pr-2">
-                  Create AI Story for "{selectedEvent?.title}"
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="h-10 w-10 rounded-tile bg-surface/85 hover:bg-surface border border-theme text-primary flex items-center justify-center transition-colors shrink-0 cursor-pointer"
-                  aria-label="Close"
-                >
-                  <Icon name="close" className="w-4 h-4" />
-                </button>
-              </div>
-
-              <form
-                onSubmit={handleCreateProject}
-                className="flex flex-col flex-1 min-h-0 overflow-hidden"
-              >
-                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-                  <div>
-                    <label className="ui-label-sm">Story Title</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Highlights & Key Moments"
-                      value={newTitle}
-                      onChange={(e) => setNewTitle(e.target.value)}
-                      className="ui-input"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="ui-label-sm">
-                      Language for Song &amp; Video
-                    </label>
-                    <select
-                      value={newLanguage}
-                      onChange={(e) => setNewLanguage(e.target.value)}
-                      className="ui-select"
-                    >
-                      {languages.map((l) => (
-                        <option key={l.code} value={l.code}>
-                          {l.flag} {l.name} ({l.nativeName})
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-muted mt-1">
-                      Lyrics, singing vocals, and synchronized subtitles will be generated in this language.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="ui-label-sm">
-                      Story Narrative / Event Memories
-                    </label>
-                    <textarea
-                      required
-                      rows={4}
-                      placeholder="Type or paste the story, speech, or summary of this event..."
-                      value={newStory}
-                      onChange={(e) => setNewTitleStory(e.target.value)}
-                      className="ui-textarea"
-                    />
-                  </div>
-
-                  {/* Cast & Characters (Visual Consistency) */}
-                  <div className="bg-primary-tint border border-theme p-4 rounded-card space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-sm font-bold text-heading flex items-center gap-1.5">
-                          <Icon
-                            name="users"
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span>Cast &amp; Characters (Optional)</span>
-                        </span>
-                        <p className="text-xs text-muted mt-0.5">
-                          Helps AI render consistent faces &amp; attire across all video scenes.
-                        </p>
-                      </div>
-                      {newCharacters.length > 0 && (
-                        <span className="ui-chip bg-primary-soft border-pastel-lavender text-primary">
-                          {newCharacters.length} added
-                        </span>
-                      )}
-                    </div>
-
-                    {newCharacters.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {newCharacters.map((c, i) => (
-                          <span
-                            key={i}
-                            className="inline-flex items-center gap-1.5 bg-surface border border-theme text-heading text-xs font-semibold px-3 py-1 rounded-full"
-                          >
-                            <span>{c.name}</span>
-                            {c.role && (
-                              <span className="text-muted text-[11px]">
-                                ({c.role})
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setNewCharacters((prev) =>
-                                  prev.filter((_, idx) => idx !== i)
-                                )
-                              }
-                              className="text-muted hover:text-danger ml-0.5 font-bold cursor-pointer"
-                            >
-                              ✕
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <input
-                        type="text"
-                        placeholder="Name (e.g. Rahul)"
-                        value={newCharName}
-                        onChange={(e) => setNewCharName(e.target.value)}
-                        className="ui-input-compact text-xs"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Role (e.g. Groom)"
-                        value={newCharRole}
-                        onChange={(e) => setNewCharRole(e.target.value)}
-                        className="ui-input-compact text-xs"
-                      />
-                      <div className="flex gap-1.5">
-                        <input
-                          type="text"
-                          placeholder="Appearance / Attire"
-                          value={newCharDesc}
-                          onChange={(e) => setNewCharDesc(e.target.value)}
-                          className="ui-input-compact text-xs flex-1 min-w-0"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!newCharName.trim()) return;
-                            setNewCharacters((prev) => [
-                              ...prev,
-                              {
-                                name: newCharName.trim(),
-                                role: newCharRole.trim(),
-                                visualDescription: newCharDesc.trim()
-                              }
-                            ]);
-                            setNewCharName("");
-                            setNewCharRole("");
-                            setNewCharDesc("");
-                          }}
-                          className="ui-btn-secondary-sm px-3 text-xs shrink-0"
-                        >
-                          + Add
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Director Guidelines & Must-Have Scenes */}
-                  <div>
-                    <label className="ui-label-sm flex items-center gap-1.5">
-                      <Icon name="studio" className="w-4 h-4 text-primary" />
-                      <span>
-                        Director Guidelines &amp; Must-Have Scenes (Optional)
-                      </span>
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder="e.g. Include stage garland exchange, grand cake cutting, and family toast..."
-                      value={newDirectorGuidelines}
-                      onChange={(e) =>
-                        setNewDirectorGuidelines(e.target.value)
-                      }
-                      className="ui-textarea text-sm"
-                    />
-                  </div>
-                </div>
-
-                {/* Modal Sticky Footer */}
-                <div className="flex justify-end gap-2.5 px-6 py-4 border-t border-theme shrink-0 bg-primary-tint/60">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateModal(false)}
-                    className="ui-btn-secondary-sm"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="ui-btn-primary-sm"
-                  >
-                    <Icon name="sparkles" className="w-4 h-4" />
-                    <span>
-                      {loading ? "Creating..." : "Create Story Project"}
-                    </span>
-                  </button>
-                </div>
-              </form>
-            </div>
           </div>
         )}
       </main>

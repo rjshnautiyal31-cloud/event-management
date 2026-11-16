@@ -41,13 +41,13 @@ A full-stack, enterprise-grade monorepo for multi-tenant company event managemen
 
 ### 2. Core Event Management & Instant QR Passes
 - **📲 Downloadable Event Registration QR Code Link**:
-  - Every event automatically generates a public registration URL (`/#/register/:slug`) and a high-resolution (360x360) `#0A2D59` branded QR code.
+  - Every event automatically generates a public registration URL (`/#/register/:slug`) and a high-resolution (360x360) `#34206F` deep indigo branded QR code.
   - 1-tap **"Download Registration QR"** button exports a ready-to-print `.png` image for posters, standees, flyers, digital banners, or social media promotion.
   - Guests scan the QR code with any smartphone camera to open the instant registration form directly.
 - **🗑️ Cascading Event Deletion**:
   - Secure event deletion with automatic cascade cleanup of associated gates, attendees, check-in logs, and AI story projects.
-- **`#0A2D59` Deep Navy Brand Identity & Universal Top Navigation**:
-  - Sticky top header featuring a **Hamburger (`☰`) Slide-Over Drawer Navigation Panel** displaying current tenant company context.
+- **`#34206F` Deep Indigo & Lavender SaaS Design System & Pill Sidebar Shell**:
+  - Fixed `280px` left sidebar on desktop and sticky white top bar with a **Hamburger (`☰`) Slide-In Drawer** on mobile, displaying current tenant workspace context, pill-style navigation, Live Studio status card, and quick bottom actions.
 - **High-Volume Event Switcher Command Palette (`⌘K` / `Ctrl+K`)**:
   - Real-time instant search input filtering by **title**, **venue location**, or **date**.
   - Categorized tabs: `⚡ Active & Upcoming`, `🕒 Past Events`, and `⭐ Pinned / Favorites` (pinned events persist in `localStorage`).

@@ -8,7 +8,7 @@ Welcome to the **Event QR Check-In System**! This application is designed to hel
 1. [Customer Company Registration & Owner Account Setup](#1-customer-company-registration--owner-account-setup)
 2. [First-Time Super Admin Setup (Platform Oversight)](#2-first-time-super-admin-setup-platform-oversight)
 3. [Navigation & Multi-Tenant Workspace](#3-navigation--multi-tenant-workspace)
-   - [Universal #0A2D59 Navigation Bar](#universal-0a2d59-navigation-bar-navbar)
+   - [Universal AppShell Sidebar & Mobile Drawer](#universal-appshell-sidebar--mobile-drawer)
    - [Command Switcher Palette (⌘K / Ctrl+K)](#command-switcher-palette-k--ctrlk)
    - [Events Directory Workspace Tab](#events-directory-workspace-tab)
    - [Super Admin Multi-Tenant Organization Switcher & Scoped View](#super-admin-multi-tenant-organization-switcher--scoped-view)
@@ -43,7 +43,7 @@ The platform provides a streamlined self-service onboarding flow for new custome
 5. **Immediate Onboarding**:
    - The platform creates your dedicated `Company` record and assigns you the **`owner`** role.
    - Your session is automatically authenticated with a tenant-scoped JWT token and redirected to the **Dashboard** (`/#/dashboard`).
-   - Your company name is prominently displayed inside the top navigation header and slide-over menu drawer.
+   - Your company name is prominently displayed inside the workspace selector card in the left sidebar (desktop) and slide-in navigation drawer (mobile).
 
 ---
 
@@ -67,15 +67,14 @@ For infrastructure operators or platform super administrators who manage cross-t
 
 ## 3. Navigation & Multi-Tenant Workspace
 
-### **Universal `#0A2D59` Navigation Bar (`Navbar`)**
-- Present across all pages (`/dashboard`, `/generator`, `/scan`, `/studio`, `/settings`).
-- **Company Identity Pill**: Displays the currently active tenant company name with an organization badge (`🏢 Company Name`).
-- **Hamburger Menu (`☰`)**: Click to reveal the slide-over drawer panel for 1-tap navigation between **Overview Hub**, **Attendee Roster**, **Gates & Posts**, **Events Directory**, **Team Access**, and **AI Studio**.
-- **Role-Aware Action Buttons**: High-privilege actions like `+ New Event` and `⚙️ Settings` dynamically adapt based on whether you are logged in as an Owner, Co-Owner, Event Admin, Staff, or Super Admin.
+### **Universal AppShell Sidebar & Mobile Drawer**
+- Present across all authenticated pages (`/dashboard`, `/generator`, `/scan`, `/studio`, `/settings`) using the `#34206F` deep indigo + lavender SaaS design language.
+- **Desktop Fixed Sidebar (`280px`) & Mobile Slide-In Drawer (`☰`)**: Displays brand identity, workspace/account selector card, pill-style navigation (**Dashboard Hub**, **AI Story Studio**, **Entrance Scanner**, **QR Studio**, **System Settings**), contextual **Event Sections**, **Live Studio** status card, and bottom circular quick actions (**Settings / Studio**, **Scanner**, **Log out**).
+- **Role-Aware Action Buttons**: High-privilege actions like `+ Create New Event` and `Settings` dynamically adapt based on whether you are logged in as an Owner, Co-Owner, Event Admin, Staff, or Super Admin.
 
 ### **Command Switcher Palette (`⌘K` / `Ctrl+K`)**
 When managing dozens or hundreds of events within your company:
-1. Click the **Event Switcher Pill** in the header or press `⌘K` (`Ctrl+K` on Windows/Linux) to launch the **Command Switcher Palette**.
+1. Click the **Workspace Selector Card** in the sidebar, click **Switch Events (`⌘K`)**, or press `⌘K` (`Ctrl+K` on Windows/Linux) to launch the **Command Switcher Palette**.
 2. **Search Input**: Type any keyword to instantly filter events by title, venue location, or date.
 3. **Category Tabs**: Toggle between `⚡ Active & Upcoming`, `🕒 Past Events`, and `⭐ Pinned / Favorites`.
 4. **Pinning Events**: Click the `⭐ Pin` button on any event card to pin it to your favorites for instant access across sessions.
@@ -93,8 +92,7 @@ When logged in as a **`super_admin`**, you have global operational oversight acr
 - **Dashboard Organization Switcher Bar**: Prominently displayed directly above the event hero card on the main dashboard (`DashboardPage.jsx`). Provides a full-width select dropdown:
   - `🌐 All Organizations / Companies (Global Overview)`: Displays an aggregated view across all platform events and team members.
   - `🏢 [Company Name] (X events • Y staff)`: Filters and scopes the entire interface into that selected customer company.
-- **Universal Top Navbar Dropdown**: A compact switcher embedded in the `#0A2D59` top navbar next to the brand title. When scoped to a company, the brand title dynamically updates to show: `[Brand] (🏢 Scoped)`.
-- **Mobile Drawer Panel**: Accessible from the hamburger menu (`☰`) on mobile and tablet devices, featuring an organization selector and a 1-tap `Reset to All` quick button.
+- **Sidebar Organization Scope Selector**: Embedded inside the workspace selector card in the fixed left sidebar (desktop) and slide-in drawer (mobile), featuring a 1-tap `Reset` button when scoped to a specific company.
 
 #### **2. Automatic Cascading Scoping Behavior**
 Selecting an organization triggers an instant, coordinated cascade across all dashboard sections:
@@ -136,7 +134,7 @@ Selecting an organization triggers an instant, coordinated cascade across all da
   - An automated confirmation email with an embedded inline QR code (`cid:qrcode`) for easy presentation at event gates.
 
 ### **📲 Downloadable Event Registration QR Code Link**
-- Directly beside the public registration link on the event overview card, the platform renders a **high-resolution 360x360 branded QR code** in `#0A2D59` navy.
+- Directly beside the public registration link on the event overview card, the platform renders a **high-resolution 360x360 branded QR code** in `#34206F` deep indigo.
 - **1-Tap PNG Download**: Click **"📥 Download Registration QR"** to immediately download a high-definition image named:
   ```
   <event-title>-registration-qr.png
@@ -268,7 +266,7 @@ The **Attendee Roster** is engineered for high-volume crowds (100s to 1,000s of 
 
 The integrated **AI Story Studio** transforms event stories, testimonials, and milestone narratives into full musical songs with synchronized lyrics, realistic motion video clips, and high-definition rendered MP4 videos.
 
-Navigate to **`/#/studio`** (accessible from the top navigation bar or drawer menu for authorized event roles).
+Navigate to **`/#/studio`** (accessible from **AI Story Studio** in the left sidebar or mobile navigation drawer for authorized event roles).
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
@@ -310,8 +308,8 @@ The studio supports two distinct rendering and visual paradigms:
 ---
 
 ### Stage 1: Story Narrative, Cast Bible & Director Directives (Level 1 Control)
-1. Select an existing story project or click **"+ New Story Project"**.
-2. **Story Narrative**: Enter raw event memories, speeches, or summaries.
+1. If the selected event has no stories yet, click **"Create First Story Project"** in the empty-state prompt card; otherwise select an existing story in the **Event Stories** strip or click **"+ New Story"** to launch the centered creation modal.
+2. **Story Narrative & Quick Action Tiles**: Enter raw event memories, speeches, or summaries. Inside **Tab 1 (Story Analysis)**, use the contextual **`+ Add Photos`** tile to jump to photo uploads or **`Cast & Guidelines`** to jump directly to the current story's character & director cards.
 3. **👥 Cast & Characters Consistency Guide (Visual Bible)**:
    - Define the key individuals in your story (*Rahul, Priya, Keynote Speaker, Birthday Star*).
    - Provide their **Role in Event** and specific **Visual Appearance & Attire** (e.g. *30yo Indian man with short black hair, wearing a cream silk sherwani with red turban*).
@@ -366,15 +364,15 @@ The studio handles two distinct source media paths:
 - **Asset Management**:
   - Uploaded files are displayed in a responsive gallery with preview thumbnails, filenames, and format badges (`📷 Photo` or `🎬 Video`).
   - Delete individual files with the trash can icon (`🗑️`), or click **"Clear All Media"** to immediately switch back to Pure AI Mode.
-  - Assets are stored securely in your active cloud storage backend (Cloudflare R2, Google Cloud Storage, or AWS S3).
+  - Assets are stored securely in your active storage backend (local disk or Google Cloud Storage).
 
 ---
 
 ### Stage 4: Lyric-Synchronized Storyboard & Dual Modes in Action (Level 2 Control)
-Switch to **Tab 4: Timeline & Storyboard**:
+Switch to **Tab 4: Storyboard**:
 
 1. **Triggering Scene Synchronization**:
-   - Click **`🎵 Sync Storyboard with Song Lyrics`** (the dark navy button at the top right).
+   - Click **`Sync Storyboard with Song Lyrics`** (the primary indigo button at the top right).
    - *(Note: This is the button referenced in Tab 3's Pure AI helper banner).*
    - **How Scene Calculation Works**:
      - The engine inspects your generated audio track's actual duration (e.g. 30s = ~5 scenes of 6s each; 60s = ~10 scenes; 180s = ~30 scenes).
@@ -583,7 +581,7 @@ Because the frontend and backend are completely decoupled, you can switch the ba
 
 ## 14. Back Office Settings & Environment Variables (`/#/settings`)
 
-The platform includes a dedicated **Back Office Settings Dashboard** accessible directly from the top navigation bar or drawer menu (`⚙️ Settings`).
+The platform includes a dedicated **Back Office Settings Dashboard** accessible directly from **System Settings** in the left sidebar (or mobile navigation drawer).
 
 > [!IMPORTANT]
 > **Strict Super Admin Access Only**: The Settings page and its underlying API routes (`/api/settings/*`) are strictly guarded. Only users with the **`super_admin`** role can view or modify settings. Event Admins and Staff are blocked with `403 Forbidden`.

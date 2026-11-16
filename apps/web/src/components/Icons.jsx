@@ -226,6 +226,14 @@ export function Icon({
         </svg>
       );
 
+    case "arrow-left":
+      return (
+        <svg {...baseProps} fill="none">
+          <line x1="19" y1="12" x2="5" y2="12" />
+          <polyline points="12 19 5 12 12 5" />
+        </svg>
+      );
+
     case "arrow-right":
       return (
         <svg {...baseProps} fill="none">
@@ -239,6 +247,13 @@ export function Icon({
         <svg {...baseProps} fill="none">
           <line x1="7" y1="17" x2="17" y2="7" />
           <polyline points="7 7 17 7 17 17" />
+        </svg>
+      );
+
+    case "chevron-left":
+      return (
+        <svg {...baseProps} fill="none">
+          <polyline points="15 18 9 12 15 6" />
         </svg>
       );
 

@@ -919,12 +919,60 @@ export function ProjectStudioPage({ auth, token: propToken }) {
   const selectedEvent = events.find((ev) => ev._id === selectedEventId);
 
   const studioTabs = [
-    { id: "story", label: "1. Story Analysis", icon: "book" },
-    { id: "lyrics", label: "2. AI Lyrics & Audio", icon: "music" },
-    { id: "media", label: "3. Event Photos", icon: "image" },
-    { id: "storyboard", label: "4. Storyboard", icon: "studio" },
-    { id: "render", label: "5. Render Video", icon: "rocket" }
+    {
+      id: "story",
+      step: 1,
+      label: "Story Analysis",
+      shortLabel: "Story",
+      icon: "book",
+      done: Boolean(activeProject?.activeStoryAnalysisId)
+    },
+    {
+      id: "lyrics",
+      step: 2,
+      label: "Lyrics & Audio",
+      shortLabel: "Lyrics & Audio",
+      icon: "music",
+      done: Boolean(
+        activeProject?.activeSongId?.audioUrl ||
+          activeProject?.activeSongId?.lyrics
+      )
+    },
+    {
+      id: "media",
+      step: 3,
+      label: "Event Photos",
+      shortLabel: "Photos",
+      icon: "image",
+      done: mediaItems.length > 0
+    },
+    {
+      id: "storyboard",
+      step: 4,
+      label: "Storyboard",
+      shortLabel: "Storyboard",
+      icon: "studio",
+      done: Boolean(activeProject?.activeStoryboardId?.scenes?.length)
+    },
+    {
+      id: "render",
+      step: 5,
+      label: "Render Video",
+      shortLabel: "Render Video",
+      icon: "rocket",
+      done: Boolean(activeProject?.activeVideoId?.videoUrl)
+    }
   ];
+  const currentStepIdx = Math.max(
+    0,
+    studioTabs.findIndex((t) => t.id === activeTab)
+  );
+  const prevStudioTab =
+    currentStepIdx > 0 ? studioTabs[currentStepIdx - 1] : null;
+  const nextStudioTab =
+    currentStepIdx < studioTabs.length - 1
+      ? studioTabs[currentStepIdx + 1]
+      : null;
 
   return (
     <AppShell
@@ -1284,7 +1332,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
               </button>
             </div>
 
-            <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-none">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {projects.map((proj) => {
                 const isSelected = activeProject?._id === proj._id;
                 return (
@@ -1292,7 +1340,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                     key={proj._id}
                     type="button"
                     onClick={() => setActiveProject(proj)}
-                    className={`min-w-[220px] max-w-[280px] text-left p-4 rounded-card transition-all shrink-0 cursor-pointer ${
+                    className={`w-full min-w-0 text-left p-4 rounded-card transition-all cursor-pointer ${
                       isSelected
                         ? "bg-primary-soft border-2 border-primary text-primary shadow-subtle"
                         : "bg-primary-tint/70 border border-theme text-heading hover:bg-primary-soft/50"
@@ -1328,14 +1376,14 @@ export function ProjectStudioPage({ auth, token: propToken }) {
         {/* Studio Workspace */}
         {activeProject ? (
           <div className="space-y-6">
-            {/* Horizontally Scrollable Studio Pipeline Tabs */}
-            <div className="bg-surface rounded-card border border-theme px-4 pt-2 shadow-subtle">
+            {/* Responsive 5-Step Pipeline Stepper (All Stages Visible at Once — Zero Horizontal Scroll) */}
+            <div className="bg-surface rounded-card border border-theme p-2.5 sm:p-3 shadow-subtle">
               <div
-                className="ui-tabs-bar border-b-0"
+                className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2"
                 role="tablist"
                 aria-label="AI Studio Workflow"
               >
-                {studioTabs.map((tab) => {
+                {studioTabs.map((tab, idx) => {
                   const active = activeTab === tab.id;
                   return (
                     <button
@@ -1344,16 +1392,45 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                       role="tab"
                       aria-selected={active}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`ui-tab ${
-                        active ? "ui-tab-active" : "ui-tab-inactive"
+                      className={`min-h-[48px] px-3 py-2 rounded-[16px] flex items-center gap-2.5 text-left transition-all cursor-pointer ${
+                        idx === 4 ? "col-span-2 sm:col-span-1" : ""
+                      } ${
+                        active
+                          ? "bg-primary-soft text-primary font-bold border-2 border-primary shadow-2xs"
+                          : "bg-primary-tint/65 text-heading hover:bg-primary-soft/60 font-semibold border border-theme"
                       }`}
                     >
-                      <Icon
-                        name={tab.icon}
-                        className="w-4 h-4 text-primary shrink-0"
-                        filled={active}
-                      />
-                      <span>{tab.label}</span>
+                      <span
+                        className={`h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                          active
+                            ? "bg-primary text-white"
+                            : tab.done
+                              ? "bg-pastel-mint text-success border border-success/40"
+                              : "bg-surface text-primary border border-theme"
+                        }`}
+                      >
+                        {!active && tab.done ? (
+                          <Icon name="check" className="w-3.5 h-3.5" />
+                        ) : (
+                          tab.step
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <span className="block text-xs sm:text-[13px] leading-tight truncate">
+                          {tab.label}
+                        </span>
+                        <span
+                          className={`block text-[10px] leading-tight mt-0.5 truncate ${
+                            active
+                              ? "text-primary/80 font-semibold"
+                              : tab.done
+                                ? "text-success font-semibold"
+                                : "text-muted font-medium"
+                          }`}
+                        >
+                          {active ? "Active Step" : tab.done ? "Completed" : `Step ${tab.step}`}
+                        </span>
+                      </div>
                     </button>
                   );
                 })}
@@ -3125,6 +3202,60 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                 )}
               </div>
             )}
+
+            {/* Bottom Step-by-Step Pipeline Navigation Bar */}
+            <div className="ui-card p-4 sm:px-6 flex items-center justify-between gap-3">
+              {prevStudioTab ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(prevStudioTab.id);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="ui-btn-secondary-sm"
+                >
+                  <Icon name="arrow-left" className="w-4 h-4 text-primary" />
+                  <span>
+                    Step {prevStudioTab.step}: {prevStudioTab.shortLabel}
+                  </span>
+                </button>
+              ) : (
+                <span className="text-xs font-semibold text-muted">
+                  Step 1 of {studioTabs.length}
+                </span>
+              )}
+
+              <span className="hidden md:inline-block text-xs font-semibold text-muted">
+                Step {currentStepIdx + 1} of {studioTabs.length} •{" "}
+                <strong className="text-primary">
+                  {studioTabs[currentStepIdx]?.label}
+                </strong>
+              </span>
+
+              {nextStudioTab ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab(nextStudioTab.id);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="ui-btn-primary-sm"
+                >
+                  <span>
+                    Next: {nextStudioTab.shortLabel}
+                  </span>
+                  <Icon name="arrow-right" className="w-4 h-4" />
+                </button>
+              ) : (
+                <span className="ui-chip bg-pastel-mint border-theme text-heading">
+                  <Icon
+                    name="check-circle"
+                    className="w-3.5 h-3.5 text-success"
+                  />
+                  <span>Final Stage</span>
+                </span>
+              )}
+            </div>
           </div>
         ) : (
           /* Empty State Prompt Card when no Story Project exists yet */

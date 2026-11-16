@@ -69,8 +69,11 @@ For infrastructure operators or platform super administrators who manage cross-t
 
 ### **Universal AppShell Sidebar & Mobile Drawer**
 - Present across all authenticated pages (`/dashboard`, `/generator`, `/scan`, `/studio`, `/settings`) using the `#34206F` deep indigo + lavender SaaS design language.
-- **Desktop Fixed Sidebar (`280px`) & Mobile Slide-In Drawer (`☰`)**: Displays brand identity, workspace/account selector card, pill-style navigation (**Dashboard Hub**, **AI Story Studio**, **Entrance Scanner**, **QR Studio**, **System Settings**), contextual **Event Sections**, **Live Studio** status card, and bottom circular quick actions (**Settings / Studio**, **Scanner**, **Log out**).
-- **Role-Aware Action Buttons**: High-privilege actions like `+ Create New Event` and `Settings` dynamically adapt based on whether you are logged in as an Owner, Co-Owner, Event Admin, Staff, or Super Admin.
+- **Desktop Fixed Sidebar (`280px`) & Mobile Slide-In Drawer (`☰`)**: Focused cleanly on top-level navigation (**Dashboard Hub**, **AI Story Studio**, **Entrance Scanner**, **QR Studio**, **System Settings**), workspace/account selector card, **Live Studio** status card, and bottom circular quick actions (**Settings / Studio**, **Scanner**, **Log out**).
+- **Responsive Dashboard Section Bar (Zero Horizontal Scroll)**:
+  - **Mobile (`< 768px`)**: Fixed bottom footer tab bar showing all event sections (`Overview`, `Attendees`, `Gates`, `Events`, `Team`) in equal-width thumb targets.
+  - **Tablet & Desktop (`≥ 768px`)**: Full-width non-scrolling segmented pill bar directly beneath the active Event Switcher.
+- **Role-Aware Action Buttons**: High-privilege actions like `+ New Event` and `Settings` dynamically adapt based on whether you are logged in as an Owner, Co-Owner, Event Admin, Staff, or Super Admin.
 
 ### **Command Switcher Palette (`⌘K` / `Ctrl+K`)**
 When managing dozens or hundreds of events within your company:
@@ -89,10 +92,10 @@ When managing dozens or hundreds of events within your company:
 When logged in as a **`super_admin`**, you have global operational oversight across every tenant company on the platform. The platform includes a unified, cascading **Organization Switcher** that allows you to inspect and operate within any specific company workspace without needing to log in as different tenant users.
 
 #### **1. Where to Switch Organizations**
-- **Dashboard Organization Switcher Bar**: Prominently displayed directly above the event hero card on the main dashboard (`DashboardPage.jsx`). Provides a full-width select dropdown:
-  - `🌐 All Organizations / Companies (Global Overview)`: Displays an aggregated view across all platform events and team members.
-  - `🏢 [Company Name] (X events • Y staff)`: Filters and scopes the entire interface into that selected customer company.
-- **Sidebar Organization Scope Selector**: Embedded inside the workspace selector card in the fixed left sidebar (desktop) and slide-in drawer (mobile), featuring a 1-tap `Reset` button when scoped to a specific company.
+- **Sidebar Organization Scope Selector (Desktop `≥ 1024px` & Mobile Drawer)**: Embedded inside the workspace selector card in the fixed left sidebar and slide-in drawer, featuring a 1-tap `Reset` button when scoped to a specific company:
+  - `All Organizations`: Displays an aggregated view across all platform events and team members.
+  - `[Company Name] (X events)`: Filters and scopes the entire interface into that selected customer company.
+- **Compact Mobile/Tablet Organization Bar (`< 1024px`)**: Displayed above the active event bar on mobile and tablet viewports when the desktop sidebar is hidden.
 
 #### **2. Automatic Cascading Scoping Behavior**
 Selecting an organization triggers an instant, coordinated cascade across all dashboard sections:
@@ -266,7 +269,7 @@ The **Attendee Roster** is engineered for high-volume crowds (100s to 1,000s of 
 
 The integrated **AI Story Studio** transforms event stories, testimonials, and milestone narratives into full musical songs with synchronized lyrics, realistic motion video clips, and high-definition rendered MP4 videos.
 
-Navigate to **`/#/studio`** (accessible from **AI Story Studio** in the left sidebar or mobile navigation drawer for authorized event roles).
+Navigate to **`/#/studio`** (accessible from **AI Story Studio** in the left sidebar or mobile navigation drawer for authorized event roles). All 5 stages are displayed simultaneously in a **non-scrolling 5-Step Pipeline Stepper** (5-column stepper on desktop, compact multi-row grid on mobile) with completion checkmarks (`✓`) and a **Previous / Next Step** navigation bar at the bottom of each stage.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐

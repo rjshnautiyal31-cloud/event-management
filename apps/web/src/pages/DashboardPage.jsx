@@ -744,9 +744,9 @@ export function DashboardPage({ auth }) {
       onSelectCompany={handleSelectCompany}
     >
       <div className="flex-1 flex flex-col pb-24 md:pb-12 overflow-x-hidden">
-        {/* Super Admin Global Organization Context Switcher Bar */}
+        {/* Super Admin Organization Switcher Bar (Mobile/Tablet < lg; Desktop uses Sidebar Scope Card) */}
         {isSuperAdmin && (
-          <div className="bg-primary-soft/85 border-b border-pastel-lavender px-4 sm:px-6 py-2.5">
+          <div className="lg:hidden bg-primary-soft/85 border-b border-pastel-lavender px-4 sm:px-6 py-2.5">
             <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs">
               <div className="flex items-center gap-2.5 flex-wrap min-w-0">
                 <div className="flex items-center gap-1.5 shrink-0 text-primary">
@@ -800,8 +800,8 @@ export function DashboardPage({ auth }) {
           </div>
         )}
 
-        {/* Top Event Switcher & Horizontally Scrollable Tab Bar */}
-        <div className="bg-surface border-b border-theme px-4 sm:px-6 lg:px-8 pt-4">
+        {/* Top Event Switcher + Desktop Non-Scrolling Segmented Pill Bar */}
+        <div className="bg-surface border-b border-theme px-4 sm:px-6 lg:px-8 py-4">
           <div className="max-w-6xl mx-auto space-y-3.5">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               {/* Interactive Command Switcher Pill Trigger */}
@@ -856,9 +856,11 @@ export function DashboardPage({ auth }) {
               )}
             </div>
 
-            {/* Horizontally Scrollable Lavender Pill Tab Bar with 2px Indigo Underline */}
+            {/* Desktop & Tablet (md+) Non-Scrolling Segmented Pill Bar — Hidden on Mobile (< md) */}
             <div
-              className="ui-tabs-bar border-b-0"
+              className={`hidden md:grid gap-1.5 bg-primary-tint p-1.5 rounded-2xl border border-theme ${
+                dashboardTabs.length === 5 ? "md:grid-cols-5" : "md:grid-cols-3"
+              }`}
               role="tablist"
               aria-label="Dashboard Sections"
             >
@@ -871,8 +873,10 @@ export function DashboardPage({ auth }) {
                     role="tab"
                     aria-selected={active}
                     onClick={() => setActiveTab(t.id)}
-                    className={`ui-tab ${
-                      active ? "ui-tab-active" : "ui-tab-inactive"
+                    className={`min-h-[44px] px-3 py-2 rounded-xl flex items-center justify-center gap-2 text-sm transition-all cursor-pointer ${
+                      active
+                        ? "bg-primary-soft text-primary font-bold border border-primary/30 shadow-2xs"
+                        : "text-body hover:text-heading hover:bg-surface/75 font-semibold border border-transparent"
                     }`}
                   >
                     <Icon
@@ -880,13 +884,13 @@ export function DashboardPage({ auth }) {
                       className="w-4 h-4 text-primary shrink-0"
                       filled={active}
                     />
-                    <span>{t.label}</span>
+                    <span className="truncate">{t.label}</span>
                     {t.badge !== undefined && t.badge !== null && (
                       <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                        className={`px-2 py-0.5 rounded-full text-xs font-bold shrink-0 ${
                           active
                             ? "bg-primary text-white"
-                            : "bg-primary-tint text-primary border border-theme"
+                            : "bg-surface text-primary border border-theme"
                         }`}
                       >
                         {t.badge}
@@ -3199,9 +3203,9 @@ export function DashboardPage({ auth }) {
           </div>
         )}
 
-        {/* Mobile Bottom Tab Bar (Lavender Pill Active State) */}
+        {/* Mobile Fixed Bottom Tab Bar (< md Only — Equal-Width Thumb Targets, Zero Scroll) */}
         <nav
-          className="fixed bottom-0 left-0 right-0 z-30 bg-surface/95 backdrop-blur-md border-t border-theme py-2 px-2 flex items-center justify-around md:hidden shadow-soft"
+          className="fixed bottom-0 left-0 right-0 z-30 bg-surface/95 backdrop-blur-md border-t border-theme py-1.5 px-2 flex items-stretch gap-1 md:hidden shadow-soft"
           aria-label="Mobile Dashboard Sections"
         >
           {dashboardTabs.map((t) => {
@@ -3211,21 +3215,23 @@ export function DashboardPage({ auth }) {
                 key={t.id}
                 type="button"
                 onClick={() => setActiveTab(t.id)}
-                className={`min-h-[46px] flex flex-col items-center justify-center gap-1 py-1 px-3 rounded-2xl transition-all relative cursor-pointer ${
+                className={`flex-1 min-w-0 min-h-[50px] flex flex-col items-center justify-center gap-1 py-1.5 px-1.5 rounded-2xl transition-all relative cursor-pointer ${
                   active
-                    ? "bg-primary-soft text-primary font-bold"
-                    : "text-muted hover:text-heading font-medium"
+                    ? "bg-primary-soft text-primary font-bold border border-primary/25"
+                    : "text-muted hover:text-heading font-medium border border-transparent"
                 }`}
               >
                 <div className="relative">
-                  <Icon name={t.icon} className="w-4 h-4" filled={active} />
+                  <Icon name={t.icon} className="w-4 h-4 text-primary" filled={active} />
                   {t.badge > 0 && (
                     <span className="absolute -top-1.5 -right-3 bg-primary text-white text-[9px] font-bold h-4 min-w-4 px-1 rounded-full flex items-center justify-center">
                       {t.badge}
                     </span>
                   )}
                 </div>
-                <span className="text-[11px] leading-none">{t.label}</span>
+                <span className="text-[11px] leading-none truncate max-w-full">
+                  {t.label}
+                </span>
               </button>
             );
           })}

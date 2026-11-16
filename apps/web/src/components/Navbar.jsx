@@ -208,7 +208,7 @@ export function AppShell({
         )}
       </div>
 
-      {/* 3. Pill-Style Navigation List (56px rows) */}
+      {/* 3. Pill-Style Top-Level Navigation List (56px rows) */}
       <nav className="flex-1 overflow-y-auto space-y-1.5 pr-0.5 scrollbar-none" aria-label="Main Navigation">
         {primaryNavItems.map((item) => {
           const active = item.isActive;
@@ -236,85 +236,6 @@ export function AppShell({
             </Link>
           );
         })}
-
-        {/* Contextual Event Workspace Sub-Links & Quick Actions */}
-        {(location.pathname === "/dashboard" || onOpenCreateEvent || onOpenWalkIn || onOpenBulkImport) && (
-          <div className="pt-3 mt-3 border-t border-theme space-y-1">
-            <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-muted">
-              Event Sections
-            </p>
-            {[
-              { id: "overview", label: "Overview", icon: "dashboard", show: true },
-              { id: "attendees", label: "Attendees", icon: "users", show: true },
-              { id: "gates", label: "Gates & Posts", icon: "pin", show: true },
-              { id: "events", label: "Events Directory", icon: "calendar", show: isAdmin },
-              { id: "team", label: "Team & Access", icon: "shield", show: isAdmin }
-            ]
-              .filter((t) => t.show)
-              .map((t) => {
-                const isTabActive = location.pathname === "/dashboard" && activeTab === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => handleNavTab(t.id)}
-                    className={`w-full min-h-[46px] px-3.5 py-2 rounded-full flex items-center gap-3 text-[15px] transition-all cursor-pointer ${
-                      isTabActive
-                        ? "bg-primary-soft text-primary font-bold"
-                        : "text-body font-medium hover:bg-primary-tint hover:text-heading"
-                    }`}
-                  >
-                    <Icon name={t.icon} className="w-4 h-4 text-primary shrink-0" filled={isTabActive} />
-                    <span className="truncate">{t.label}</span>
-                  </button>
-                );
-              })}
-
-            {isAdmin && (onOpenCreateEvent || onOpenWalkIn || onOpenBulkImport) && (
-              <div className="pt-2 space-y-1">
-                {canCreateEvent && onOpenCreateEvent && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDrawerOpen(false);
-                      onOpenCreateEvent();
-                    }}
-                    className="w-full min-h-[44px] px-3.5 py-2 rounded-full flex items-center gap-3 text-sm font-semibold text-primary hover:bg-primary-soft/60 transition-colors cursor-pointer"
-                  >
-                    <Icon name="plus" className="w-4 h-4 text-primary shrink-0" />
-                    <span className="truncate">Create New Event</span>
-                  </button>
-                )}
-                {onOpenWalkIn && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDrawerOpen(false);
-                      onOpenWalkIn();
-                    }}
-                    className="w-full min-h-[44px] px-3.5 py-2 rounded-full flex items-center gap-3 text-sm font-medium text-body hover:bg-primary-tint transition-colors cursor-pointer"
-                  >
-                    <Icon name="users" className="w-4 h-4 text-primary shrink-0" />
-                    <span className="truncate">Walk-In Registration</span>
-                  </button>
-                )}
-                {onOpenBulkImport && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDrawerOpen(false);
-                      onOpenBulkImport();
-                    }}
-                    className="w-full min-h-[44px] px-3.5 py-2 rounded-full flex items-center gap-3 text-sm font-medium text-body hover:bg-primary-tint transition-colors cursor-pointer"
-                  >
-                    <Icon name="upload" className="w-4 h-4 text-primary shrink-0" />
-                    <span className="truncate">Bulk Import CSV</span>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
       </nav>
 
       {/* 4. Active Workspace / Studio Status Card (24px radius, primary-tint, lavender border) */}

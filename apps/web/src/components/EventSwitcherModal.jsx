@@ -167,8 +167,8 @@ export function EventSwitcherModal({
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-3">
-            <div className="ui-tabs-bar border-b-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="ui-tabs-bar border-b-0 pb-0 flex-1">
               <button
                 type="button"
                 onClick={() => setCategory("upcoming")}
@@ -205,7 +205,7 @@ export function EventSwitcherModal({
                   onClose();
                   onOpenCreateModal();
                 }}
-                className="ui-btn-pill mb-2 shrink-0"
+                className="ui-btn-pill shrink-0"
               >
                 <Icon name="plus" className="w-4 h-4" />
                 <span>New Event</span>

@@ -130,25 +130,25 @@
     @apply inline-flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 rounded-control bg-danger-tint hover:bg-danger/15 text-danger font-semibold text-sm border border-danger/25 transition-all cursor-pointer;
   }
 
-  /* Horizontally Scrollable Tab Bar */
+  /* Multi-Line Wrapping Pill Tab Bar (All Tabs Visible Without Hidden Horizontal Scroll) */
   .ui-tabs-bar {
-    @apply flex items-center gap-2 overflow-x-auto border-b border-theme pb-0 scrollbar-none;
+    @apply flex flex-wrap items-center gap-2 border-b border-theme pb-3;
   }
 
   .ui-tab {
-    @apply relative inline-flex items-center gap-2 min-h-[46px] px-4 py-2.5 rounded-t-2xl text-sm sm:text-[15px] font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0;
+    @apply relative inline-flex items-center gap-2 min-h-[42px] px-4 py-2 rounded-full text-sm sm:text-[15px] font-semibold transition-all cursor-pointer border;
   }
 
   .ui-tab-active {
-    @apply bg-primary-soft text-primary font-bold after:content-[''] after:absolute after:left-2 after:right-2 after:bottom-0 after:h-[2px] after:bg-primary after:rounded-full;
+    @apply bg-primary-soft text-primary font-bold border-primary/35 shadow-2xs;
   }
 
   .ui-tab-inactive {
-    @apply text-muted hover:text-heading hover:bg-primary-tint/70;
+    @apply bg-primary-tint/55 text-body border-transparent hover:text-heading hover:bg-primary-soft/60 hover:border-theme;
   }
 
   .ui-tab-danger {
-    @apply text-danger hover:bg-danger-tint;
+    @apply text-danger border-danger/20 hover:bg-danger-tint;
   }
 
   /* Category Translucent Badges & Soft Chips */

@@ -425,3 +425,656 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
 
   return null;
 }
+
+// Helper: Format structured ad script segments into a readable script transcript
+export function formatSegmentsToTranscript(segments = []) {
+  if (!Array.isArray(segments) || segments.length === 0) return "";
+  return segments
+    .map((seg, i) => {
+      const tag = seg.segmentType === "sung_jingle"
+        ? `[SUNG JINGLE - ${seg.speakerName || "Vocals"}]`
+        : seg.segmentType === "visual_beat"
+        ? `[VISUAL CARD]`
+        : seg.segmentType === "narration"
+        ? `[NARRATOR CTA - ${seg.speakerName || "Announcer"}]`
+        : `[DIALOGUE - ${seg.speakerName || `Speaker ${i + 1}`}]`;
+      const headlinePart = seg.onScreenHeadline ? ` (On-Screen: "${seg.onScreenHeadline}")` : "";
+      return `${tag}${headlinePart}\n${seg.text || seg.onScreenHeadline || ""}`.trim();
+    })
+    .join("\n\n");
+}
+
+// 5. Analyze Short Advertisement Brief with Gemini Commercial Strategist
+export async function analyzeAdBriefWithGemini(briefText = "", options = {}) {
+  const clientInfo = getGeminiClient();
+  const language = options?.language || "en";
+  const adBrief = options?.adBrief || {};
+  const eventContext = options?.eventContext || null;
+  const directorGuidelines = options?.directorGuidelines || "";
+  const characters = Array.isArray(options?.characters) ? options.characters : [];
+  const langConfig = getLanguageConfig(language);
+
+  const brandLabel = adBrief.brandName || eventContext?.title || "Featured Brand";
+  const ctaLabel = adBrief.callToAction || (eventContext ? `Register now for ${eventContext.title}` : `Discover ${brandLabel} today`);
+  const targetSec = Number(adBrief.targetDurationSeconds) || 30;
+  const audioMode = adBrief.audioMode || "hybrid_conversation_song";
+
+  const mockAdAnalysis = {
+    summary: `High-impact ${targetSec}s commercial campaign for ${brandLabel} designed to capture attention in the first 3 seconds and drive action (${ctaLabel}).`,
+    emotionalArc: ["Instant curiosity hook", "Relatable problem & spark", "Confident brand reveal & action"],
+    themes: ["Attention Hook", "Value Reveal", "Call to Action"],
+    suggestedGenres: ["Upbeat Commercial", "Indie Pop", "Bollywood Pop", "Corporate Synth"],
+    mood: "Energetic",
+    keyMoments: [
+      { momentNumber: 1, description: "3-Second Hook", visualIdea: `Dynamic close-up lifestyle shot capturing immediate curiosity for ${brandLabel}, crisp commercial lighting, 8k photorealistic`, suggestedDurationSeconds: 4 },
+      { momentNumber: 2, description: "Product / Event Showcase", visualIdea: `Vibrant hero showcase of ${adBrief.productOrOffer || brandLabel} in action with delighted people, shallow depth of field, studio commercial look`, suggestedDurationSeconds: 5 },
+      { momentNumber: 3, description: "Call-to-Action Finale", visualIdea: `Clean cinematic commercial end-card framing ${brandLabel} with confident celebratory energy and clear composition for headline overlay`, suggestedDurationSeconds: 4 }
+    ],
+    adStrategy: {
+      hook: `Stop scrolling — see why everyone is talking about ${brandLabel}!`,
+      painPointOrDesire: adBrief.productOrOffer || `Looking for an unforgettable experience that stands out?`,
+      valueProposition: `${brandLabel} delivers instant impact, quality, and memorable value.`,
+      jingleHookIdea: audioMode === "hybrid_conversation_song" ? `${brandLabel} — shine brighter, live louder today!` : "",
+      callToActionLine: ctaLabel,
+      pacingStyle: `Fast ${targetSec}s commercial cuts (3-5s per shot)`
+    }
+  };
+
+  if (!clientInfo) return mockAdAnalysis;
+
+  try {
+    const langInstruction = langConfig.code === "hinglish"
+      ? "Hinglish (modern conversational blend of Hindi and English written in Roman/Latin script)"
+      : `${langConfig.name} (${langConfig.nativeName})`;
+
+    let contextLines = `Target Duration: ${targetSec} seconds.\nAudio Mode: ${audioMode}.\nSpeaker Format: ${adBrief.speakerFormat || "two_speaker_chat"}.\n`;
+    if (adBrief.brandName) contextLines += `Brand / Organization: ${adBrief.brandName}.\n`;
+    if (adBrief.productOrOffer) contextLines += `Product / Offer / Promo Focus: ${adBrief.productOrOffer}.\n`;
+    if (adBrief.objective) contextLines += `Campaign Objective: ${adBrief.objective}.\n`;
+    if (adBrief.targetAudience) contextLines += `Target Audience: ${adBrief.targetAudience}.\n`;
+    if (adBrief.callToAction) contextLines += `Call-to-Action (CTA): ${adBrief.callToAction}${adBrief.ctaSubtext ? ` (${adBrief.ctaSubtext})` : ""}.\n`;
+    if (eventContext?.title) {
+      contextLines += `Linked Event Context: "${eventContext.title}"${eventContext.date ? ` on ${new Date(eventContext.date).toDateString()}` : ""}${eventContext.location ? ` at ${eventContext.location}` : ""}.\n`;
+    } else {
+      contextLines += `Workspace Scope: Standalone Brand / Product Commercial (not tied to a single event).\n`;
+    }
+    if (characters.length > 0) {
+      const charList = characters.filter(c => c?.name).map(c => `${c.name}${c.role ? ` (${c.role})` : ""}`).join(", ");
+      if (charList) contextLines += `Cast / Spokespeople: ${charList}.\n`;
+    }
+    if (directorGuidelines?.trim()) {
+      contextLines += `Creative Director Guidelines: "${directorGuidelines.trim()}".\n`;
+    }
+
+    const prompt = `You are an award-winning commercial creative director. Analyze this short advertisement brief for a ${targetSec}-second promo video in ${langInstruction}.
+${contextLines}
+Raw Ad Concept / Notes:
+"""
+${(briefText || "").slice(0, 4000)}
+"""
+
+Return a structured commercial strategy JSON with:
+- summary (2-3 punchy sentences in ${langInstruction})
+- emotionalArc (3 stages in ${langInstruction})
+- themes (3 short tags in ${langInstruction})
+- suggestedGenres (3-4 musical/underscore styles suitable for this ad)
+- mood (1-2 words)
+- keyMoments (3 to 5 commercial visual beats; write visualIdea in English for photorealistic commercial scene generation, 3-5s each)
+- adStrategy: { hook, painPointOrDesire, valueProposition, jingleHookIdea (catchy 1-2 line sung hook in ${langInstruction} if hybrid jingle fits, or empty string if no song), callToActionLine (in ${langInstruction}), pacingStyle }`;
+
+    const response = await clientInfo.ai.models.generateContent({
+      model: clientInfo.modelName,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            summary: { type: Type.STRING },
+            emotionalArc: { type: Type.ARRAY, items: { type: Type.STRING } },
+            themes: { type: Type.ARRAY, items: { type: Type.STRING } },
+            suggestedGenres: { type: Type.ARRAY, items: { type: Type.STRING } },
+            mood: { type: Type.STRING },
+            keyMoments: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  momentNumber: { type: Type.INTEGER },
+                  description: { type: Type.STRING },
+                  visualIdea: { type: Type.STRING },
+                  suggestedDurationSeconds: { type: Type.INTEGER }
+                }
+              }
+            },
+            adStrategy: {
+              type: Type.OBJECT,
+              properties: {
+                hook: { type: Type.STRING },
+                painPointOrDesire: { type: Type.STRING },
+                valueProposition: { type: Type.STRING },
+                jingleHookIdea: { type: Type.STRING },
+                callToActionLine: { type: Type.STRING },
+                pacingStyle: { type: Type.STRING }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const cleanJsonText = (response.text || "").replace(/```json/g, "").replace(/```/g, "").trim();
+    return { ...mockAdAnalysis, ...JSON.parse(cleanJsonText) };
+  } catch (err) {
+    console.warn("Gemini ad brief analysis failed, using local commercial strategy:", err.message);
+    return mockAdAnalysis;
+  }
+}
+
+// 6. Generate Timed Multi-Speaker / Hybrid Jingle Commercial Script Segments
+export async function generateAdScriptWithGemini({
+  storyText = "",
+  adBrief = {},
+  analysis = null,
+  eventContext = null,
+  language = "en",
+  characters = [],
+  directorGuidelines = ""
+}) {
+  const clientInfo = getGeminiClient();
+  const langConfig = getLanguageConfig(language);
+  const targetSec = Number(adBrief.targetDurationSeconds) || 30;
+  const audioMode = adBrief.audioMode || "hybrid_conversation_song";
+  const speakerFormat = adBrief.speakerFormat || "two_speaker_chat";
+  const brandLabel = adBrief.brandName || eventContext?.title || "Our Brand";
+  const offerLabel = adBrief.productOrOffer || storyText.slice(0, 100) || "something extraordinary";
+  const ctaLabel = adBrief.callToAction || analysis?.adStrategy?.callToActionLine || `Check out ${brandLabel} today!`;
+
+  // Determine default Speaker A (female) & Speaker B (male) names from cast or language defaults
+  const femaleChar = characters.find(c => c?.voiceGender === "female") || characters[0];
+  const maleChar = characters.find(c => c?.voiceGender === "male" && c !== femaleChar) || characters[1];
+  const defaultSpeakerA = femaleChar?.name || (langConfig.code === "en" ? "Maya" : "Priya");
+  const defaultSpeakerB = maleChar?.name || (langConfig.code === "en" ? "Liam" : "Aarav");
+
+  const buildFallbackSegments = () => {
+    if (audioMode === "visual_only") {
+      const beatCount = Math.max(3, Math.round(targetSec / 5));
+      const beatDur = Number((targetSec / beatCount).toFixed(1));
+      const headlines = [
+        brandLabel,
+        adBrief.productOrOffer || "Experience Excellence",
+        analysis?.adStrategy?.valueProposition?.slice(0, 48) || "Crafted For You",
+        ctaLabel
+      ];
+      return Array.from({ length: beatCount }, (_, idx) => {
+        const isLast = idx === beatCount - 1;
+        const start = Number((idx * beatDur).toFixed(1));
+        const end = isLast ? targetSec : Number(((idx + 1) * beatDur).toFixed(1));
+        return {
+          segmentOrder: idx + 1,
+          segmentType: "visual_beat",
+          speakerName: "On-Screen Text",
+          voiceRole: "narrator",
+          voiceGender: "female",
+          text: "",
+          onScreenHeadline: isLast ? ctaLabel : (headlines[idx % headlines.length] || brandLabel),
+          targetDurationSeconds: Math.max(2, Math.round(end - start)),
+          startTimeSeconds: start,
+          endTimeSeconds: end,
+          bgmBehavior: "full"
+        };
+      });
+    }
+
+    if (audioMode === "hybrid_conversation_song") {
+      const introA = Math.max(3, Math.round(targetSec * 0.2));
+      const introB = Math.max(3, Math.round(targetSec * 0.2));
+      const jingleDur = Math.max(6, Math.round(targetSec * 0.4));
+      const ctaDur = Math.max(3, targetSec - introA - introB - jingleDur);
+
+      const line1 = langConfig.code === "hi"
+        ? `अरे ${defaultSpeakerB}, क्या तुमने ${brandLabel} के बारे में सुना?`
+        : langConfig.code === "hinglish"
+        ? `Hey ${defaultSpeakerB}, tune ${brandLabel} ka naya offer dekha kya?`
+        : `Hey ${defaultSpeakerB}, have you seen what ${brandLabel} just launched?`;
+
+      const line2 = langConfig.code === "hi"
+        ? `अभी देखा! ${offerLabel} तो वाकई कमाल का है!`
+        : langConfig.code === "hinglish"
+        ? `Haan yaar! ${offerLabel} toh seriously next level hai!`
+        : `Just saw it — ${offerLabel} changes everything!`;
+
+      const jingleText = langConfig.code === "hi"
+        ? `${brandLabel} के संग चमके हर पल, खुशियों का नया है कल!`
+        : langConfig.code === "hinglish"
+        ? `${brandLabel} ka hai yeh zamana, har moment ko special banana!`
+        : `Step into the moment with ${brandLabel}, brighter every single day!`;
+
+      return [
+        {
+          segmentOrder: 1,
+          segmentType: "dialogue",
+          speakerName: speakerFormat === "single_narrator" ? "Narrator" : defaultSpeakerA,
+          voiceRole: speakerFormat === "single_narrator" ? "narrator" : "speaker_a",
+          voiceGender: "female",
+          text: line1,
+          onScreenHeadline: brandLabel,
+          targetDurationSeconds: introA,
+          startTimeSeconds: 0,
+          endTimeSeconds: introA,
+          bgmBehavior: "ducked"
+        },
+        {
+          segmentOrder: 2,
+          segmentType: "dialogue",
+          speakerName: speakerFormat === "single_narrator" ? "Narrator" : defaultSpeakerB,
+          voiceRole: speakerFormat === "single_narrator" ? "narrator" : "speaker_b",
+          voiceGender: "male",
+          text: line2,
+          onScreenHeadline: adBrief.productOrOffer || "",
+          targetDurationSeconds: introB,
+          startTimeSeconds: introA,
+          endTimeSeconds: introA + introB,
+          bgmBehavior: "ducked"
+        },
+        {
+          segmentOrder: 3,
+          segmentType: "sung_jingle",
+          speakerName: "Brand Jingle",
+          voiceRole: "jingle_vocal",
+          voiceGender: "female",
+          text: jingleText,
+          onScreenHeadline: brandLabel,
+          targetDurationSeconds: jingleDur,
+          startTimeSeconds: introA + introB,
+          endTimeSeconds: introA + introB + jingleDur,
+          bgmBehavior: "full"
+        },
+        {
+          segmentOrder: 4,
+          segmentType: "narration",
+          speakerName: "Announcer",
+          voiceRole: "narrator",
+          voiceGender: "male",
+          text: ctaLabel,
+          onScreenHeadline: ctaLabel,
+          targetDurationSeconds: ctaDur,
+          startTimeSeconds: introA + introB + jingleDur,
+          endTimeSeconds: targetSec,
+          bgmBehavior: "ducked"
+        }
+      ];
+    }
+
+    // dialogue_only or dialogue_bgm
+    const bgmMode = audioMode === "dialogue_bgm" ? "ducked" : "none";
+    if (speakerFormat === "single_narrator") {
+      const d1 = Math.round(targetSec * 0.35);
+      const d2 = Math.round(targetSec * 0.35);
+      const d3 = Math.max(3, targetSec - d1 - d2);
+      return [
+        {
+          segmentOrder: 1,
+          segmentType: "narration",
+          speakerName: "Narrator",
+          voiceRole: "narrator",
+          voiceGender: "female",
+          text: analysis?.adStrategy?.hook || `Ready for something remarkable from ${brandLabel}?`,
+          onScreenHeadline: brandLabel,
+          targetDurationSeconds: d1,
+          startTimeSeconds: 0,
+          endTimeSeconds: d1,
+          bgmBehavior: bgmMode
+        },
+        {
+          segmentOrder: 2,
+          segmentType: "narration",
+          speakerName: "Narrator",
+          voiceRole: "narrator",
+          voiceGender: "female",
+          text: `${offerLabel}.`,
+          onScreenHeadline: adBrief.productOrOffer || "",
+          targetDurationSeconds: d2,
+          startTimeSeconds: d1,
+          endTimeSeconds: d1 + d2,
+          bgmBehavior: bgmMode
+        },
+        {
+          segmentOrder: 3,
+          segmentType: "narration",
+          speakerName: "Narrator",
+          voiceRole: "narrator",
+          voiceGender: "female",
+          text: ctaLabel,
+          onScreenHeadline: ctaLabel,
+          targetDurationSeconds: d3,
+          startTimeSeconds: d1 + d2,
+          endTimeSeconds: targetSec,
+          bgmBehavior: bgmMode
+        }
+      ];
+    }
+
+    const d1 = Math.round(targetSec * 0.35);
+    const d2 = Math.round(targetSec * 0.35);
+    const d3 = Math.max(3, targetSec - d1 - d2);
+    return [
+      {
+        segmentOrder: 1,
+        segmentType: "dialogue",
+        speakerName: defaultSpeakerA,
+        voiceRole: "speaker_a",
+        voiceGender: "female",
+        text: langConfig.code === "hinglish"
+          ? `Sun ${defaultSpeakerB}, ${brandLabel} ke baare mein suna kya?`
+          : `Hey ${defaultSpeakerB}, did you hear the big news from ${brandLabel}?`,
+        onScreenHeadline: brandLabel,
+        targetDurationSeconds: d1,
+        startTimeSeconds: 0,
+        endTimeSeconds: d1,
+        bgmBehavior: bgmMode
+      },
+      {
+        segmentOrder: 2,
+        segmentType: "dialogue",
+        speakerName: defaultSpeakerB,
+        voiceRole: "speaker_b",
+        voiceGender: "male",
+        text: langConfig.code === "hinglish"
+          ? `Bilkul! ${offerLabel} sabke liye game-changer hai!`
+          : `Absolutely — ${offerLabel} is exactly what we needed!`,
+        onScreenHeadline: adBrief.productOrOffer || "",
+        targetDurationSeconds: d2,
+        startTimeSeconds: d1,
+        endTimeSeconds: d1 + d2,
+        bgmBehavior: bgmMode
+      },
+      {
+        segmentOrder: 3,
+        segmentType: "narration",
+        speakerName: "Announcer",
+        voiceRole: "narrator",
+        voiceGender: "male",
+        text: ctaLabel,
+        onScreenHeadline: ctaLabel,
+        targetDurationSeconds: d3,
+        startTimeSeconds: d1 + d2,
+        endTimeSeconds: targetSec,
+        bgmBehavior: bgmMode
+      }
+    ];
+  };
+
+  const fallbackSegments = buildFallbackSegments();
+  if (!clientInfo) return fallbackSegments;
+
+  try {
+    const langDisplay = langConfig.code === "hinglish"
+      ? "Hinglish (natural modern blend of Hindi and English in Roman/Latin alphabet — do NOT use Devanagari)"
+      : `${langConfig.name} (${langConfig.nativeName})`;
+
+    const totalWordBudget = Math.max(20, Math.round(targetSec * 2.1));
+
+    let modeRules = "";
+    if (audioMode === "dialogue_only") {
+      modeRules = `AUDIO MODE: Pure Conversation / Voiceover Only (NO SONG, NO BGM).
+- Use ONLY segmentType "dialogue" and "narration" (do NOT include "sung_jingle").
+- Set bgmBehavior = "none" on every segment.
+- ${speakerFormat === "single_narrator" ? `Use a single persuasive narrator (voiceRole "narrator").` : `Write natural back-and-forth conversational dialogue between ${defaultSpeakerA} (voiceRole "speaker_a", voiceGender "female") and ${defaultSpeakerB} (voiceRole "speaker_b", voiceGender "male"), ending with a crisp closing Call-to-Action segment (voiceRole "narrator").`}`;
+    } else if (audioMode === "dialogue_bgm") {
+      modeRules = `AUDIO MODE: Conversation / Voiceover over Soft Instrumental Background Music (NO SINGING).
+- Use ONLY segmentType "dialogue" and "narration" (do NOT include "sung_jingle").
+- Set bgmBehavior = "ducked" on every segment.
+- ${speakerFormat === "single_narrator" ? `Use a single charismatic narrator (voiceRole "narrator").` : `Write engaging conversational banter between ${defaultSpeakerA} (voiceRole "speaker_a", voiceGender "female") and ${defaultSpeakerB} (voiceRole "speaker_b", voiceGender "male"), finishing with a punchy Call-to-Action line (voiceRole "narrator").`}`;
+    } else if (audioMode === "hybrid_conversation_song") {
+      modeRules = `AUDIO MODE: Hybrid Mixup of Conversation + Catchy Sung Brand Jingle!
+- Structure the ${targetSec}s ad dynamically:
+  1. Start with 1 to 3 short spoken conversational hook segments (segmentType "dialogue", using ${defaultSpeakerA} [speaker_a, female] and ${defaultSpeakerB} [speaker_b, male], bgmBehavior "ducked" or "none").
+  2. Transition into 1 catchy, memorable SUNG JINGLE segment (segmentType "sung_jingle", voiceRole "jingle_vocal", bgmBehavior "full", lasting ~8 to ${Math.min(18, Math.round(targetSec * 0.45))} seconds with rhythmic, rhyming ad jingle lyrics celebrating ${brandLabel}).
+  3. Finish with 1 crisp spoken Call-to-Action outro segment (segmentType "narration", voiceRole "narrator", bgmBehavior "ducked") delivering the CTA: "${ctaLabel}".`;
+    } else {
+      modeRules = `AUDIO MODE: Visual / Kinetic Poster Ad Only (Zero Spoken Voiceover).
+- Every segment MUST use segmentType "visual_beat", text = "", bgmBehavior = "full", and a bold, short 2-6 word "onScreenHeadline" in ${langDisplay} ending with the CTA "${ctaLabel}".`;
+    }
+
+    let castInfo = "";
+    if (characters.length > 0) {
+      castInfo = `\nDefined Cast:\n` + characters.map(c => `- ${c.name} (${c.role || "Cast"}, gender: ${c.voiceGender || "female"}, roleSlot: ${c.voiceRole || "speaker_a"})`).join("\n");
+    }
+
+    const prompt = `Write a timed ${targetSec}-second short advertisement script in ${langDisplay}.
+Brand / Title: "${brandLabel}"
+Offer / Key Message: "${adBrief.productOrOffer || ""}"
+Audience: "${adBrief.targetAudience || "General audience"}"
+Call-to-Action (CTA): "${ctaLabel}"${adBrief.ctaSubtext ? ` (${adBrief.ctaSubtext})` : ""}
+${eventContext?.title ? `Linked Event: "${eventContext.title}" (${eventContext.location || ""})` : "Standalone Brand/Product Ad"}
+Raw Ad Brief: "${storyText.slice(0, 1500)}"
+${analysis?.summary ? `Strategy Summary: "${analysis.summary}"` : ""}
+${directorGuidelines ? `Director Notes: "${directorGuidelines}"` : ""}
+${castInfo}
+
+${modeRules}
+
+TIMING & PACING RULES:
+1. Keep total spoken/sung words around ${totalWordBudget} words maximum so speech sounds natural and unhurried within ${targetSec} seconds (~2.2 words/sec).
+2. Generate between ${targetSec <= 15 ? "3 and 4" : targetSec <= 30 ? "4 and 6" : "5 and 9"} ordered segments covering 0s to ${targetSec}s continuously.
+3. Each segment needs a short, punchy onScreenHeadline (max 6 words) for key visual emphasis, especially the final CTA segment.
+
+Return a JSON array of script segments.`;
+
+    const response = await clientInfo.ai.models.generateContent({
+      model: clientInfo.modelName,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              segmentOrder: { type: Type.INTEGER },
+              segmentType: { type: Type.STRING },
+              speakerName: { type: Type.STRING },
+              voiceRole: { type: Type.STRING },
+              voiceGender: { type: Type.STRING },
+              text: { type: Type.STRING },
+              onScreenHeadline: { type: Type.STRING },
+              targetDurationSeconds: { type: Type.NUMBER },
+              startTimeSeconds: { type: Type.NUMBER },
+              endTimeSeconds: { type: Type.NUMBER },
+              bgmBehavior: { type: Type.STRING }
+            },
+            required: ["segmentOrder", "segmentType", "speakerName", "text", "targetDurationSeconds"]
+          }
+        }
+      }
+    });
+
+    const cleanJson = (response.text || "").replace(/```json/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleanJson);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      let cursor = 0;
+      const validTypes = ["dialogue", "narration", "sung_jingle", "visual_beat"];
+      const validRoles = ["speaker_a", "speaker_b", "narrator", "jingle_vocal"];
+      const validBgm = ["none", "ducked", "full"];
+
+      const normalized = parsed.map((seg, idx) => {
+        let segType = validTypes.includes(seg.segmentType) ? seg.segmentType : "dialogue";
+        if ((audioMode === "dialogue_only" || audioMode === "dialogue_bgm") && segType === "sung_jingle") {
+          segType = "dialogue";
+        }
+        if (audioMode === "visual_only") {
+          segType = "visual_beat";
+        }
+        const dur = Math.max(2, Number(seg.targetDurationSeconds) || 4);
+        const start = Number(cursor.toFixed(1));
+        cursor += dur;
+        const end = Number(cursor.toFixed(1));
+        return {
+          segmentOrder: idx + 1,
+          segmentType: segType,
+          speakerName: seg.speakerName || (segType === "sung_jingle" ? "Brand Jingle" : "Narrator"),
+          voiceRole: validRoles.includes(seg.voiceRole)
+            ? seg.voiceRole
+            : (segType === "sung_jingle" ? "jingle_vocal" : segType === "narration" ? "narrator" : idx % 2 === 0 ? "speaker_a" : "speaker_b"),
+          voiceGender: String(seg.voiceGender || "").toLowerCase() === "male" ? "male" : "female",
+          text: segType === "visual_beat" ? "" : (seg.text || ""),
+          onScreenHeadline: seg.onScreenHeadline || (idx === parsed.length - 1 ? ctaLabel : ""),
+          targetDurationSeconds: dur,
+          startTimeSeconds: start,
+          endTimeSeconds: end,
+          bgmBehavior: audioMode === "dialogue_only"
+            ? "none"
+            : (validBgm.includes(seg.bgmBehavior) ? seg.bgmBehavior : (segType === "sung_jingle" ? "full" : "ducked"))
+        };
+      });
+      return normalized;
+    }
+    return fallbackSegments;
+  } catch (err) {
+    console.warn("Gemini ad script generation failed, using structured fallback:", err.message);
+    return fallbackSegments;
+  }
+}
+
+// 7. Generate Commercial Storyboard Synchronized to Ad Script Segments
+export async function generateAdStoryboard({
+  storyContext = "",
+  adBrief = {},
+  scriptSegments = [],
+  totalDurationSeconds = 30,
+  language = "en",
+  characters = [],
+  directorGuidelines = "",
+  eventContext = null
+}) {
+  const clientInfo = getGeminiClient();
+  const langConfig = getLanguageConfig(language);
+  const brandLabel = adBrief.brandName || eventContext?.title || "Featured Brand";
+  const ctaHeadline = adBrief.callToAction || `Discover ${brandLabel}`;
+
+  // Build deterministic commercial fallback scenes directly aligned with scriptSegments
+  const buildFallbackAdScenes = () => {
+    if (Array.isArray(scriptSegments) && scriptSegments.length > 0) {
+      return scriptSegments.map((seg, idx) => {
+        const isLast = idx === scriptSegments.length - 1;
+        const start = typeof seg.startTimeSeconds === "number" ? seg.startTimeSeconds : idx * 5;
+        const end = typeof seg.endTimeSeconds === "number" && seg.endTimeSeconds > start
+          ? seg.endTimeSeconds
+          : Math.min(totalDurationSeconds, start + (seg.targetDurationSeconds || 5));
+        const matchedChar = characters.find(c => c?.name && seg.speakerName && c.name.toLowerCase() === seg.speakerName.toLowerCase());
+        const charDesc = matchedChar ? `featuring ${matchedChar.name} (${matchedChar.visualDescription || matchedChar.role || "spokesperson"})` : "";
+        return {
+          sceneNumber: idx + 1,
+          startTimeSeconds: Number(start.toFixed(2)),
+          endTimeSeconds: Number((isLast ? Math.max(end, totalDurationSeconds) : end).toFixed(2)),
+          durationSeconds: Number(Math.max(1.5, (isLast ? Math.max(end, totalDurationSeconds) : end) - start).toFixed(2)),
+          segmentType: isLast ? "cta_endcard" : (seg.segmentType || "dialogue"),
+          speakerName: seg.speakerName || "",
+          onScreenHeadline: seg.onScreenHeadline || (isLast ? ctaHeadline : ""),
+          lyricSnippet: seg.text || seg.onScreenHeadline || brandLabel,
+          visualIdea: isLast
+            ? `Sleek commercial hero end-card shot showcasing ${brandLabel} ${adBrief.productOrOffer || ""}, bold clean studio lighting, 8k advertising cinematography`
+            : `Modern high-end commercial shot ${charDesc} illustrating "${(seg.text || seg.onScreenHeadline || brandLabel).slice(0, 80)}", crisp shallow depth of field, vibrant natural lighting`,
+          characters: matchedChar ? [matchedChar.name] : []
+        };
+      });
+    }
+
+    const count = Math.max(3, Math.round(totalDurationSeconds / 5));
+    const step = Number((totalDurationSeconds / count).toFixed(2));
+    return Array.from({ length: count }, (_, i) => ({
+      sceneNumber: i + 1,
+      startTimeSeconds: Number((i * step).toFixed(2)),
+      endTimeSeconds: i === count - 1 ? totalDurationSeconds : Number(((i + 1) * step).toFixed(2)),
+      durationSeconds: step,
+      segmentType: i === count - 1 ? "cta_endcard" : "dialogue",
+      speakerName: "",
+      onScreenHeadline: i === count - 1 ? ctaHeadline : brandLabel,
+      lyricSnippet: i === count - 1 ? ctaHeadline : `Ad Scene ${i + 1}`,
+      visualIdea: `High-impact commercial cinematography for ${brandLabel}, scene ${i + 1}, photorealistic 8k lighting`,
+      characters: []
+    }));
+  };
+
+  const fallbackScenes = buildFallbackAdScenes();
+  if (!clientInfo || !Array.isArray(scriptSegments) || scriptSegments.length === 0) {
+    return fallbackScenes;
+  }
+
+  try {
+    let castBlock = "";
+    if (Array.isArray(characters) && characters.length > 0) {
+      const lines = characters
+        .filter(c => c?.name)
+        .map(c => `- ${c.name}${c.role ? ` (${c.role})` : ""}: ${c.visualDescription || "Commercial talent"}`)
+        .join("\n");
+      if (lines) {
+        castBlock = `\nCAST / TALENT VISUAL ANCHORS:\n${lines}\nWhenever a speaker or cast member appears on screen, explicitly include their visualDescription (face, attire, age, style) inside visualIdea for visual consistency!\n`;
+      }
+    }
+
+    const segmentsPromptText = scriptSegments
+      .map((s, idx) => `Segment ${idx + 1} [${s.startTimeSeconds}s - ${s.endTimeSeconds}s] (${s.segmentType}, Speaker: ${s.speakerName || "N/A"}): "${s.text || s.onScreenHeadline || ""}" | Headline: "${s.onScreenHeadline || ""}"`)
+      .join("\n");
+
+    const prompt = `You are a commercial film director storyboarding a ${totalDurationSeconds}-second advertisement in ${langConfig.name}.
+Brand / Campaign: "${brandLabel}" — ${adBrief.productOrOffer || ""}
+Call-to-Action: "${ctaHeadline}"
+Ad Context: "${storyContext.slice(0, 600)}"
+${directorGuidelines ? `Director Guidelines: "${directorGuidelines}"` : ""}
+${castBlock}
+Timed Audio & Script Segments:
+${segmentsPromptText}
+
+Create commercial storyboard scenes synchronized strictly to these timed segments:
+1. Map each script segment to a vivid commercial camera shot (if a sung_jingle segment is longer than 8 seconds, you may split it into 2 fast montage scenes; otherwise keep 1 scene per segment with exact matching startTimeSeconds and endTimeSeconds).
+2. Write visualIdea in English with commercial camera framing (close-up reaction, two-person conversational framing, product hero macro, dynamic lifestyle montage, clean CTA end-card).
+3. Preserve lyricSnippet (the exact spoken line or sung jingle line for subtitles), speakerName, segmentType, and a short punchy onScreenHeadline (ensure the final scene has "${ctaHeadline}" as onScreenHeadline).
+4. Start at 0s and end at ${totalDurationSeconds}s.
+
+Return a JSON array of scenes.`;
+
+    const response = await clientInfo.ai.models.generateContent({
+      model: clientInfo.modelName,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              sceneNumber: { type: Type.INTEGER },
+              startTimeSeconds: { type: Type.NUMBER },
+              endTimeSeconds: { type: Type.NUMBER },
+              durationSeconds: { type: Type.NUMBER },
+              segmentType: { type: Type.STRING },
+              speakerName: { type: Type.STRING },
+              onScreenHeadline: { type: Type.STRING },
+              lyricSnippet: { type: Type.STRING },
+              visualIdea: { type: Type.STRING },
+              characters: { type: Type.ARRAY, items: { type: Type.STRING } }
+            },
+            required: ["sceneNumber", "startTimeSeconds", "endTimeSeconds", "lyricSnippet", "visualIdea"]
+          }
+        }
+      }
+    });
+
+    const cleanJson = (response.text || "").replace(/```json/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleanJson);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      parsed[0].startTimeSeconds = 0;
+      parsed[parsed.length - 1].endTimeSeconds = totalDurationSeconds;
+      if (!parsed[parsed.length - 1].onScreenHeadline && ctaHeadline) {
+        parsed[parsed.length - 1].onScreenHeadline = ctaHeadline;
+      }
+      return parsed;
+    }
+    return fallbackScenes;
+  } catch (err) {
+    console.warn("Gemini ad storyboard generation failed, using aligned fallback:", err.message);
+    return fallbackScenes;
+  }
+}

@@ -7,7 +7,8 @@ export function EventSwitcherModal({
   events = [],
   selectedEventId,
   onSelectEvent,
-  onOpenCreateModal
+  onOpenCreateModal,
+  allowStandalone = false
 }) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("upcoming"); // "upcoming" | "past" | "pinned"
@@ -216,6 +217,45 @@ export function EventSwitcherModal({
 
         {/* Event Roster List */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 bg-page max-h-[48vh]">
+          {allowStandalone && (
+            <div
+              onClick={() => {
+                onSelectEvent("standalone");
+                onClose();
+              }}
+              className={`p-4 rounded-card border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                selectedEventId === "standalone"
+                  ? "bg-primary-soft border-2 border-primary shadow-subtle"
+                  : "bg-surface border-theme hover:border-primary/40 hover:bg-primary-tint/40"
+              }`}
+            >
+              <div className="space-y-1 flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="h-7 w-7 rounded-tile bg-indigo-tile text-white inline-flex items-center justify-center shrink-0">
+                    <Icon name="building" className="w-4 h-4" />
+                  </span>
+                  <span className="font-bold text-[15px] text-heading">
+                    Standalone Brand &amp; Product Ads (No Event)
+                  </span>
+                  <span className="ui-chip bg-pastel-mint text-heading border-theme">
+                    Company Workspace
+                  </span>
+                  {selectedEventId === "standalone" && (
+                    <span className="ui-chip bg-primary text-white border-primary">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted">
+                  Create short advertisement and promo videos without linking to a specific event.
+                </p>
+              </div>
+              <span className="text-xs font-bold text-primary shrink-0">
+                Select Workspace →
+              </span>
+            </div>
+          )}
+
           {paginatedEvents.length === 0 ? (
             <div className="ui-card p-8 text-center space-y-2">
               <div className="mx-auto h-12 w-12 rounded-full bg-primary-soft text-primary flex items-center justify-center">

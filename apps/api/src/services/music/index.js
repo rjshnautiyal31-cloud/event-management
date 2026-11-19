@@ -208,22 +208,29 @@ async function fetchGoogleCloudNeuralVocalAudio(lyricsText, tempVocalPath, langu
     }
 
     const ttsClient = new textToSpeech.TextToSpeechClient(clientOptions);
-    const voiceConfig = getLanguageGcpVoice(language, voiceType);
+    try {
+      const voiceConfig = getLanguageGcpVoice(language, voiceType);
 
-    const [response] = await ttsClient.synthesizeSpeech({
-      input: { text: cleanLyrics },
-      voice: voiceConfig,
-      audioConfig: {
-        audioEncoding: "MP3",
-        speakingRate: 0.95,
-        pitch: 1.2
+      const [response] = await ttsClient.synthesizeSpeech(
+        {
+          input: { text: cleanLyrics },
+          voice: voiceConfig,
+          audioConfig: {
+            audioEncoding: "MP3",
+            speakingRate: 0.95,
+            pitch: 1.2
+          }
+        },
+        { timeout: 12000, maxRetries: 1 }
+      );
+
+      if (response.audioContent) {
+        await fsPromises.writeFile(tempVocalPath, response.audioContent, "binary");
+        console.log(`[Google Cloud TTS OAuth2] Successfully synthesized Google ${voiceConfig.languageCode} (${voiceConfig.name}, ${voiceConfig.ssmlGender}) Studio Vocal audio file (${response.audioContent.length} bytes) for ${langConfig.name}`);
+        return true;
       }
-    });
-
-    if (response.audioContent) {
-      await fsPromises.writeFile(tempVocalPath, response.audioContent, "binary");
-      console.log(`[Google Cloud TTS OAuth2] Successfully synthesized Google ${voiceConfig.languageCode} (${voiceConfig.name}, ${voiceConfig.ssmlGender}) Studio Vocal audio file (${response.audioContent.length} bytes) for ${langConfig.name}`);
-      return true;
+    } finally {
+      ttsClient.close().catch(() => {});
     }
   } catch (err) {
     console.warn(`Google Cloud OAuth2 TTS call failed for ${langConfig.code}, falling back to local vocal synthesis:`, err.message);

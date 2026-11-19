@@ -15,7 +15,15 @@ const storyAnalysisSchema = new mongoose.Schema(
         visualIdea: { type: String },
         suggestedDurationSeconds: { type: Number, default: 5 }
       }
-    ]
+    ],
+    adStrategy: {
+      hook: { type: String, default: "" },
+      painPointOrDesire: { type: String, default: "" },
+      valueProposition: { type: String, default: "" },
+      jingleHookIdea: { type: String, default: "" },
+      callToActionLine: { type: String, default: "" },
+      pacingStyle: { type: String, default: "" }
+    }
   },
   { timestamps: true }
 );

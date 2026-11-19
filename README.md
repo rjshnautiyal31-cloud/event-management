@@ -63,9 +63,20 @@ A full-stack, enterprise-grade monorepo for multi-tenant company event managemen
 - **Decoupled Check-in Logs**:
   - Denormalizes attendee name and email into `entrylogs` at check-in so historical records are preserved even if an attendee profile is subsequently deleted.
 
-### 3. AI Story-to-Song-to-Video Studio (`/#/studio`)
+### 3. AI Story Studio (`/#/studio`) & Dedicated AI Ad Studio (`/#/ads`)
+- **Two Dedicated Studio Workspaces**:
+  - **AI Story Studio (`/#/studio` — `story_music`)**: Dedicated exclusively to full narrative Story-to-Music Videos with poetic lyrics, studio singing vocals, and cinematic event highlights.
+  - **AI Ad Studio (`/#/ads` — `ad_promo`)**: Dedicated page for **15s, 30s, 45s, and 60s Short Advertisement & Promo Videos**, supporting **both Event Promo Ads** (`eventId: <ObjectId>`) **and Standalone Brand / Product Ads without selecting an Event** (`eventId: null`, isolated per `companyId` for `owner`, `co_owner`, `admin`, and `super_admin`).
+- **4 Flexible Commercial Audio Modes (`ad_promo`)**:
+  - **`dialogue_only` (Conversation / Voiceover Only — No Song)**: Multi-speaker dialogue (`speaker_a`, `speaker_b`, `narrator`) or single narrator synthesized via Google Cloud Neural2 / ElevenLabs with zero background music.
+  - **`dialogue_bgm` (Conversation + Soft BGM — No Singing)**: Spoken dialogue mixed over an auto-ducked instrumental background bed (`~18%` volume under speech).
+  - **`hybrid_conversation_song` (Conversation + Sung Jingle Mixup)**: Spoken conversational hook transitioning seamlessly into a catchy sung AI jingle chorus (Lyria 3 Pro / ElevenLabs) and closing with a crisp spoken CTA voiceover.
+  - **`visual_only` (Visual Kinetic Ad Only)**: Bold burned-in typography cards with optional instrumental soundtrack or silent stream.
+- **Interactive Script Timeline Editor & Burned-In CTA Banners**:
+  - Reorderable commercial script blocks (`dialogue`, `narration`, `sung_jingle`, `visual_beat`) with per-block speaker names, voice gender/slot, target duration, spoken/sung copy, and on-screen headlines.
+  - Crisp deep-indigo (`#34206F`) `.ass` subtitle/headline banners and closing Call-to-Action overlays burned directly into rendered MP4 videos via `libass`, alongside downloadable speaker-labeled `.srt` and `.vtt` tracks.
 - **Event-Scoped AI Stories & Multi-Video Support**:
-  - Associate multiple AI story projects per event. Restrictable via Event ACL (`owner`, `co_owner`, `event_admin`, `super_admin`).
+  - Associate multiple AI story or ad projects per event, or switch to **Standalone Brand & Product Ads** via the scope bar or `⌘K` switcher. Restrictable via Event & Tenant ACL (`owner`, `co_owner`, `event_admin`, `super_admin`).
 - **Multilingual Narrative & Audio Synthesis (English, Hindi & Hinglish)**:
   - Generate story analysis, poetic song lyrics, singing vocals, visual storyboards, and burned subtitles in **🇺🇸 English (`en`)**, **🇮🇳 Hindi (`hi` — हिन्दी)**, and **🇮🇳 Hinglish (`hinglish` — modern Bollywood / Indie-Pop blend of conversational Hindi and English written & sung in Roman script)**.
   - Native script rendering (Devanagari for Hindi, Roman script for Hinglish/English) with automatic cross-lingual visual translation for AI video generators.

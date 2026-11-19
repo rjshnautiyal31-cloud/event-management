@@ -77,6 +77,17 @@ export function AppShell({
       icon: "studio",
       isActive: location.pathname === "/studio"
     },
+    ...(isAdmin
+      ? [
+          {
+            key: "ads",
+            label: "AI Ad Studio",
+            to: "/ads",
+            icon: "rocket",
+            isActive: location.pathname === "/ads"
+          }
+        ]
+      : []),
     {
       key: "scan",
       label: "Entrance Scanner",
@@ -248,11 +259,17 @@ export function AppShell({
             </span>
           </div>
           <Link
-            to={location.pathname === "/studio" ? "/scan" : "/studio"}
+            to={
+              location.pathname === "/studio" || location.pathname === "/ads"
+                ? "/scan"
+                : "/studio"
+            }
             onClick={() => setDrawerOpen(false)}
             className="px-3.5 py-1.5 rounded-full bg-primary hover:bg-primary-dark text-white text-xs font-semibold transition-colors shrink-0"
           >
-            {location.pathname === "/studio" ? "Scanner" : "Open AI"}
+            {location.pathname === "/studio" || location.pathname === "/ads"
+              ? "Scanner"
+              : "Open AI"}
           </Link>
         </div>
 

@@ -12,6 +12,7 @@ import { Song } from "../models/Song.js";
 import { queueService } from "../services/queue/index.js";
 import { env } from "../config/env.js";
 import { createMusicalMelodyWavBuffer } from "../services/music/index.js";
+import { createSilentStereoWavBuffer } from "../services/music/adAudioComposer.js";
 import { uploadAssetBuffer, buildStoryStorageKey } from "../services/storage/index.js";
 
 const activeFfmpegPath = process.env.FFMPEG_PATH || (fsSync.existsSync("/usr/bin/ffmpeg") ? "/usr/bin/ffmpeg" : (fsSync.existsSync("/usr/local/bin/ffmpeg") ? "/usr/local/bin/ffmpeg" : ffmpegInstaller));
@@ -37,6 +38,68 @@ export function formatVttTime(secondsTotal) {
 
   const pad = (n, z = 2) => String(n).padStart(z, "0");
   return `${pad(hrs)}:${pad(mins)}:${pad(secs)}.${pad(millis, 3)}`;
+}
+
+// Helper to format speaker-aware / jingle-aware subtitle lines for Ad & Story scenes
+export function formatSceneSubtitleLine(scene, isAdProject = false, fallbackIndex = 0) {
+  if (!isAdProject) {
+    return scene.captionText || scene.lyricSnippet || `Scene ${scene.sceneNumber || fallbackIndex + 1}`;
+  }
+  const segType = scene.segmentType || "dialogue";
+  const rawLine = (scene.lyricSnippet || scene.captionText || "").trim();
+  if (segType === "visual_beat") {
+    return (scene.onScreenHeadline || rawLine || "").trim();
+  }
+  if (!rawLine) {
+    return (scene.onScreenHeadline || "").trim();
+  }
+  if (segType === "sung_jingle") {
+    return rawLine.startsWith("♪") ? rawLine : `♪ ${rawLine} ♪`;
+  }
+  const speaker = (scene.speakerName || "").trim();
+  if (speaker && !["narrator", "announcer", "on-screen text", "brand jingle"].includes(speaker.toLowerCase())) {
+    return rawLine.toLowerCase().startsWith(`${speaker.toLowerCase()}:`) ? rawLine : `${speaker}: ${rawLine}`;
+  }
+  return rawLine;
+}
+
+// Build a libass (.ass) commercial headline / CTA banner file for burned-in ad overlays
+async function writeAdHeadlineAssFile(assPath, { width, height, duration, headline = "", subtext = "", isEndCard = false }) {
+  const cleanHeadline = String(headline || "").replace(/[\r\n{}]/g, " ").trim();
+  const cleanSubtext = String(subtext || "").replace(/[\r\n{}]/g, " ").trim();
+  if (!cleanHeadline) return false;
+
+  const hrs = Math.floor(duration / 3600);
+  const mins = Math.floor((duration % 3600) / 60);
+  const secs = (duration % 60).toFixed(2).padStart(5, "0");
+  const endAssTime = `${hrs}:${String(mins).padStart(2, "0")}:${secs}`;
+
+  const baseScale = Math.min(width, height);
+  const titleFontSize = Math.max(28, Math.round(baseScale * (isEndCard ? 0.046 : 0.038)));
+  const subFontSize = Math.max(20, Math.round(baseScale * 0.028));
+  const marginV = Math.max(60, Math.round(height * (isEndCard ? 0.14 : 0.10)));
+  const marginH = Math.max(36, Math.round(width * 0.06));
+
+  // ASS colors use &HAABBGGRR (Deep Indigo #34206F => BGR 6F2034)
+  const dialogueText = isEndCard && cleanSubtext
+    ? `${cleanHeadline}\\N{\\fs${subFontSize}\\b0}${cleanSubtext}`
+    : cleanHeadline;
+
+  const assBody = `[Script Info]
+ScriptType: v4.00+
+PlayResX: ${width}
+PlayResY: ${height}
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: AdBanner,Sans,${titleFontSize},&H00FFFFFF,&H00FFFFFF,&H306F2034,&H406F2034,-1,0,0,0,100,100,0.5,0,3,16,0,2,${marginH},${marginH},${marginV},1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,${endAssTime},AdBanner,,0,0,0,,${dialogueText}
+`;
+  await fs.writeFile(assPath, assBody, "utf8");
+  return true;
 }
 
 // Pure JS 24-bit solid color BMP image generator
@@ -210,14 +273,21 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     await fs.mkdir(uploadDir, { recursive: true });
     const tempOutputPath = path.join(uploadDir, outputFilename);
 
-    // Fetch Song Document for Exact Song Duration
+    // Fetch Song Document for Exact Song / Ad Audio Duration
     const projectDoc = await Project.findById(projectId).populate("activeSongId activeStoryboardId");
+    const isAdProject = projectDoc?.projectType === "ad_promo";
     let songDoc = projectDoc?.activeSongId;
     if (!songDoc) {
       songDoc = await Song.findOne({ projectId }).sort({ createdAt: -1 });
     }
 
-    const targetSongDuration = songDoc?.durationSeconds || 30;
+    const effectiveAudioMode = songDoc?.trackMode && songDoc.trackMode !== "song"
+      ? songDoc.trackMode
+      : (isAdProject ? (projectDoc?.adBrief?.audioMode || "hybrid_conversation_song") : "song");
+
+    const targetSongDuration =
+      songDoc?.durationSeconds ||
+      (isAdProject ? Number(projectDoc?.adBrief?.targetDurationSeconds) || 30 : 30);
 
     // Fetch Storyboard and uploaded Media items
     let storyboardDoc = projectDoc?.activeStoryboardId;
@@ -232,11 +302,12 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
 
     let rawScenes = storyboardDoc?.scenes || [];
     if (rawScenes.length === 0) {
-      const sceneCount = Math.max(4, mediaDocs.length);
+      const sceneCount = Math.max(isAdProject ? 3 : 4, mediaDocs.length);
       rawScenes = Array.from({ length: sceneCount }).map((_, i) => ({
         sceneNumber: i + 1,
-        captionText: `Event Scene ${i + 1}`,
-        mediaId: mediaDocs[i % mediaDocs.length] || null
+        captionText: isAdProject ? (projectDoc?.adBrief?.brandName || `Ad Scene ${i + 1}`) : `Event Scene ${i + 1}`,
+        onScreenHeadline: isAdProject && i === sceneCount - 1 ? (projectDoc?.adBrief?.callToAction || "") : "",
+        mediaId: mediaDocs[i % Math.max(1, mediaDocs.length)] || null
       }));
     }
 
@@ -266,7 +337,7 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       const scene = rawScenes[idx];
       let mediaDoc = scene.mediaId;
 
-      if (!mediaDoc || !mediaDoc.fileUrl) {
+      if ((!mediaDoc || !mediaDoc.fileUrl) && mediaDocs.length > 0) {
         mediaDoc = mediaDocs[idx % mediaDocs.length];
       }
 
@@ -278,7 +349,10 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       scenesToRender.push({
         sceneNumber: scene.sceneNumber || idx + 1,
         duration: Math.max(1, rawDurations[idx] || 5),
-        captionText: scene.captionText || scene.lyricSnippet || `Scene ${idx + 1}`,
+        segmentType: scene.segmentType || (isAdProject ? "dialogue" : "song"),
+        speakerName: scene.speakerName || "",
+        onScreenHeadline: scene.onScreenHeadline || (isAdProject && idx === rawScenes.length - 1 ? (projectDoc?.adBrief?.callToAction || "") : ""),
+        captionText: formatSceneSubtitleLine(scene, isAdProject, idx),
         imgPath
       });
     }
@@ -290,7 +364,7 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     for (const scene of scenesToRender) {
       if (!scene.imgPath) {
         if (!hasFallbackCreated) {
-          const bmpBuffer = createSolidBmpBuffer(800, 600, "0A2D59");
+          const bmpBuffer = createSolidBmpBuffer(800, 600, isAdProject ? "34206F" : "0A2D59");
           await fs.writeFile(fallbackBmpPath, bmpBuffer);
           hasFallbackCreated = true;
           tempFilesToClean.push(fallbackBmpPath);
@@ -307,17 +381,21 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     }
     if (!effectiveAudioPath) {
       const fallbackWavPath = path.join(uploadDir, `fallback_audio_${timestamp}.wav`);
-      const wavBuffer = createMusicalMelodyWavBuffer(targetSongDuration, 44100, songDoc?.genre || "Pop");
+      // Respect "No Song" modes (dialogue_only / visual_only) — never inject synthetic melody when user chose no song!
+      const wavBuffer = (effectiveAudioMode === "dialogue_only" || effectiveAudioMode === "visual_only")
+        ? createSilentStereoWavBuffer(targetSongDuration, 44100)
+        : createMusicalMelodyWavBuffer(targetSongDuration, 44100, songDoc?.genre || "Pop");
       await fs.writeFile(fallbackWavPath, wavBuffer);
       effectiveAudioPath = fallbackWavPath;
       tempFilesToClean.push(fallbackWavPath);
     }
 
-    console.log("[Video Worker] Target song duration:", targetSongDuration);
+    console.log("[Video Worker] Target duration:", targetSongDuration, "mode:", effectiveAudioMode);
     console.log("[Video Worker] scenesToRender count:", scenesToRender.length);
 
     // Detect if running on Render Free Tier or resource-constrained environment
     const isConstrained = Boolean(process.env.RENDER || env.nodeEnv === "production");
+    const burnInAdOverlay = Boolean(isAdProject && projectDoc?.adBrief?.burnInCtaOverlay !== false);
 
     // Render standardized scene MP4 segments matching the selected resolution preset
     const segmentPaths = [];
@@ -326,10 +404,28 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       const segPath = path.join(uploadDir, `seg_${timestamp}_${index}.mp4`);
       const srcPath = scene.imgPath;
       const isVideo = [".mp4", ".webm", ".mov", ".mkv", ".avi"].includes(path.extname(srcPath || "").toLowerCase());
+      const isFinalScene = index === scenesToRender.length - 1;
 
       console.log(`[Video Worker] Rendering segment ${index} (${preset.width}x${preset.height}): isVideo=${isVideo}, duration=${scene.duration}`);
 
-      await new Promise((resolve, reject) => {
+      let assOverlayPath = null;
+      if (burnInAdOverlay && (isFinalScene || scene.segmentType === "visual_beat" || scene.segmentType === "cta_endcard") && scene.onScreenHeadline) {
+        const candidateAss = path.join(uploadDir, `ad_banner_${timestamp}_${index}.ass`);
+        const wroteAss = await writeAdHeadlineAssFile(candidateAss, {
+          width: preset.width,
+          height: preset.height,
+          duration: scene.duration,
+          headline: scene.onScreenHeadline,
+          subtext: isFinalScene ? (projectDoc?.adBrief?.ctaSubtext || "") : "",
+          isEndCard: isFinalScene
+        }).catch(() => false);
+        if (wroteAss) {
+          assOverlayPath = candidateAss;
+          tempFilesToClean.push(candidateAss);
+        }
+      }
+
+      const renderSegmentPass = (withAss = true) => new Promise((resolve, reject) => {
         const cmd = ffmpeg();
         if (isVideo) {
           cmd.input(srcPath).inputOptions(["-stream_loop", "-1", "-t", String(scene.duration)]);
@@ -337,8 +433,14 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
           cmd.input(srcPath).inputOptions(["-loop", "1", "-t", String(scene.duration)]);
         }
 
+        const baseScaleCrop = `scale=${preset.width}:${preset.height}:force_original_aspect_ratio=increase,crop=${preset.width}:${preset.height}`;
+        const safeAssFilter = withAss && assOverlayPath
+          ? `,ass=${assOverlayPath.replace(/\\/g, "/").replace(/:/g, "\\:")}`
+          : "";
+        const vfChain = `${baseScaleCrop}${safeAssFilter},format=yuv420p`;
+
         const segOutputOpts = [
-          "-vf", `scale=${preset.width}:${preset.height}:force_original_aspect_ratio=increase,crop=${preset.width}:${preset.height},format=yuv420p`,
+          "-vf", vfChain,
           "-r", "25",
           "-an",
           "-c:v", "libx264",
@@ -350,10 +452,21 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
           .save(segPath)
           .on("end", resolve)
           .on("error", (err) => {
-            console.error(`Segment ${index} render error:`, err.message);
+            console.error(`Segment ${index} render error (withAss=${withAss}):`, err.message);
             reject(err);
           });
       });
+
+      try {
+        await renderSegmentPass(Boolean(assOverlayPath));
+      } catch (segErr) {
+        if (assOverlayPath) {
+          await fs.unlink(segPath).catch(() => {});
+          await renderSegmentPass(false);
+        } else {
+          throw segErr;
+        }
+      }
 
       segmentPaths.push(segPath);
     }
@@ -458,9 +571,11 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
         const startTime = currentSrtTime;
         const endTime = currentSrtTime + scene.duration;
         currentSrtTime = endTime;
-        const text = scene.captionText || `Scene ${scene.sceneNumber}`;
-        srtBlocks.push(`${i + 1}\n${formatSrtTime(startTime)} --> ${formatSrtTime(endTime)}\n${text}\n`);
-        vttBlocks.push(`${i + 1}\n${formatVttTime(startTime)} --> ${formatVttTime(endTime)}\n${text}\n`);
+        const text = (scene.captionText || "").trim();
+        if (text) {
+          srtBlocks.push(`${srtBlocks.length + 1}\n${formatSrtTime(startTime)} --> ${formatSrtTime(endTime)}\n${text}\n`);
+          vttBlocks.push(`${vttBlocks.length}\n${formatVttTime(startTime)} --> ${formatVttTime(endTime)}\n${text}\n`);
+        }
       });
 
       const srtContent = srtBlocks.join("\n");
@@ -511,7 +626,9 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     dbJob.status = "completed";
     dbJob.progressPercent = 100;
     dbJob.resultRef = videoDoc._id;
-    dbJob.currentStepMessage = "Event Music Video rendering complete!";
+    dbJob.currentStepMessage = isAdProject
+      ? "Short Advertisement Video rendering complete!"
+      : "Event Music Video rendering complete!";
     await dbJob.save();
 
     await Project.findByIdAndUpdate(projectId, {

@@ -310,6 +310,22 @@ The studio supports two distinct rendering and visual paradigms:
 
 ---
 
+### 10.3 Dedicated AI Ad Studio (`/#/ads` — Event Promo & Standalone Brand Ads)
+Short Advertisement & Promo Videos live on their own dedicated page at **`/#/ads`** (**AI Ad Studio** in the left sidebar), keeping **`/#/studio`** (**AI Story Studio**) 100% focused on Story-to-Music Videos:
+1. **Two-Pill Workspace Scope Toggle (No Dropdown Hunting)**:
+   - **Event Promo Ads**: Select any managed event (or press `⌘K`) and click **+ New Short Ad** to promote ticket registration, early-bird offers, speakers, or event highlights.
+   - **Standalone Brand & Product Ads (No Event Required)**: Click the **Standalone Brand & Product Ads** pill at the top of `/#/ads` (available to Company Owners, Co-Owners, Admins, and Super Admins) to create 15s–60s general product, SaaS, or brand commercials isolated safely to your company workspace without creating or selecting an event.
+2. **4 Commercial Audio & Song Modes**:
+   - **Conversation + Sung Jingle Mix (`hybrid_conversation_song`)**: Opens with natural 2-speaker conversational banter, transitions into a catchy sung AI brand jingle chorus (Lyria 3 Pro / ElevenLabs), and closes with a spoken announcer Call-to-Action.
+   - **Conversation + Soft BGM (`dialogue_bgm`)**: Multi-speaker conversation or single narrator voiceover mixed over an auto-ducked instrumental background bed (zero singing).
+   - **Conversation / Voiceover Only (`dialogue_only`)**: Pure crisp multi-speaker dialogue or narrator voiceover with zero background music.
+   - **Visual Kinetic Ad Only (`visual_only`)**: Bold on-screen typography and visual cuts with optional instrumental soundtrack or silent MP4 output.
+3. **Interactive Script Timeline & Burned-In CTA Overlays**:
+   - In **Step 2 (Script, Voices & Jingle)**, click **1. Generate AI Ad Script** to draft timed commercial blocks, edit/reorder/add dialogue or jingle lines, and click **2. Synthesize & Mix Ad Audio**.
+   - In **Step 4 & Step 5**, customize per-scene **On-Screen Headlines** and toggle **Burn-In CTA Banner** to render crisp `#34206F` deep-indigo headline banners directly onto your MP4 alongside speaker-labeled `.srt`/`.vtt` subtitles.
+
+---
+
 ### Stage 1: Story Narrative, Cast Bible & Director Directives (Level 1 Control)
 1. If the selected event has no stories yet, click **"Create First Story Project"** in the empty-state prompt card; otherwise select an existing story in the **Event Stories** strip or click **"+ New Story"** to launch the centered creation modal.
 2. **Story Narrative & Quick Action Tiles**: Enter raw event memories, speeches, or summaries. Inside **Tab 1 (Story Analysis)**, use the contextual **`+ Add Photos`** tile to jump to photo uploads or **`Cast & Guidelines`** to jump directly to the current story's character & director cards.

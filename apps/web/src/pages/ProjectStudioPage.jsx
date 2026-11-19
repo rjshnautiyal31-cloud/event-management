@@ -307,9 +307,12 @@ export function ProjectStudioPage({ auth, token: propToken }) {
 
   async function loadProjects(eventId) {
     try {
-      const data = await api(`/api/story-video/projects?eventId=${eventId}`, {
-        token
-      });
+      const data = await api(
+        `/api/story-video/projects?eventId=${encodeURIComponent(eventId)}&projectType=story_music`,
+        {
+          token
+        }
+      );
       setProjects(data);
       if (data.length > 0) {
         setActiveProject(data[0]);

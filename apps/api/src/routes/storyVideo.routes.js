@@ -1096,13 +1096,18 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/veo", async (req, res, n
       }
     }
 
-    console.log(`[API Story Video] Generating ${targetAspect} Gemini Omni 1.1 Flash video clip for Scene ${scene.sceneNumber}: "${promptText.slice(0, 60)}..."`);
+    const sceneClipDuration = Math.max(
+      2,
+      Math.round((Number(scene.endTimeSeconds) || 5) - (Number(scene.startTimeSeconds) || 0))
+    );
+
+    console.log(`[API Story Video] Generating ${targetAspect} (${sceneClipDuration}s) Gemini Omni 1.1 Flash video clip for Scene ${scene.sceneNumber}: "${promptText.slice(0, 60)}..."`);
 
     const videoEngine = getVideoProvider(req.body?.videoProvider);
     const videoUrl = await videoEngine.generateSceneVideoClip({
       imageUrl: sourceImageUrl,
       promptText,
-      durationSeconds: 5,
+      durationSeconds: sceneClipDuration,
       aspectRatio: targetAspect,
       projectId: project._id,
       title: project.title,
@@ -1119,7 +1124,7 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/veo", async (req, res, n
       mediaType: "video",
       aspectRatio: targetAspect,
       originalFilename: `omni_scene_${scene.sceneNumber}_${aspectTag}.mp4`,
-      durationSeconds: 5
+      durationSeconds: sceneClipDuration
     });
 
     const setUpdate = {
@@ -1429,12 +1434,17 @@ storyVideoRouter.post("/projects/:id/scenes/generate-all-veo", async (req, res, 
             }
           }
 
+          const sceneClipDuration = Math.max(
+            2,
+            Math.round((Number(scene.endTimeSeconds) || 5) - (Number(scene.startTimeSeconds) || 0))
+          );
+
           try {
-            console.log(`[API Story Video] Generating ${targetAspect} scene ${scene.sceneNumber}/${storyboard.scenes.length} with Gemini Omni 1.1 Flash: "${promptText.slice(0, 50)}..."`);
+            console.log(`[API Story Video] Generating ${targetAspect} (${sceneClipDuration}s) scene ${scene.sceneNumber}/${storyboard.scenes.length} with Gemini Omni 1.1 Flash: "${promptText.slice(0, 50)}..."`);
             const videoUrl = await videoEngine.generateSceneVideoClip({
               imageUrl: sourceImageUrl,
               promptText,
-              durationSeconds: 5,
+              durationSeconds: sceneClipDuration,
               aspectRatio: targetAspect,
               projectId: project._id,
               title: project.title,
@@ -1448,7 +1458,7 @@ storyVideoRouter.post("/projects/:id/scenes/generate-all-veo", async (req, res, 
                 mediaType: "video",
                 aspectRatio: targetAspect,
                 originalFilename: `omni_scene_${scene.sceneNumber}_${aspectTag}.mp4`,
-                durationSeconds: 5
+                durationSeconds: sceneClipDuration
               });
 
               const setUpdate = {

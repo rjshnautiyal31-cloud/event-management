@@ -7,7 +7,9 @@ import {
   resolveSceneMediaForAspect,
   getSavedAspectsForScene,
   collectSavedRenderedVideos,
-  aspectRatioToSlotKey
+  aspectRatioToSlotKey,
+  getSceneDurationSeconds,
+  summarizeStoryboardTiming
 } from "../utils/aspectMedia.js";
 
 export function ProjectStudioPage({ auth, token: propToken }) {
@@ -235,7 +237,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
       if (activeProject.activeSongId?.durationSeconds) {
         const d = activeProject.activeSongId.durationSeconds;
         const matchingDuration =
-          d <= 45 ? "30" : d <= 75 ? "60" : d <= 105 ? "90" : "180";
+          d <= 45 ? "30" : d <= 75 ? "60" : d <= 105 ? "90" : d <= 150 ? "120" : "180";
         setSelectedTargetDuration(matchingDuration);
       }
       if (activeProject.activeSongId?.genre) {
@@ -580,7 +582,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     setError("");
     const langLabel = getLanguageLabel(selectedLanguage);
     setSuccess(
-      `Analyzing story narrative in ${langLabel} with Gemini AI (~10-15s)...`
+      `Analyzing story narrative in ${langLabel} with Gemini AI...`
     );
     try {
       await api(`/api/story-video/projects/${activeProject._id}/analyze`, {
@@ -620,7 +622,11 @@ export function ProjectStudioPage({ auth, token: propToken }) {
       const langLabel = getLanguageLabel(selectedLanguage);
       const targetSec = Number(selectedTargetDuration) || 180;
       const targetSecLabel =
-        targetSec >= 120 ? "~3 min full studio song" : `${targetSec}s track`;
+        targetSec >= 165
+          ? "180s (3 min) studio song"
+          : targetSec >= 115
+            ? "120s (2 min) studio song"
+            : `${targetSec}s track`;
       const voiceLabel =
         selectedVoiceType === "male"
           ? "Male Vocals"
@@ -631,7 +637,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
               : "Female Vocals";
 
       setSuccess(
-        `Composing ${targetSecLabel} (${voiceLabel}) in ${langLabel} with ${providerLabel} (~60-90s)... Generating singing vocals, acoustics & melody.`
+        `Composing ${targetSecLabel} (${voiceLabel}) in ${langLabel} with ${providerLabel}... Generating singing vocals, acoustics & melody.`
       );
 
       const songRes = await api(
@@ -686,10 +692,20 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     if (!activeProject) return;
     const targetAspectRatio =
       videoPresets[selectedPreset]?.aspectRatio || "16:9";
+    const scenes = activeProject.activeStoryboardId?.scenes || [];
+    const totalSec =
+      activeProject.activeSongId?.durationSeconds ||
+      Number(selectedTargetDuration) ||
+      30;
+    const sceneObj = scenes[sceneIndex];
+    const sceneDur = getSceneDurationSeconds(
+      sceneObj,
+      Math.max(2, Math.round(totalSec / Math.max(1, scenes.length)))
+    );
     setGeneratingVeoSceneIdx(sceneIndex);
     setError("");
     setSuccess(
-      `Generating Gemini Omni 1.1 Flash (${targetAspectRatio}) motion video for Scene ${sceneIndex + 1}... (~30-35s)`
+      `Generating ${sceneDur}s Gemini Omni 1.1 Flash (${targetAspectRatio}) motion clip for Scene ${sceneIndex + 1} (${totalSec}s total video)...`
     );
     try {
       await api(
@@ -701,7 +717,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
         }
       );
       setSuccess(
-        `Gemini Omni 1.1 (${targetAspectRatio}) motion video clip saved for Scene ${sceneIndex + 1} (other aspect ratios preserved)!`
+        `Saved ${sceneDur}s Gemini Omni 1.1 (${targetAspectRatio}) motion clip for Scene ${sceneIndex + 1} (other aspect ratios preserved)!`
       );
       const updated = await api(
         `/api/story-video/projects/${activeProject._id}`,
@@ -720,10 +736,23 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     if (!activeProject) return;
     const targetAspectRatio =
       videoPresets[selectedPreset]?.aspectRatio || "16:9";
+    const scenes = activeProject.activeStoryboardId?.scenes || [];
+    const timing = summarizeStoryboardTiming(
+      scenes,
+      activeProject.activeSongId?.durationSeconds ||
+        selectedTargetDuration ||
+        30
+    );
+    const slotKey = aspectRatioToSlotKey(targetAspectRatio);
+    const pendingScenes = overwrite
+      ? scenes
+      : scenes.filter((s) => !s.mediaByAspect?.[slotKey]?.videoMediaId);
+    const targetCount = pendingScenes.length || scenes.length;
+
     setGeneratingAllVeo(true);
     setError("");
     setSuccess(
-      `Generating Gemini Omni 1.1 Flash (${targetAspectRatio}) motion video clips for all scenes (~30-40s per scene)...`
+      `Generating ${targetCount} Gemini Omni 1.1 Flash (${targetAspectRatio}) motion clip${targetCount === 1 ? "" : "s"} (${timing.perSceneLabel} per scene • ${timing.totalSec}s total video)...`
     );
     try {
       await api(
@@ -735,7 +764,7 @@ export function ProjectStudioPage({ auth, token: propToken }) {
         }
       );
       setSuccess(
-        `Gemini Omni 1.1 (${targetAspectRatio}) motion video clips saved for all storyboard scenes (other aspect ratios preserved)!`
+        `Saved ${targetCount} Gemini Omni 1.1 (${targetAspectRatio}) motion clip${targetCount === 1 ? "" : "s"} (${timing.perSceneLabel} per scene • ${timing.totalSec}s video — other aspect ratios preserved)!`
       );
       const updated = await api(
         `/api/story-video/projects/${activeProject._id}`,
@@ -756,8 +785,15 @@ export function ProjectStudioPage({ auth, token: propToken }) {
     setError("");
     const targetAspectRatio =
       videoPresets[selectedPreset]?.aspectRatio || "16:9";
+    const scenes = activeProject.activeStoryboardId?.scenes || [];
+    const timing = summarizeStoryboardTiming(
+      scenes,
+      activeProject.activeSongId?.durationSeconds ||
+        selectedTargetDuration ||
+        30
+    );
     setSuccess(
-      `Synthesizing Google AI high-definition ${targetAspectRatio} scene frames for storyboard (~5-10s per scene)...`
+      `Synthesizing ${timing.count || "all"} Google AI high-definition ${targetAspectRatio} scene frame${timing.count === 1 ? "" : "s"} (${timing.perSceneLabel} per scene • ${timing.totalSec}s total video)...`
     );
     try {
       const res = await api(
@@ -862,10 +898,14 @@ export function ProjectStudioPage({ auth, token: propToken }) {
           body: { targetSceneDuration: 6, aspectRatio: targetAspectRatio }
         }
       );
+      const timing = summarizeStoryboardTiming(
+        res.scenes || [],
+        activeProject.activeSongId?.durationSeconds ||
+          selectedTargetDuration ||
+          30
+      );
       setSuccess(
-        `Storyboard synchronized! Created ${
-          res.scenes?.length || 0
-        } lyric-aligned scenes (~5-6s each) matching your song's duration.`
+        `Storyboard synchronized! Created ${timing.count} lyric-aligned scene${timing.count === 1 ? "" : "s"} (${timing.perSceneLabel} each • ${timing.totalSec}s total song).`
       );
       const updated = await api(
         `/api/story-video/projects/${activeProject._id}`,
@@ -1546,7 +1586,8 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                           className="bg-transparent text-xs sm:text-sm font-bold text-heading pr-5 py-2 focus:outline-none appearance-none cursor-pointer"
                           aria-label="Target Song Duration"
                         >
-                          <option value="180">~3m Studio</option>
+                          <option value="180">3m Studio (180s)</option>
+                          <option value="120">2m Song (120s)</option>
                           <option value="90">90s Track</option>
                           <option value="60">60s Track</option>
                           <option value="30">30s Reel</option>
@@ -2054,7 +2095,8 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                         }
                         className="ui-select"
                       >
-                        <option value="180">Full Studio Song (~3 min)</option>
+                        <option value="180">Full Studio Song (180 sec / 3 min)</option>
+                        <option value="120">Studio Song (120 sec / 2 min)</option>
                         <option value="90">Extended Track (90 sec)</option>
                         <option value="60">Standard Track (60 sec)</option>
                         <option value="30">Short Clip / Reel (30 sec)</option>
@@ -2400,26 +2442,30 @@ export function ProjectStudioPage({ auth, token: propToken }) {
                         <h3 className="text-xl font-bold text-heading">
                           Scene Storyboard &amp; Lyric Timeline
                         </h3>
-                        {activeProject.activeSongId && (
-                          <span className="ui-chip bg-primary-soft border-pastel-lavender text-primary">
-                            <span>
-                              {activeProject.activeSongId.durationSeconds || 30}
-                              s Audio
-                            </span>
-                            <span>•</span>
-                            <span>
-                              {activeProject.activeStoryboardId?.scenes
-                                ?.length || 0}{" "}
-                              Scenes (~5-6s each)
-                            </span>
-                            <span>•</span>
-                            <span>
-                              {getLanguageShort(
-                                activeProject.language || selectedLanguage
-                              )}
-                            </span>
-                          </span>
-                        )}
+                        {activeProject.activeSongId &&
+                          (() => {
+                            const timing = summarizeStoryboardTiming(
+                              activeProject.activeStoryboardId?.scenes || [],
+                              activeProject.activeSongId.durationSeconds || 30
+                            );
+                            return (
+                              <span className="ui-chip bg-primary-soft border-pastel-lavender text-primary">
+                                <span>{timing.totalSec}s Audio</span>
+                                <span>•</span>
+                                <span>
+                                  {timing.count}{" "}
+                                  {timing.count === 1 ? "Scene" : "Scenes"} (
+                                  {timing.perSceneLabel} each)
+                                </span>
+                                <span>•</span>
+                                <span>
+                                  {getLanguageShort(
+                                    activeProject.language || selectedLanguage
+                                  )}
+                                </span>
+                              </span>
+                            );
+                          })()}
                       </div>
                       <p className="text-sm text-muted">
                         Each scene is synchronized to the song lyrics with natural 5-6s cuts matching AI motion video duration so clips never repeat.

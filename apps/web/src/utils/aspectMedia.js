@@ -62,6 +62,60 @@ export function getSavedAspectsForScene(scene) {
     .map(([label]) => label);
 }
 
+export function getSceneDurationSeconds(scene, fallbackPerScene = 5) {
+  if (
+    scene &&
+    typeof scene.startTimeSeconds === "number" &&
+    typeof scene.endTimeSeconds === "number" &&
+    scene.endTimeSeconds > scene.startTimeSeconds
+  ) {
+    return Math.max(1, Math.round(scene.endTimeSeconds - scene.startTimeSeconds));
+  }
+  if (scene && typeof scene.durationSeconds === "number" && scene.durationSeconds > 0) {
+    return Math.max(1, Math.round(scene.durationSeconds));
+  }
+  return Math.max(1, Math.round(fallbackPerScene));
+}
+
+export function summarizeStoryboardTiming(scenes = [], fallbackTotalSeconds = 30) {
+  const list = Array.isArray(scenes) ? scenes : [];
+  const computedTotalFromScenes =
+    list.length > 0 &&
+    typeof list[list.length - 1]?.endTimeSeconds === "number" &&
+    list[list.length - 1].endTimeSeconds > 0
+      ? Math.round(list[list.length - 1].endTimeSeconds)
+      : 0;
+  const totalSec = Math.max(
+    1,
+    Math.round(Number(fallbackTotalSeconds) || computedTotalFromScenes || 30)
+  );
+
+  if (list.length === 0) {
+    const estPerScene = totalSec <= 15 ? 4 : totalSec <= 45 ? 5 : 6;
+    return {
+      count: 0,
+      minSec: estPerScene,
+      maxSec: estPerScene,
+      perSceneLabel: `~${estPerScene}s`,
+      totalSec
+    };
+  }
+
+  const avgFallback = Math.max(1, Math.round(totalSec / list.length));
+  const durations = list.map((s) => getSceneDurationSeconds(s, avgFallback));
+  const minSec = Math.min(...durations);
+  const maxSec = Math.max(...durations);
+  const perSceneLabel = minSec === maxSec ? `${minSec}s` : `${minSec}s–${maxSec}s`;
+
+  return {
+    count: list.length,
+    minSec,
+    maxSec,
+    perSceneLabel,
+    totalSec
+  };
+}
+
 export function collectSavedRenderedVideos(project) {
   if (!project) return [];
   const seen = new Set();

@@ -91,7 +91,7 @@ A full-stack, enterprise-grade monorepo for multi-tenant company event managemen
     - *Acoustic, Folk & Soul*: `Acoustic`, `Folk / Indie Folk`, `R&B / Soul`, `Jazz / Lounge`, `Country`
     - *Cinematic, Rock & Urban*: `Cinematic`, `Rock`, `Hip-Hop / Rap`, `Lo-Fi Chill`, `Uplifting Choir / Gospel`
   - **Vocalist Voice Selection**: Choose between **👩 Female Vocalist**, **👨 Male Vocalist**, **👥 Duet / Harmonized Ensemble**, or **🎙️ Custom Vocal Persona** (e.g., *warm acoustic contralto*, *husky rock baritone*, *Indian classical female vocals*).
-  - **Flexible Duration Control**: Select audio target length from **30s, 60s, 90s up to 180s (3 full minutes)**.
+  - **Flexible Duration Control**: Select audio target length from **30s, 60s, 90s, 120s, up to 180s (3 full minutes)**.
   - Generates authentic musical song compositions using **Google DeepMind Lyria 3 Pro / Lyria 2** (`lyria-3-pro-preview`), ElevenLabs Music API, Suno, or local synthetic fallback.
   - Features intelligent prompt conditioning, automatic Lyria retry on rate limits, and transparent fallback indicator badges in the UI.
 - **Phase 3: Event Photos & Pure AI Motion Video Generation**:

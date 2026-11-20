@@ -646,11 +646,14 @@ export class GoogleLyriaMusicAdapter {
       const targetSec = Number(durationSeconds) || 180;
       const isShortTrack = targetSec <= 45;
       const isMediumTrack = targetSec <= 90;
+      const isTwoMinTrack = targetSec > 90 && targetSec <= 150;
       const durationDesc = isShortTrack
         ? `strictly ~${targetSec} seconds (Short Social Clip / Reel format with quick punchy intro, single verse, hook chorus, and rapid outro resolution)`
         : isMediumTrack
         ? `~${targetSec} seconds (Standard Radio Track format)`
-        : `~${targetSec} seconds (Full Studio Song format with intro, verse 1, chorus, verse 2, chorus, bridge, outro)`;
+        : isTwoMinTrack
+        ? `~${targetSec} seconds (2-Minute Studio Song format with intro, verse 1, chorus, verse 2, chorus, outro)`
+        : `~${targetSec} seconds (Full 3-Minute Studio Song format with intro, verse 1, chorus, verse 2, chorus, bridge, outro)`;
 
       const vocalLanguageDesc = langConfig.code === "hinglish"
         ? "Hinglish (modern Bollywood / Indie-Pop blend of conversational Hindi and English sung in Roman script)"

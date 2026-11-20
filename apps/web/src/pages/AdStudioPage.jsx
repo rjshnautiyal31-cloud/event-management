@@ -7,7 +7,9 @@ import {
   resolveSceneMediaForAspect,
   getSavedAspectsForScene,
   collectSavedRenderedVideos,
-  aspectRatioToSlotKey
+  aspectRatioToSlotKey,
+  getSceneDurationSeconds,
+  summarizeStoryboardTiming
 } from "../utils/aspectMedia.js";
 
 export function AdStudioPage({ auth, token: propToken }) {
@@ -681,8 +683,9 @@ export function AdStudioPage({ auth, token: propToken }) {
     setLoading(true);
     setError("");
     const langLabel = getLanguageLabel(selectedLanguage);
+    const targetAdSec = Number(adBriefDraft.targetDurationSeconds) || 30;
     setSuccess(
-      `Analyzing commercial hook & strategy in ${langLabel} with Gemini AI (~10s)...`
+      `Analyzing ${targetAdSec}s commercial hook & strategy in ${langLabel} with Gemini AI...`
     );
     try {
       await api(`/api/story-video/projects/${activeProject._id}`, {
@@ -803,7 +806,11 @@ export function AdStudioPage({ auth, token: propToken }) {
               ? "instrumental commercial soundtrack"
               : "silent visual track"
             : "conversation + sung AI jingle mix";
-    setSuccess(`Synthesizing & mastering ${modeDesc} (~20-60s)...`);
+    const targetAdSec = Number(adBriefDraft.targetDurationSeconds) || 30;
+    const blockCount = adSegmentsDraft.length;
+    setSuccess(
+      `Synthesizing & mastering ${targetAdSec}s ${modeDesc}${blockCount > 0 ? ` (${blockCount} script blocks)` : ""}...`
+    );
     try {
       const songRes = await api(
         `/api/story-video/projects/${activeProject._id}/ad-audio`,
@@ -929,10 +936,20 @@ export function AdStudioPage({ auth, token: propToken }) {
     if (!activeProject) return;
     const targetAspectRatio =
       videoPresets[selectedPreset]?.aspectRatio || "9:16";
+    const scenes = activeProject.activeStoryboardId?.scenes || [];
+    const totalSec =
+      activeProject.activeSongId?.durationSeconds ||
+      Number(adBriefDraft.targetDurationSeconds) ||
+      15;
+    const sceneObj = scenes[sceneIndex];
+    const sceneDur = getSceneDurationSeconds(
+      sceneObj,
+      Math.max(2, Math.round(totalSec / Math.max(1, scenes.length)))
+    );
     setGeneratingVeoSceneIdx(sceneIndex);
     setError("");
     setSuccess(
-      `Generating Gemini Omni 1.1 Flash (${targetAspectRatio}) motion video for Scene ${sceneIndex + 1}... (~30-35s)`
+      `Generating ${sceneDur}s Gemini Omni 1.1 Flash (${targetAspectRatio}) motion clip for Cut ${sceneIndex + 1} (${totalSec}s total ad)...`
     );
     try {
       await api(
@@ -944,7 +961,7 @@ export function AdStudioPage({ auth, token: propToken }) {
         }
       );
       setSuccess(
-        `Gemini Omni 1.1 (${targetAspectRatio}) motion video clip saved for Scene ${sceneIndex + 1} (other aspect ratios preserved)!`
+        `Saved ${sceneDur}s Gemini Omni 1.1 (${targetAspectRatio}) motion clip for Cut ${sceneIndex + 1} (other aspect ratios preserved)!`
       );
       const updated = await api(
         `/api/story-video/projects/${activeProject._id}`,
@@ -963,10 +980,23 @@ export function AdStudioPage({ auth, token: propToken }) {
     if (!activeProject) return;
     const targetAspectRatio =
       videoPresets[selectedPreset]?.aspectRatio || "9:16";
+    const scenes = activeProject.activeStoryboardId?.scenes || [];
+    const timing = summarizeStoryboardTiming(
+      scenes,
+      activeProject.activeSongId?.durationSeconds ||
+        adBriefDraft.targetDurationSeconds ||
+        15
+    );
+    const slotKey = aspectRatioToSlotKey(targetAspectRatio);
+    const pendingScenes = overwrite
+      ? scenes
+      : scenes.filter((s) => !s.mediaByAspect?.[slotKey]?.videoMediaId);
+    const targetCount = pendingScenes.length || scenes.length;
+
     setGeneratingAllVeo(true);
     setError("");
     setSuccess(
-      `Generating Gemini Omni 1.1 Flash (${targetAspectRatio}) motion video clips for commercial cuts (~30-40s per scene)...`
+      `Generating ${targetCount} Gemini Omni 1.1 Flash (${targetAspectRatio}) motion clip${targetCount === 1 ? "" : "s"} (${timing.perSceneLabel} per cut • ${timing.totalSec}s total ad)...`
     );
     try {
       await api(
@@ -978,7 +1008,7 @@ export function AdStudioPage({ auth, token: propToken }) {
         }
       );
       setSuccess(
-        `Gemini Omni 1.1 (${targetAspectRatio}) motion video clips saved for all ad scenes (other aspect ratios preserved)!`
+        `Saved ${targetCount} Gemini Omni 1.1 (${targetAspectRatio}) motion clip${targetCount === 1 ? "" : "s"} (${timing.perSceneLabel} per cut • ${timing.totalSec}s ad — other aspect ratios preserved)!`
       );
       const updated = await api(
         `/api/story-video/projects/${activeProject._id}`,
@@ -999,8 +1029,15 @@ export function AdStudioPage({ auth, token: propToken }) {
     setError("");
     const targetAspectRatio =
       videoPresets[selectedPreset]?.aspectRatio || "9:16";
+    const scenes = activeProject.activeStoryboardId?.scenes || [];
+    const timing = summarizeStoryboardTiming(
+      scenes,
+      activeProject.activeSongId?.durationSeconds ||
+        adBriefDraft.targetDurationSeconds ||
+        15
+    );
     setSuccess(
-      `Synthesizing Google AI high-definition ${targetAspectRatio} commercial frames (~5-10s per scene)...`
+      `Synthesizing ${timing.count || "all"} Google AI high-definition ${targetAspectRatio} commercial frame${timing.count === 1 ? "" : "s"} (${timing.perSceneLabel} per cut • ${timing.totalSec}s total ad)...`
     );
     try {
       const res = await api(
@@ -1105,10 +1142,14 @@ export function AdStudioPage({ auth, token: propToken }) {
           body: { targetSceneDuration: 4, aspectRatio: targetAspectRatio }
         }
       );
+      const timing = summarizeStoryboardTiming(
+        res.scenes || [],
+        activeProject.activeSongId?.durationSeconds ||
+          adBriefDraft.targetDurationSeconds ||
+          15
+      );
       setSuccess(
-        `Ad Storyboard ready! Created ${
-          res.scenes?.length || 0
-        } commercial cuts synchronized to your script & CTA.`
+        `Ad Storyboard ready! Created ${timing.count} commercial cut${timing.count === 1 ? "" : "s"} (${timing.perSceneLabel} each • ${timing.totalSec}s total ad) synchronized to your script & CTA.`
       );
       const updated = await api(
         `/api/story-video/projects/${activeProject._id}`,
@@ -3269,26 +3310,31 @@ export function AdStudioPage({ auth, token: propToken }) {
                         <h3 className="text-xl font-bold text-heading">
                           Ad Storyboard &amp; Commercial Timeline
                         </h3>
-                        <span className="ui-chip bg-primary-soft border-pastel-lavender text-primary">
-                          <span>
-                            {activeProject.activeSongId?.durationSeconds ||
+                        {(() => {
+                          const timing = summarizeStoryboardTiming(
+                            activeProject.activeStoryboardId?.scenes || [],
+                            activeProject.activeSongId?.durationSeconds ||
                               adBriefDraft.targetDurationSeconds ||
-                              30}
-                            s Ad
-                          </span>
-                          <span>•</span>
-                          <span>
-                            {activeProject.activeStoryboardId?.scenes?.length ||
-                              0}{" "}
-                            Cuts (~3-5s each)
-                          </span>
-                          <span>•</span>
-                          <span>
-                            {getLanguageShort(
-                              activeProject.language || selectedLanguage
-                            )}
-                          </span>
-                        </span>
+                              15
+                          );
+                          return (
+                            <span className="ui-chip bg-primary-soft border-pastel-lavender text-primary">
+                              <span>{timing.totalSec}s Ad</span>
+                              <span>•</span>
+                              <span>
+                                {timing.count}{" "}
+                                {timing.count === 1 ? "Cut" : "Cuts"} (
+                                {timing.perSceneLabel} each)
+                              </span>
+                              <span>•</span>
+                              <span>
+                                {getLanguageShort(
+                                  activeProject.language || selectedLanguage
+                                )}
+                              </span>
+                            </span>
+                          );
+                        })()}
                       </div>
                       <p className="text-sm text-muted">
                         Each commercial cut is aligned to your spoken dialogue, sung jingle chorus, on-screen headline, and closing CTA end-card.

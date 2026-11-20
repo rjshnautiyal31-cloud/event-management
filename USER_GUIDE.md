@@ -358,7 +358,7 @@ Switch to **Tab 2: AI Lyrics & Audio**:
    - 👥 **Duet / Harmonized Ensemble**: Harmonious dual vocal arrangement.
    - 🎙️ **Custom Vocal Persona**: Freely type any vocal style (e.g., *husky delta blues singer*, *ethereal operatic choir*, *energetic Bollywood playback vocalist*).
 4. **Audio Song Duration Control**:
-   - Choose between **30s, 60s, 90s, up to 180s (3 full minutes)**.
+   - Choose between **30s, 60s, 90s, 120s (2 min), up to 180s (3 full minutes)**.
    - The AI writes structured lyrics (*Verses, Chorus, Bridge, Outro*) tailored to fill the target time window.
 5. Click **"Generate AI Song & Vocals"**:
    - Includes automatic retry if a model is temporarily rate-limited.

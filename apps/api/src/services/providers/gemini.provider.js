@@ -142,6 +142,7 @@ export async function generateLyricsWithGemini(storySummary, targetGenre, option
   try {
     const isShortClip = targetDuration <= 45;
     const isMediumTrack = targetDuration <= 90;
+    const isTwoMinuteTrack = targetDuration > 90 && targetDuration <= 150;
     const isHinglish = langConfig.code === "hinglish";
     const langDisplay = isHinglish
       ? "Hinglish (modern Bollywood / Indie-Pop blend of conversational Hindi and English in Roman script)"
@@ -182,6 +183,12 @@ Genre style: ${targetGenre}.
 Target Duration: ~${targetDuration} seconds.
 Total length requirement: Around 60-80 words total so it completes in ~60-90 seconds.
 Output only formatted song lyrics with section headers [Verse 1], [Chorus], [Verse 2], [Outro].`;
+    } else if (isTwoMinuteTrack) {
+      prompt = `Write structured 2-minute studio song lyrics (Verse 1, Chorus, Verse 2, Chorus, Bridge, Outro) in ${langDisplay} based on this story summary: "${storySummary}".${extraSongContext}
+Genre style: ${targetGenre}.
+Target Duration: ~${targetDuration} seconds (2-minute studio song).
+Total length requirement: Around 95-125 words total so it completes naturally in ~120 seconds.
+Output only formatted song lyrics with section headers [Verse 1], [Chorus], [Verse 2], [Chorus], [Bridge], [Outro].`;
     } else {
       prompt = `Write structured full-length song lyrics (Verse 1, Chorus, Verse 2, Chorus, Bridge, Chorus, Outro) in ${langDisplay} based on this story summary: "${storySummary}".${extraSongContext}
 Genre style: ${targetGenre}.

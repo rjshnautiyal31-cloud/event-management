@@ -43,9 +43,10 @@ function buildAspectFramingPrefix(aspectRatio = "16:9") {
 // Google Cloud Gemini Omni 1.1 Flash AI Video Adapter (Vertex AI Next-Gen Interactions)
 export class GoogleOmniVideoAdapter {
   async generateSceneVideoClip({ imageUrl, promptText, durationSeconds = 5, aspectRatio = "16:9", projectId: storyProjectId, title = "", sceneNumber = 1 }) {
+    const clipSec = Math.max(2, Math.round(Number(durationSeconds) || 5));
     const framingPrefix = buildAspectFramingPrefix(aspectRatio);
-    const rawPrompt = (promptText || "Cinematic 5-second motion video clip with smooth natural camera movement").trim();
-    const cleanPrompt = `${framingPrefix}: ${rawPrompt}`;
+    const rawPrompt = (promptText || `Cinematic ${clipSec}-second motion video clip with smooth natural camera movement`).trim();
+    const cleanPrompt = `${framingPrefix} (${clipSec}s scene duration): ${rawPrompt}`;
     const targetVideoAspect = aspectRatio === "9:16" ? "9:16" : "16:9";
 
     try {
@@ -139,7 +140,7 @@ export class GoogleOmniVideoAdapter {
         if (Array.isArray(inputPayload) && inputPayload.length > 1) {
           console.warn("[Google Gemini Omni Video] Multimodal call failed, falling back to cinematic text prompt:", callErr.message);
           inter = await createWithOptionalFormat(
-            `${framingPrefix}, 5-second motion video clip: ${rawPrompt}. Highly detailed, realistic motion, smooth camera movement.`
+            `${framingPrefix}, ${clipSec}-second motion video clip: ${rawPrompt}. Highly detailed, realistic motion, smooth camera movement.`
           );
         } else {
           throw callErr;

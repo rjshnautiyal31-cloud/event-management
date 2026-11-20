@@ -3,6 +3,12 @@ import { api, API_BASE } from "../api.js";
 import { AppShell } from "../components/Navbar.jsx";
 import { Icon } from "../components/Icons.jsx";
 import { EventSwitcherModal } from "../components/EventSwitcherModal.jsx";
+import {
+  resolveSceneMediaForAspect,
+  getSavedAspectsForScene,
+  collectSavedRenderedVideos,
+  aspectRatioToSlotKey
+} from "../utils/aspectMedia.js";
 
 export function AdStudioPage({ auth, token: propToken }) {
   const token = auth?.token || propToken;
@@ -102,9 +108,10 @@ export function AdStudioPage({ auth, token: propToken }) {
   const [mediaItems, setMediaItems] = useState([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
 
-  // Job Polling State
+  // Job Polling & Multi-Format Rendered Video Preview State
   const [activeJob, setActiveJob] = useState(null);
   const [rendering, setRendering] = useState(false);
+  const [selectedVideoPreviewId, setSelectedVideoPreviewId] = useState("");
 
   // Video Resolution Presets State (Default to vertical 9:16 mobile for Short Ads)
   const [selectedPreset, setSelectedPreset] = useState("mobile");
@@ -590,16 +597,17 @@ export function AdStudioPage({ auth, token: propToken }) {
 
   async function handleAssignSceneMedia(sceneIdx, mediaId) {
     if (!activeProject?._id) return;
+    const currentAspect = videoPresets[selectedPreset]?.aspectRatio || "9:16";
     try {
       await api(
         `/api/story-video/projects/${activeProject._id}/scenes/${sceneIdx}`,
         {
           token,
           method: "PATCH",
-          body: { mediaId: mediaId || null }
+          body: { mediaId: mediaId || null, aspectRatio: currentAspect }
         }
       );
-      setSuccess(`Scene ${sceneIdx + 1} visual asset updated!`);
+      setSuccess(`Scene ${sceneIdx + 1} (${currentAspect}) visual asset updated!`);
       const updated = await api(
         `/api/story-video/projects/${activeProject._id}`,
         { token }
@@ -919,10 +927,12 @@ export function AdStudioPage({ auth, token: propToken }) {
 
   async function handleGenerateVeoScene(sceneIndex, customPrompt) {
     if (!activeProject) return;
+    const targetAspectRatio =
+      videoPresets[selectedPreset]?.aspectRatio || "9:16";
     setGeneratingVeoSceneIdx(sceneIndex);
     setError("");
     setSuccess(
-      `Generating Gemini Omni 1.1 Flash motion video for Scene ${sceneIndex + 1}... (~30-35s)`
+      `Generating Gemini Omni 1.1 Flash (${targetAspectRatio}) motion video for Scene ${sceneIndex + 1}... (~30-35s)`
     );
     try {
       await api(
@@ -930,11 +940,11 @@ export function AdStudioPage({ auth, token: propToken }) {
         {
           token,
           method: "POST",
-          body: { prompt: customPrompt }
+          body: { prompt: customPrompt, aspectRatio: targetAspectRatio }
         }
       );
       setSuccess(
-        `Gemini Omni 1.1 motion video clip ready for Scene ${sceneIndex + 1}!`
+        `Gemini Omni 1.1 (${targetAspectRatio}) motion video clip saved for Scene ${sceneIndex + 1} (other aspect ratios preserved)!`
       );
       const updated = await api(
         `/api/story-video/projects/${activeProject._id}`,
@@ -949,23 +959,26 @@ export function AdStudioPage({ auth, token: propToken }) {
     }
   }
 
-  async function handleGenerateAllVeo() {
+  async function handleGenerateAllVeo(overwrite = false) {
     if (!activeProject) return;
+    const targetAspectRatio =
+      videoPresets[selectedPreset]?.aspectRatio || "9:16";
     setGeneratingAllVeo(true);
     setError("");
     setSuccess(
-      "Generating Gemini Omni 1.1 Flash motion video clips for all commercial cuts (~30-40s per scene)..."
+      `Generating Gemini Omni 1.1 Flash (${targetAspectRatio}) motion video clips for commercial cuts (~30-40s per scene)...`
     );
     try {
       await api(
         `/api/story-video/projects/${activeProject._id}/scenes/generate-all-veo`,
         {
           token,
-          method: "POST"
+          method: "POST",
+          body: { aspectRatio: targetAspectRatio, overwrite }
         }
       );
       setSuccess(
-        "Gemini Omni 1.1 motion video clips generated for all ad scenes!"
+        `Gemini Omni 1.1 (${targetAspectRatio}) motion video clips saved for all ad scenes (other aspect ratios preserved)!`
       );
       const updated = await api(
         `/api/story-video/projects/${activeProject._id}`,
@@ -1079,6 +1092,8 @@ export function AdStudioPage({ auth, token: propToken }) {
 
   async function handleGenerateStoryboard() {
     if (!activeProject) return;
+    const targetAspectRatio =
+      videoPresets[selectedPreset]?.aspectRatio || "9:16";
     setLoading(true);
     setError("");
     try {
@@ -1087,7 +1102,7 @@ export function AdStudioPage({ auth, token: propToken }) {
         {
           token,
           method: "POST",
-          body: { targetSceneDuration: 4 }
+          body: { targetSceneDuration: 4, aspectRatio: targetAspectRatio }
         }
       );
       setSuccess(
@@ -1144,12 +1159,15 @@ export function AdStudioPage({ auth, token: propToken }) {
         if (job.status === "completed") {
           clearInterval(interval);
           setRendering(false);
-          setSuccess("Short Advertisement Video rendering complete!");
+          setSuccess("Short Advertisement Video rendering complete! Saved alongside your other rendered formats.");
           const updated = await api(
             `/api/story-video/projects/${activeProject._id}`,
             { token }
           );
           setActiveProject(updated);
+          if (updated?.activeVideoId?._id) {
+            setSelectedVideoPreviewId(String(updated.activeVideoId._id));
+          }
         } else if (job.status === "failed") {
           clearInterval(interval);
           setRendering(false);
@@ -3195,6 +3213,7 @@ export function AdStudioPage({ auth, token: propToken }) {
                         )}
                         <span className="ui-badge-overlay absolute top-3 left-3">
                           {isVideo ? "VIDEO" : "PHOTO"}
+                          {item.aspectRatio ? ` • ${item.aspectRatio}` : ""}
                         </span>
                         <button
                           type="button"
@@ -3277,6 +3296,37 @@ export function AdStudioPage({ auth, token: propToken }) {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2.5">
+                      {/* Multi-Aspect Ratio Switcher (Non-Destructive: Each Aspect Saves Its Own Frames & Clips) */}
+                      <div
+                        className="inline-flex items-center gap-1 bg-primary-tint border border-theme rounded-full p-1"
+                        title="Switch active aspect ratio — each aspect ratio saves its own frames & video clips without overriding others"
+                      >
+                        {[
+                          { presetId: "mobile", label: "9:16" },
+                          { presetId: "square", label: "1:1" },
+                          { presetId: "1080p", label: "16:9" },
+                          { presetId: "tablet", label: "4:3" }
+                        ].map((opt) => {
+                          const currentAspect =
+                            videoPresets[selectedPreset]?.aspectRatio || "9:16";
+                          const active = currentAspect === opt.label;
+                          return (
+                            <button
+                              key={opt.label}
+                              type="button"
+                              onClick={() => setSelectedPreset(opt.presetId)}
+                              className={`px-2.5 py-1 rounded-full text-xs font-bold transition cursor-pointer ${
+                                active
+                                  ? "bg-primary text-white shadow-2xs"
+                                  : "text-heading hover:bg-primary-soft"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
                       <button
                         type="button"
                         onClick={() => handleGenerateAllImages(true)}
@@ -3286,19 +3336,19 @@ export function AdStudioPage({ auth, token: propToken }) {
                           !activeProject.activeStoryboardId
                         }
                         className="ui-btn-secondary-sm text-primary"
-                        title="Synthesize watermark-free Google AI commercial images for all scenes"
+                        title="Synthesize Google AI commercial images for the selected aspect ratio (preserves other aspect ratios)"
                       >
                         <Icon name="image" className="w-4 h-4" />
                         <span>
                           {generatingAllImages
                             ? "Generating AI Images..."
-                            : "Generate AI Images (All)"}
+                            : `Generate ${videoPresets[selectedPreset]?.aspectRatio || "9:16"} Images`}
                         </span>
                       </button>
 
                       <button
                         type="button"
-                        onClick={handleGenerateAllVeo}
+                        onClick={() => handleGenerateAllVeo(false)}
                         disabled={
                           generatingAllVeo ||
                           loading ||
@@ -3309,8 +3359,8 @@ export function AdStudioPage({ auth, token: propToken }) {
                         <Icon name="sparkles" className="w-4 h-4" />
                         <span>
                           {generatingAllVeo
-                            ? "Generating Omni Video Clips..."
-                            : "Generate Omni Video Clips (All)"}
+                            ? "Generating Omni Clips..."
+                            : `Generate ${videoPresets[selectedPreset]?.aspectRatio || "9:16"} Omni Clips`}
                         </span>
                       </button>
 
@@ -3333,10 +3383,14 @@ export function AdStudioPage({ auth, token: propToken }) {
 
                 {activeProject.activeStoryboardId && (
                   <div className="bg-mint-fade rounded-container border border-theme p-6 sm:p-7 space-y-5">
-                    {activeProject.activeStoryboardId.scenes?.some((s) => {
-                      const m = mediaItems.find(
-                        (item) =>
-                          item._id === s.mediaId || item._id === s.mediaId?._id
+                    {activeProject.activeStoryboardId.scenes?.some((s, sIdx) => {
+                      const activeAspect =
+                        videoPresets[selectedPreset]?.aspectRatio || "9:16";
+                      const m = resolveSceneMediaForAspect(
+                        s,
+                        activeAspect,
+                        mediaItems,
+                        sIdx
                       );
                       return (
                         !m ||
@@ -3352,11 +3406,15 @@ export function AdStudioPage({ auth, token: propToken }) {
                           className="w-5 h-5 text-primary shrink-0"
                         />
                         <span>
-                          <strong>Pro Tip:</strong> Your cuts currently use static image frames. Click{" "}
+                          <strong>Pro Tip:</strong> Showing{" "}
                           <strong className="text-primary">
-                            "Generate Omni Video Clips (All)"
+                            {videoPresets[selectedPreset]?.aspectRatio || "9:16"}
                           </strong>{" "}
-                          to render smooth motion video for each commercial cut.
+                          cuts (other aspect ratios stay saved separately). Click{" "}
+                          <strong className="text-primary">
+                            "Generate {videoPresets[selectedPreset]?.aspectRatio || "9:16"} Omni Clips"
+                          </strong>{" "}
+                          to create motion video for this aspect ratio without overriding others.
                         </span>
                       </div>
                     )}
@@ -3364,13 +3422,19 @@ export function AdStudioPage({ auth, token: propToken }) {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                       {activeProject.activeStoryboardId.scenes?.map(
                         (scene, idx) => {
-                          const media =
-                            mediaItems.find(
-                              (m) =>
-                                m._id === scene.mediaId ||
-                                m._id === scene.mediaId?._id
-                            ) ||
-                            mediaItems[idx % Math.max(1, mediaItems.length)];
+                          const activeAspect =
+                            videoPresets[selectedPreset]?.aspectRatio || "9:16";
+                          const activeSlotKey =
+                            aspectRatioToSlotKey(activeAspect);
+                          const media = resolveSceneMediaForAspect(
+                            scene,
+                            activeAspect,
+                            mediaItems,
+                            idx
+                          );
+                          const savedAspects = getSavedAspectsForScene(scene);
+                          const isPortraitPreview =
+                            activeAspect === "9:16" || activeAspect === "1:1";
                           const isVideoMedia =
                             media &&
                             (media.mediaType === "video" ||
@@ -3403,11 +3467,20 @@ export function AdStudioPage({ auth, token: propToken }) {
                               className="bg-surface border border-theme rounded-card overflow-hidden shadow-subtle flex flex-col justify-between"
                             >
                               {media ? (
-                                <div className="h-48 bg-primary-tint overflow-hidden relative group">
+                                <div
+                                  className={`${
+                                    isPortraitPreview ? "h-64" : "h-48"
+                                  } bg-heading/90 overflow-hidden relative group flex items-center justify-center`}
+                                >
                                   {isVideoMedia ? (
                                     <video
+                                      key={`${media.fileUrl}_${activeAspect}`}
                                       src={media.fileUrl}
-                                      className="w-full h-full object-cover"
+                                      className={`w-full h-full ${
+                                        isPortraitPreview
+                                          ? "object-contain"
+                                          : "object-cover"
+                                      }`}
                                       muted
                                       loop
                                       autoPlay
@@ -3417,7 +3490,11 @@ export function AdStudioPage({ auth, token: propToken }) {
                                     <img
                                       src={media.fileUrl}
                                       alt="Ad cut media"
-                                      className="w-full h-full object-cover"
+                                      className={`w-full h-full ${
+                                        isPortraitPreview
+                                          ? "object-contain"
+                                          : "object-cover"
+                                      }`}
                                     />
                                   )}
                                   <span className="ui-badge-overlay absolute top-3 left-3">
@@ -3425,14 +3502,41 @@ export function AdStudioPage({ auth, token: propToken }) {
                                     {scene.startTimeSeconds}s-
                                     {scene.endTimeSeconds}s ({sceneDuration}s) •{" "}
                                     {isVideoMedia ? "VIDEO" : "PHOTO"}
+                                    {media.aspectRatio
+                                      ? ` (${media.aspectRatio})`
+                                      : ""}
                                   </span>
+                                  {savedAspects.length > 0 && (
+                                    <div className="absolute bottom-2.5 right-2.5 flex flex-wrap gap-1">
+                                      {savedAspects.map((ar) => (
+                                        <span
+                                          key={ar}
+                                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                            ar === activeAspect
+                                              ? "bg-primary text-white"
+                                              : "bg-surface/90 text-heading"
+                                          }`}
+                                          title={`Saved ${ar} asset on this cut`}
+                                        >
+                                          {ar} ✓
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               ) : (
-                                <div className="h-48 bg-primary-tint relative flex items-center justify-center text-muted text-xs font-semibold">
+                                <div
+                                  className={`${
+                                    isPortraitPreview ? "h-64" : "h-48"
+                                  } bg-primary-tint relative flex items-center justify-center text-muted text-xs font-semibold`}
+                                >
                                   <span className="ui-badge-overlay absolute top-3 left-3">
-                                    Cut {scene.sceneNumber} • {sceneDuration}s
+                                    Cut {scene.sceneNumber} • {sceneDuration}s •{" "}
+                                    {activeAspect}
                                   </span>
-                                  <span>Cut {scene.sceneNumber} Frame</span>
+                                  <span>
+                                    Cut {scene.sceneNumber} ({activeAspect})
+                                  </span>
                                 </div>
                               )}
 
@@ -3668,12 +3772,15 @@ export function AdStudioPage({ auth, token: propToken }) {
                                   {mediaItems.length > 0 && (
                                     <div>
                                       <label className="text-[11px] font-bold text-muted uppercase tracking-wider block mb-1">
-                                        Source Visual Media
+                                        Source Visual Media ({activeAspect})
                                       </label>
                                       <select
                                         value={
-                                          scene.mediaId?._id ||
-                                          scene.mediaId ||
+                                          scene.mediaByAspect?.[activeSlotKey]
+                                            ?.activeMediaId?._id ||
+                                          scene.mediaByAspect?.[activeSlotKey]
+                                            ?.activeMediaId ||
+                                          media?._id ||
                                           ""
                                         }
                                         onChange={(e) =>
@@ -3685,7 +3792,7 @@ export function AdStudioPage({ auth, token: propToken }) {
                                         className="ui-select-compact w-full text-xs"
                                       >
                                         <option value="">
-                                          AI Frame / Default Media
+                                          AI Frame / Default ({activeAspect})
                                         </option>
                                         {mediaItems.map((m, mIdx) => (
                                           <option
@@ -3698,6 +3805,9 @@ export function AdStudioPage({ auth, token: propToken }) {
                                             {m.mediaType === "video"
                                               ? "Video"
                                               : "Photo"}
+                                            {m.aspectRatio
+                                              ? ` • ${m.aspectRatio}`
+                                              : ""}
                                             )
                                           </option>
                                         ))}
@@ -3871,7 +3981,17 @@ export function AdStudioPage({ auth, token: propToken }) {
                           <button
                             key={preset.id}
                             type="button"
-                            onClick={() => setSelectedPreset(preset.id)}
+                            onClick={() => {
+                              setSelectedPreset(preset.id);
+                              const matchingSaved = collectSavedRenderedVideos(
+                                activeProject
+                              ).find((v) => v.preset === preset.id);
+                              if (matchingSaved?._id) {
+                                setSelectedVideoPreviewId(
+                                  String(matchingSaved._id)
+                                );
+                              }
+                            }}
                             className={`flex flex-col text-left p-4 rounded-card transition-all cursor-pointer ${
                               isSelected
                                 ? "bg-primary-soft border-2 border-primary shadow-subtle"
@@ -3919,23 +4039,28 @@ export function AdStudioPage({ auth, token: propToken }) {
 
                   {/* Motion Video Notice + Spec Summary Box */}
                   {(() => {
+                    const targetRenderAspect =
+                      videoPresets[selectedPreset]?.aspectRatio || "9:16";
                     const totalScenes =
                       activeProject.activeStoryboardId?.scenes?.length || 0;
                     const videoSceneCount =
-                      activeProject.activeStoryboardId?.scenes?.filter((s) => {
-                        const m = mediaItems.find(
-                          (item) =>
-                            item._id === s.mediaId ||
-                            item._id === s.mediaId?._id
-                        );
-                        return (
-                          m &&
-                          (m.mediaType === "video" ||
-                            [".mp4", ".webm", ".mov"].some((ext) =>
-                              m.fileUrl?.toLowerCase().endsWith(ext)
-                            ))
-                        );
-                      }).length || 0;
+                      activeProject.activeStoryboardId?.scenes?.filter(
+                        (s, sIdx) => {
+                          const m = resolveSceneMediaForAspect(
+                            s,
+                            targetRenderAspect,
+                            mediaItems,
+                            sIdx
+                          );
+                          return (
+                            m &&
+                            (m.mediaType === "video" ||
+                              [".mp4", ".webm", ".mov"].some((ext) =>
+                                m.fileUrl?.toLowerCase().endsWith(ext)
+                              ))
+                          );
+                        }
+                      ).length || 0;
 
                     const activeTrackMode =
                       activeProject.activeSongId?.trackMode ||
@@ -4059,122 +4184,198 @@ export function AdStudioPage({ auth, token: propToken }) {
                   )}
                 </div>
 
-                {/* Final Rendered Advertisement Video Preview Player */}
-                {activeProject.activeVideoId?.videoUrl && (
-                  <div className="ui-card p-6 sm:p-7 space-y-5">
-                    <div className="flex items-center justify-between flex-wrap gap-3 border-b border-theme pb-4">
-                      <h4 className="font-bold text-lg text-heading flex items-center gap-2">
-                        <Icon
-                          name="rocket"
-                          className="w-5 h-5 text-primary"
-                        />
-                        <span>Rendered Advertisement Video Preview</span>
-                      </h4>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="ui-chip bg-pastel-mint border-theme text-heading">
-                          {activeProject.activeVideoId.resolution || "1080x1920"}
-                        </span>
-                        {activeProject.activeVideoId.aspectRatio && (
-                          <span className="ui-chip bg-primary-soft border-pastel-lavender text-primary">
-                            {activeProject.activeVideoId.aspectRatio}
+                {/* Final Rendered Advertisement Video Preview Player (All Aspect Ratios Preserved) */}
+                {(() => {
+                  const savedVideos = collectSavedRenderedVideos(activeProject);
+                  const activePreviewVideo =
+                    savedVideos.find(
+                      (v) => String(v._id) === String(selectedVideoPreviewId)
+                    ) ||
+                    savedVideos.find((v) => v.preset === selectedPreset) ||
+                    savedVideos[0] ||
+                    null;
+
+                  if (!activePreviewVideo?.videoUrl) return null;
+
+                  return (
+                    <div className="ui-card p-6 sm:p-7 space-y-5">
+                      {savedVideos.length > 0 && (
+                        <div className="bg-primary-tint/70 border border-theme rounded-card p-4 space-y-2.5">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="text-xs font-bold uppercase tracking-wider text-primary">
+                              Saved Rendered Formats ({savedVideos.length} Preserved — Never Overridden)
+                            </span>
+                            <span className="text-xs text-muted">
+                              Click any rendered format below to preview or download
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {savedVideos.map((vid, vIdx) => {
+                              const isCurrent =
+                                String(vid._id || vid.videoUrl) ===
+                                String(
+                                  activePreviewVideo._id ||
+                                    activePreviewVideo.videoUrl
+                                );
+                              const label =
+                                videoPresets[vid.preset]?.shortLabel ||
+                                vid.preset ||
+                                `Render #${savedVideos.length - vIdx}`;
+                              return (
+                                <button
+                                  key={vid._id || vIdx}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedVideoPreviewId(String(vid._id));
+                                    if (vid.preset && videoPresets[vid.preset]) {
+                                      setSelectedPreset(vid.preset);
+                                    }
+                                  }}
+                                  className={`px-3.5 py-2 rounded-full text-xs font-bold inline-flex items-center gap-2 transition cursor-pointer ${
+                                    isCurrent
+                                      ? "bg-primary text-white shadow-subtle"
+                                      : "bg-surface border border-theme text-heading hover:bg-primary-soft"
+                                  }`}
+                                >
+                                  <span>{label}</span>
+                                  {vid.aspectRatio && (
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-[10px] ${
+                                        isCurrent
+                                          ? "bg-white/20 text-white"
+                                          : "bg-primary-soft text-primary"
+                                      }`}
+                                    >
+                                      {vid.aspectRatio}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between flex-wrap gap-3 border-b border-theme pb-4">
+                        <h4 className="font-bold text-lg text-heading flex items-center gap-2">
+                          <Icon
+                            name="rocket"
+                            className="w-5 h-5 text-primary"
+                          />
+                          <span>Rendered Advertisement Video Preview</span>
+                        </h4>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="ui-chip bg-pastel-mint border-theme text-heading">
+                            {activePreviewVideo.resolution || "1080x1920"}
                           </span>
-                        )}
-                        <span className="ui-chip bg-primary-tint border-theme text-heading">
-                          {getLanguageShort(
-                            activeProject.activeVideoId.language ||
-                              activeProject.language
+                          {activePreviewVideo.aspectRatio && (
+                            <span className="ui-chip bg-primary-soft border-pastel-lavender text-primary">
+                              {activePreviewVideo.aspectRatio}
+                            </span>
                           )}
-                        </span>
-                        <a
-                          href={
-                            activeProject.activeVideoId.subtitlesUrl ||
-                            `${API_BASE}/api/story-video/projects/${activeProject._id}/subtitles.srt`
-                          }
-                          download={`ad_subtitles_${
-                            activeProject.activeVideoId.language ||
-                            activeProject.language ||
-                            "track"
-                          }.srt`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="ui-btn-secondary-sm text-xs px-3.5"
-                          title="Download SRT subtitle file"
+                          <span className="ui-chip bg-primary-tint border-theme text-heading">
+                            {getLanguageShort(
+                              activePreviewVideo.language ||
+                                activeProject.language
+                            )}
+                          </span>
+                          <a
+                            href={
+                              activePreviewVideo.subtitlesUrl ||
+                              `${API_BASE}/api/story-video/projects/${activeProject._id}/subtitles.srt`
+                            }
+                            download={`ad_subtitles_${
+                              activePreviewVideo.preset || "track"
+                            }_${
+                              activePreviewVideo.language ||
+                              activeProject.language ||
+                              "en"
+                            }.srt`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="ui-btn-secondary-sm text-xs px-3.5"
+                            title="Download SRT subtitle file"
+                          >
+                            <Icon
+                              name="download"
+                              className="w-3.5 h-3.5 text-primary"
+                            />
+                            <span>Subtitles (.srt)</span>
+                          </a>
+                          <a
+                            href={
+                              activePreviewVideo.vttUrl ||
+                              `${API_BASE}/api/story-video/projects/${activeProject._id}/subtitles.vtt`
+                            }
+                            download={`ad_subtitles_${
+                              activePreviewVideo.preset || "track"
+                            }_${
+                              activePreviewVideo.language ||
+                              activeProject.language ||
+                              "en"
+                            }.vtt`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="ui-btn-secondary-sm text-xs px-3.5"
+                            title="Download WebVTT subtitle file"
+                          >
+                            <Icon
+                              name="download"
+                              className="w-3.5 h-3.5 text-primary"
+                            />
+                            <span>Subtitles (.vtt)</span>
+                          </a>
+                          <a
+                            href={activePreviewVideo.videoUrl}
+                            download={`short_ad_${
+                              activePreviewVideo.preset || "final"
+                            }_${(activePreviewVideo.aspectRatio || "").replace(":", "x")}.mp4`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="ui-btn-primary-sm text-xs px-4"
+                          >
+                            <Icon name="download" className="w-4 h-4" />
+                            <span>
+                              Download {activePreviewVideo.aspectRatio || ""} Ad MP4
+                            </span>
+                          </a>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-center bg-primary-tint rounded-card p-4 sm:p-6 border border-pastel-lavender">
+                        <video
+                          key={activePreviewVideo.videoUrl}
+                          controls
+                          crossOrigin="anonymous"
+                          className="max-h-[560px] w-auto max-w-full rounded-[18px] shadow-soft border border-theme bg-black"
                         >
-                          <Icon
-                            name="download"
-                            className="w-3.5 h-3.5 text-primary"
+                          <source
+                            src={activePreviewVideo.videoUrl}
+                            type="video/mp4"
                           />
-                          <span>Subtitles (.srt)</span>
-                        </a>
-                        <a
-                          href={
-                            activeProject.activeVideoId.vttUrl ||
-                            `${API_BASE}/api/story-video/projects/${activeProject._id}/subtitles.vtt`
-                          }
-                          download={`ad_subtitles_${
-                            activeProject.activeVideoId.language ||
-                            activeProject.language ||
-                            "track"
-                          }.vtt`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="ui-btn-secondary-sm text-xs px-3.5"
-                          title="Download WebVTT subtitle file"
-                        >
-                          <Icon
-                            name="download"
-                            className="w-3.5 h-3.5 text-primary"
+                          <track
+                            kind="subtitles"
+                            src={
+                              activePreviewVideo.vttUrl ||
+                              `${API_BASE}/api/story-video/projects/${activeProject._id}/subtitles.vtt`
+                            }
+                            srcLang={
+                              activePreviewVideo.language ||
+                              activeProject.language ||
+                              "en"
+                            }
+                            label={`${getLanguageShort(
+                              activePreviewVideo.language ||
+                                activeProject.language
+                            )} Subtitles`}
+                            default
                           />
-                          <span>Subtitles (.vtt)</span>
-                        </a>
-                        <a
-                          href={activeProject.activeVideoId.videoUrl}
-                          download={`short_ad_${
-                            activeProject.activeVideoId.preset || "final"
-                          }.mp4`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="ui-btn-primary-sm text-xs px-4"
-                        >
-                          <Icon name="download" className="w-4 h-4" />
-                          <span>Download Ad MP4</span>
-                        </a>
+                          Your browser does not support the video tag.
+                        </video>
                       </div>
                     </div>
-
-                    <div className="flex justify-center bg-primary-tint rounded-card p-4 sm:p-6 border border-pastel-lavender">
-                      <video
-                        key={activeProject.activeVideoId.videoUrl}
-                        controls
-                        crossOrigin="anonymous"
-                        className="max-h-[520px] w-auto max-w-full rounded-[18px] shadow-soft border border-theme bg-black"
-                      >
-                        <source
-                          src={activeProject.activeVideoId.videoUrl}
-                          type="video/mp4"
-                        />
-                        <track
-                          kind="subtitles"
-                          src={
-                            activeProject.activeVideoId.vttUrl ||
-                            `${API_BASE}/api/story-video/projects/${activeProject._id}/subtitles.vtt`
-                          }
-                          srcLang={
-                            activeProject.activeVideoId.language ||
-                            activeProject.language ||
-                            "en"
-                          }
-                          label={`${getLanguageShort(
-                            activeProject.activeVideoId.language ||
-                              activeProject.language
-                          )} Subtitles`}
-                          default
-                        />
-                        Your browser does not support the video tag.
-                      </video>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             )}
 

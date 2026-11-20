@@ -6,6 +6,8 @@ const mediaSchema = new mongoose.Schema(
     fileUrl: { type: String, required: true },
     mediaType: { type: String, enum: ["image", "video"], default: "image" },
     originalFilename: { type: String },
+    aspectRatio: { type: String, default: "" },
+    caption: { type: String, default: "" },
     width: { type: Number },
     height: { type: Number },
     durationSeconds: { type: Number }

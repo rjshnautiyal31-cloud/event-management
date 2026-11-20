@@ -6,7 +6,7 @@ import { Project } from "../models/Project.js";
 import { StoryAnalysis } from "../models/StoryAnalysis.js";
 import { Song } from "../models/Song.js";
 import { Media } from "../models/Media.js";
-import { Storyboard } from "../models/Storyboard.js";
+import { Storyboard, aspectRatioToSlotKey } from "../models/Storyboard.js";
 import { Video } from "../models/Video.js";
 import { GenerationJob } from "../models/GenerationJob.js";
 import { Event } from "../models/Event.js";
@@ -31,6 +31,34 @@ import { env } from "../config/env.js";
 
 const upload = multer({ storage: multer.memoryStorage() });
 export const storyVideoRouter = Router();
+
+// Attach all saved rendered Video documents (across all aspect ratios & presets) onto Project payload(s)
+async function attachRenderedVideosToProjects(projectOrList) {
+  if (!projectOrList) return projectOrList;
+  const isArray = Array.isArray(projectOrList);
+  const list = isArray ? projectOrList : [projectOrList];
+  if (list.length === 0) return projectOrList;
+
+  const projectIds = list.map((p) => p?._id).filter(Boolean);
+  const allVideos = await Video.find({ projectId: { $in: projectIds } })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const videosByProject = new Map();
+  for (const v of allVideos) {
+    const key = String(v.projectId);
+    if (!videosByProject.has(key)) videosByProject.set(key, []);
+    videosByProject.get(key).push(v);
+  }
+
+  const enriched = list.map((proj) => {
+    const plain = typeof proj.toObject === "function" ? proj.toObject() : { ...proj };
+    plain.renderedVideos = videosByProject.get(String(plain._id)) || [];
+    return plain;
+  });
+
+  return isArray ? enriched : enriched[0];
+}
 
 // Public Subtitle Streaming Routes (Used by HTML5 <track> & media players)
 storyVideoRouter.get("/projects/:id/subtitles.vtt", async (req, res, next) => {
@@ -202,7 +230,8 @@ storyVideoRouter.get("/projects", async (req, res, next) => {
       .populate("activeStoryAnalysisId activeSongId activeStoryboardId activeVideoId")
       .sort({ updatedAt: -1 });
 
-    res.json(projects);
+    const enrichedProjects = await attachRenderedVideosToProjects(projects);
+    res.json(enrichedProjects);
   } catch (err) {
     next(err);
   }
@@ -363,7 +392,18 @@ storyVideoRouter.get("/projects/:id", async (req, res, next) => {
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
-    res.json(project);
+    const enrichedProject = await attachRenderedVideosToProjects(project);
+    res.json(enrichedProject);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// 3b. List All Saved Rendered Videos for a Project (Preserves 9:16, 16:9, 1:1, 4:3, 1080p, 720p)
+storyVideoRouter.get("/projects/:id/videos", async (req, res, next) => {
+  try {
+    const videos = await Video.find({ projectId: req.params.id }).sort({ createdAt: -1 });
+    res.json(videos);
   } catch (err) {
     next(err);
   }
@@ -859,7 +899,7 @@ storyVideoRouter.delete("/projects/:id/media", async (req, res, next) => {
 // 8. Generate Scene Storyboard Mapping (Supports both Story Music Videos and Short Advertisement Videos)
 storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
   try {
-    const project = await Project.findById(req.params.id).populate("activeStoryAnalysisId activeSongId");
+    const project = await Project.findById(req.params.id).populate("activeStoryAnalysisId activeSongId activeStoryboardId");
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
@@ -869,8 +909,13 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
       return res.status(400).json({ message: "Project must have generated lyrics and song first" });
     }
 
-    const { targetSceneDuration = isAdProject ? 4 : 6 } = req.body || {};
+    const { targetSceneDuration = isAdProject ? 4 : 6, aspectRatio } = req.body || {};
+    const effectiveAspect = aspectRatio || (isAdProject ? "9:16" : "16:9");
+    const slotKey = aspectRatioToSlotKey(effectiveAspect);
     const mediaItems = await Media.find({ projectId: project._id }).sort({ createdAt: 1 });
+    const uploadedOnlyMedia = mediaItems.filter((m) => !m.aspectRatio && String(m.originalFilename || "").startsWith("upload_"));
+    const aspectMatchingMedia = mediaItems.filter((m) => m.aspectRatio === effectiveAspect);
+    const previousScenes = project.activeStoryboardId?.scenes || [];
     const storyContext = project.storyText || project.activeStoryAnalysisId?.summary || project.description || project.title || "";
 
     let generatedScenes = [];
@@ -894,7 +939,7 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
         });
       }
 
-      console.log(`[API Ad Storyboard] Generating commercial storyboard (${totalDuration}s, segments=${scriptSegments.length}, lang=${project.language || "en"})...`);
+      console.log(`[API Ad Storyboard] Generating commercial storyboard (${totalDuration}s, aspect=${effectiveAspect}, segments=${scriptSegments.length}, lang=${project.language || "en"})...`);
       generatedScenes = await generateAdStoryboard({
         storyContext,
         adBrief: project.adBrief || {},
@@ -907,7 +952,7 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
       });
     } else {
       const lyrics = project.activeSongId.lyrics || "";
-      console.log(`[API Storyboard] Generating synchronized storyboard from lyrics (${totalDuration}s, ~${targetSceneDuration}s/scene, lang=${project.language || project.activeSongId.language || "en"}, characters=${project.characters?.length || 0})...`);
+      console.log(`[API Storyboard] Generating synchronized storyboard from lyrics (${totalDuration}s, ~${targetSceneDuration}s/scene, aspect=${effectiveAspect}, lang=${project.language || project.activeSongId.language || "en"}, characters=${project.characters?.length || 0})...`);
       generatedScenes = await generateStoryboardFromLyrics({
         storyContext,
         lyrics,
@@ -922,37 +967,63 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
     console.log(`[API Storyboard] Generated ${generatedScenes.length} synchronized scenes.`);
 
     const scenes = [];
+    const defaultPool = uploadedOnlyMedia.length > 0 ? uploadedOnlyMedia : aspectMatchingMedia;
 
-    // Map each generated scene to a media item or assign from project media
+    // Map each generated scene to a media item while preserving any prior multi-aspect slots
     for (let index = 0; index < generatedScenes.length; index++) {
       const sceneItem = generatedScenes[index];
-      let media = mediaItems.length > 0 ? mediaItems[index % mediaItems.length] : null;
+      const prevScene = previousScenes[index];
+      const preservedAspects = prevScene?.mediaByAspect
+        ? (typeof prevScene.mediaByAspect.toObject === "function"
+            ? prevScene.mediaByAspect.toObject()
+            : JSON.parse(JSON.stringify(prevScene.mediaByAspect)))
+        : {
+            portrait_9_16: {},
+            landscape_16_9: {},
+            square_1_1: {},
+            tablet_4_3: {}
+          };
 
-      // If project has no media at all, generate an initial frame for the first scene
-      if (!media && index === 0 && sceneItem.visualIdea) {
+      let media = defaultPool.length > 0 ? defaultPool[index % defaultPool.length] : null;
+
+      // If project has no media for this aspect yet, generate an initial frame for the first scene
+      if (!media && !preservedAspects[slotKey]?.activeMediaId && index === 0 && sceneItem.visualIdea) {
         const generatedImageUrl = await generateSceneImageWithGemini(sceneItem.visualIdea, {
           projectId: project._id,
           title: project.title,
           sceneNumber: sceneItem.sceneNumber || 1,
-          aspectRatio: isAdProject ? "9:16" : "16:9"
+          aspectRatio: effectiveAspect
         });
         if (generatedImageUrl) {
           media = await Media.create({
             projectId: project._id,
             fileUrl: generatedImageUrl,
             mediaType: "image",
-            originalFilename: `scene_frame_${sceneItem.sceneNumber}.jpg`,
+            aspectRatio: effectiveAspect,
+            originalFilename: `scene_frame_${sceneItem.sceneNumber}_${effectiveAspect.replace(":", "x")}.jpg`,
             caption: sceneItem.visualIdea
           });
           mediaItems.push(media);
+          preservedAspects[slotKey] = {
+            ...(preservedAspects[slotKey] || {}),
+            activeMediaId: media._id,
+            imageMediaId: media._id
+          };
         }
+      } else if (media && !preservedAspects[slotKey]?.activeMediaId) {
+        preservedAspects[slotKey] = {
+          ...(preservedAspects[slotKey] || {}),
+          activeMediaId: media._id,
+          ...(media.mediaType === "video" ? { videoMediaId: media._id } : { imageMediaId: media._id })
+        };
       }
 
       scenes.push({
         sceneNumber: sceneItem.sceneNumber || index + 1,
         startTimeSeconds: sceneItem.startTimeSeconds,
         endTimeSeconds: sceneItem.endTimeSeconds,
-        mediaId: media?._id || null,
+        mediaId: prevScene?.mediaId || media?._id || null,
+        mediaByAspect: preservedAspects,
         segmentType: sceneItem.segmentType || (isAdProject ? "dialogue" : "song"),
         speakerName: sceneItem.speakerName || "",
         onScreenHeadline: sceneItem.onScreenHeadline || "",
@@ -981,7 +1052,7 @@ storyVideoRouter.post("/projects/:id/storyboard", async (req, res, next) => {
   }
 });
 
-// 8b. Generate Google Veo AI Motion Video Clip for an Individual Scene
+// 8b. Generate Google Veo / Gemini Omni AI Motion Video Clip for an Individual Scene (Aspect-Ratio Preserved)
 storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/veo", async (req, res, next) => {
   try {
     const { id, sceneIndex } = req.params;
@@ -1001,19 +1072,38 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/veo", async (req, res, n
       return res.status(404).json({ message: `Scene at index ${sceneIndex} not found` });
     }
 
-    const promptText = req.body.prompt || scene.visualPrompt || scene.captionText || "Cinematic celebratory scene with lively motion and atmospheric lighting";
-    if (req.body.prompt) {
+    const targetAspect = req.body?.aspectRatio || (project.projectType === "ad_promo" ? "9:16" : "16:9");
+    const slotKey = aspectRatioToSlotKey(targetAspect);
+    const aspectTag = targetAspect.replace(":", "x");
+
+    const promptText = req.body?.prompt || scene.visualPrompt || scene.captionText || "Cinematic celebratory scene with lively motion and atmospheric lighting";
+    if (req.body?.prompt) {
       scene.visualPrompt = req.body.prompt;
     }
-    const sourceImageUrl = scene.mediaId?.fileUrl || null;
 
-    console.log(`[API Story Video] Generating Gemini Omni 1.1 Flash video clip for Scene ${scene.sceneNumber}: "${promptText.slice(0, 60)}..."`);
+    // Prefer a reference image matching the target aspect ratio (or user-uploaded photo) so a 16:9 frame never forces a 9:16 clip into landscape
+    let sourceImageUrl = null;
+    const slotImageId = scene.mediaByAspect?.[slotKey]?.imageMediaId || scene.mediaByAspect?.[slotKey]?.activeMediaId;
+    if (slotImageId) {
+      const slotMediaDoc = await Media.findById(slotImageId).lean();
+      if (slotMediaDoc && slotMediaDoc.mediaType === "image") {
+        sourceImageUrl = slotMediaDoc.fileUrl;
+      }
+    }
+    if (!sourceImageUrl && scene.mediaId?.fileUrl && scene.mediaId?.mediaType === "image") {
+      if (!scene.mediaId.aspectRatio || scene.mediaId.aspectRatio === targetAspect) {
+        sourceImageUrl = scene.mediaId.fileUrl;
+      }
+    }
+
+    console.log(`[API Story Video] Generating ${targetAspect} Gemini Omni 1.1 Flash video clip for Scene ${scene.sceneNumber}: "${promptText.slice(0, 60)}..."`);
 
     const videoEngine = getVideoProvider(req.body?.videoProvider);
     const videoUrl = await videoEngine.generateSceneVideoClip({
       imageUrl: sourceImageUrl,
       promptText,
       durationSeconds: 5,
+      aspectRatio: targetAspect,
       projectId: project._id,
       title: project.title,
       sceneNumber: scene.sceneNumber
@@ -1027,24 +1117,29 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/veo", async (req, res, n
       projectId: project._id,
       fileUrl: videoUrl,
       mediaType: "video",
-      originalFilename: `omni_scene_${scene.sceneNumber}.mp4`,
+      aspectRatio: targetAspect,
+      originalFilename: `omni_scene_${scene.sceneNumber}_${aspectTag}.mp4`,
       durationSeconds: 5
     });
 
-    scene.mediaId = mediaDoc._id;
+    const setUpdate = {
+      [`scenes.$.mediaByAspect.${slotKey}.videoMediaId`]: mediaDoc._id,
+      [`scenes.$.mediaByAspect.${slotKey}.activeMediaId`]: mediaDoc._id,
+      "scenes.$.visualPrompt": scene.visualPrompt
+    };
+    if (!scene.mediaId) {
+      setUpdate["scenes.$.mediaId"] = mediaDoc._id;
+    }
+
     await Storyboard.updateOne(
       { _id: storyboard._id, "scenes.sceneNumber": scene.sceneNumber },
-      {
-        $set: {
-          "scenes.$.mediaId": mediaDoc._id,
-          "scenes.$.visualPrompt": scene.visualPrompt
-        }
-      }
+      { $set: setUpdate }
     );
 
     res.json({
-      message: "Google Gemini Omni 1.1 motion video clip generated successfully",
+      message: `Google Gemini Omni 1.1 (${targetAspect}) motion video clip generated successfully`,
       sceneNumber: scene.sceneNumber,
+      aspectRatio: targetAspect,
       media: mediaDoc,
       videoUrl
     });
@@ -1053,11 +1148,11 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/veo", async (req, res, n
   }
 });
 
-// 8c. Update an Individual Scene (visual prompt, caption, characters, mediaId)
+// 8c. Update an Individual Scene (visual prompt, caption, characters, mediaId per aspectRatio)
 storyVideoRouter.patch("/projects/:id/scenes/:sceneIndex", async (req, res, next) => {
   try {
     const { id, sceneIndex } = req.params;
-    const { visualPrompt, captionText, characters, mediaId, onScreenHeadline, speakerName, segmentType } = req.body;
+    const { visualPrompt, captionText, characters, mediaId, aspectRatio, onScreenHeadline, speakerName, segmentType } = req.body;
     const project = await Project.findById(id).populate("activeStoryboardId");
     if (!project || !project.activeStoryboardId) {
       return res.status(400).json({ message: "Project must have a storyboard generated first" });
@@ -1096,8 +1191,13 @@ storyVideoRouter.patch("/projects/:id/scenes/:sceneIndex", async (req, res, next
       updateFields["scenes.$.characters"] = characters;
     }
     if (mediaId !== undefined) {
-      scene.mediaId = mediaId || null;
-      updateFields["scenes.$.mediaId"] = mediaId || null;
+      if (aspectRatio) {
+        const slotKey = aspectRatioToSlotKey(aspectRatio);
+        updateFields[`scenes.$.mediaByAspect.${slotKey}.activeMediaId`] = mediaId || null;
+      } else {
+        scene.mediaId = mediaId || null;
+        updateFields["scenes.$.mediaId"] = mediaId || null;
+      }
     }
 
     if (Object.keys(updateFields).length > 0) {
@@ -1116,7 +1216,7 @@ storyVideoRouter.patch("/projects/:id/scenes/:sceneIndex", async (req, res, next
   }
 });
 
-// 8d. Generate / Regenerate AI Image Frame for an Individual Scene
+// 8d. Generate / Regenerate AI Image Frame for an Individual Scene (Saved per Aspect Ratio — Never Overrides Other Aspects)
 storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/image", async (req, res, next) => {
   try {
     const { id, sceneIndex } = req.params;
@@ -1136,17 +1236,21 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/image", async (req, res,
       return res.status(404).json({ message: `Scene at index ${sceneIndex} not found` });
     }
 
-    const promptText = req.body.prompt || scene.visualPrompt || scene.captionText || "Cinematic celebration scene";
-    if (req.body.prompt && req.body.prompt !== scene.visualPrompt) {
+    const targetAspect = req.body?.aspectRatio || (project.projectType === "ad_promo" ? "9:16" : "16:9");
+    const slotKey = aspectRatioToSlotKey(targetAspect);
+    const aspectTag = targetAspect.replace(":", "x");
+
+    const promptText = req.body?.prompt || scene.visualPrompt || scene.captionText || "Cinematic celebration scene";
+    if (req.body?.prompt && req.body.prompt !== scene.visualPrompt) {
       scene.visualPrompt = req.body.prompt;
     }
 
-    console.log(`[API Scene Image] Generating AI frame for Scene ${scene.sceneNumber}: "${promptText.slice(0, 60)}..."`);
+    console.log(`[API Scene Image] Generating ${targetAspect} AI frame for Scene ${scene.sceneNumber}: "${promptText.slice(0, 60)}..."`);
     const generatedImageUrl = await generateSceneImageWithGemini(promptText, {
       projectId: project._id,
       title: project.title,
       sceneNumber: scene.sceneNumber,
-      aspectRatio: req.body.aspectRatio || "16:9"
+      aspectRatio: targetAspect
     });
 
     if (!generatedImageUrl) {
@@ -1158,24 +1262,29 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/image", async (req, res,
       projectId: project._id,
       fileUrl: generatedImageUrl,
       mediaType: "image",
-      originalFilename: `scene_frame_${scene.sceneNumber}.${mimeType.includes("png") ? "png" : "jpg"}`,
+      aspectRatio: targetAspect,
+      originalFilename: `scene_frame_${scene.sceneNumber}_${aspectTag}.${mimeType.includes("png") ? "png" : "jpg"}`,
       caption: promptText
     });
 
-    scene.mediaId = mediaDoc._id;
+    const setUpdate = {
+      [`scenes.$.mediaByAspect.${slotKey}.imageMediaId`]: mediaDoc._id,
+      [`scenes.$.mediaByAspect.${slotKey}.activeMediaId`]: mediaDoc._id,
+      "scenes.$.visualPrompt": scene.visualPrompt
+    };
+    if (!scene.mediaId) {
+      setUpdate["scenes.$.mediaId"] = mediaDoc._id;
+    }
+
     await Storyboard.updateOne(
       { _id: storyboard._id, "scenes.sceneNumber": scene.sceneNumber },
-      {
-        $set: {
-          "scenes.$.mediaId": mediaDoc._id,
-          "scenes.$.visualPrompt": scene.visualPrompt
-        }
-      }
+      { $set: setUpdate }
     );
 
     res.json({
-      message: "Scene image frame generated successfully",
+      message: `Scene ${targetAspect} image frame generated successfully`,
       sceneNumber: scene.sceneNumber,
+      aspectRatio: targetAspect,
       media: mediaDoc,
       imageUrl: generatedImageUrl
     });
@@ -1184,11 +1293,10 @@ storyVideoRouter.post("/projects/:id/scenes/:sceneIndex/image", async (req, res,
   }
 });
 
-// 8e. Generate High-Definition Google AI Images for ALL Scenes (or missing scenes)
+// 8e. Generate High-Definition Google AI Images for ALL Scenes (Saved into Selected Aspect Ratio Slot — Other Aspect Ratios Untouched)
 storyVideoRouter.post("/projects/:id/scenes/generate-all-images", async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { overwrite = false, aspectRatio = "16:9" } = req.body || {};
     const project = await Project.findById(id).populate({
       path: "activeStoryboardId",
       populate: { path: "scenes.mediaId" }
@@ -1198,24 +1306,30 @@ storyVideoRouter.post("/projects/:id/scenes/generate-all-images", async (req, re
       return res.status(400).json({ message: "Project must have a storyboard generated first" });
     }
 
+    const { overwrite = false, aspectRatio } = req.body || {};
+    const targetAspect = aspectRatio || (project.projectType === "ad_promo" ? "9:16" : "16:9");
+    const slotKey = aspectRatioToSlotKey(targetAspect);
+    const aspectTag = targetAspect.replace(":", "x");
+
     const storyboard = project.activeStoryboardId;
     let generatedCount = 0;
 
     for (let idx = 0; idx < storyboard.scenes.length; idx++) {
       const scene = storyboard.scenes[idx];
-      // Skip if scene already has an image and overwrite is not true
-      if (scene.mediaId && !overwrite) {
+      const existingSlot = scene.mediaByAspect?.[slotKey];
+      // Skip only if THIS aspect ratio already has a dedicated image and overwrite is false
+      if (existingSlot?.imageMediaId && !overwrite) {
         continue;
       }
 
       const promptText = scene.visualPrompt || scene.captionText || `Cinematic moment ${scene.sceneNumber}`;
-      console.log(`[API Generate All Images] Generating scene ${scene.sceneNumber}/${storyboard.scenes.length}: "${promptText.slice(0, 50)}..."`);
+      console.log(`[API Generate All Images] Generating ${targetAspect} scene ${scene.sceneNumber}/${storyboard.scenes.length}: "${promptText.slice(0, 50)}..."`);
 
       const generatedImageUrl = await generateSceneImageWithGemini(promptText, {
         projectId: project._id,
         title: project.title,
         sceneNumber: scene.sceneNumber,
-        aspectRatio
+        aspectRatio: targetAspect
       });
 
       if (generatedImageUrl) {
@@ -1224,18 +1338,22 @@ storyVideoRouter.post("/projects/:id/scenes/generate-all-images", async (req, re
           projectId: project._id,
           fileUrl: generatedImageUrl,
           mediaType: "image",
-          originalFilename: `scene_frame_${scene.sceneNumber}.${mimeType.includes("png") ? "png" : "jpg"}`,
+          aspectRatio: targetAspect,
+          originalFilename: `scene_frame_${scene.sceneNumber}_${aspectTag}.${mimeType.includes("png") ? "png" : "jpg"}`,
           caption: promptText
         });
 
-        scene.mediaId = mediaDoc._id;
+        const setUpdate = {
+          [`scenes.$.mediaByAspect.${slotKey}.imageMediaId`]: mediaDoc._id,
+          [`scenes.$.mediaByAspect.${slotKey}.activeMediaId`]: mediaDoc._id
+        };
+        if (!scene.mediaId) {
+          setUpdate["scenes.$.mediaId"] = mediaDoc._id;
+        }
+
         await Storyboard.updateOne(
           { _id: storyboard._id, "scenes.sceneNumber": scene.sceneNumber },
-          {
-            $set: {
-              "scenes.$.mediaId": mediaDoc._id
-            }
-          }
+          { $set: setUpdate }
         );
         generatedCount++;
       }
@@ -1247,7 +1365,8 @@ storyVideoRouter.post("/projects/:id/scenes/generate-all-images", async (req, re
     });
 
     res.json({
-      message: `Successfully generated Google AI images for ${generatedCount} scene(s)`,
+      message: `Successfully generated ${targetAspect} Google AI images for ${generatedCount} scene(s) (other aspect ratios preserved)`,
+      aspectRatio: targetAspect,
       generatedCount,
       storyboard: refreshed.activeStoryboardId
     });
@@ -1256,7 +1375,7 @@ storyVideoRouter.post("/projects/:id/scenes/generate-all-images", async (req, re
   }
 });
 
-// 8c. Generate Google Gemini Omni 1.1 AI Motion Video Clips for All Scenes
+// 8f. Generate Google Gemini Omni 1.1 AI Motion Video Clips for All Scenes (Saved into Selected Aspect Ratio Slot — Other Aspect Ratios Untouched)
 storyVideoRouter.post("/projects/:id/scenes/generate-all-veo", async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -1269,15 +1388,24 @@ storyVideoRouter.post("/projects/:id/scenes/generate-all-veo", async (req, res, 
       return res.status(400).json({ message: "Project must have a storyboard generated first" });
     }
 
+    const targetAspect = req.body?.aspectRatio || (project.projectType === "ad_promo" ? "9:16" : "16:9");
+    const overwrite = Boolean(req.body?.overwrite);
+    const slotKey = aspectRatioToSlotKey(targetAspect);
+    const aspectTag = targetAspect.replace(":", "x");
+
     const storyboard = project.activeStoryboardId;
+    const allMedia = await Media.find({ projectId: project._id }).lean();
+    const mediaById = new Map(allMedia.map((m) => [String(m._id), m]));
     const videoEngine = getVideoProvider(req.body?.videoProvider);
     const results = [];
 
     const scenesToProcess = [];
     for (let i = 0; i < storyboard.scenes.length; i++) {
       const scene = storyboard.scenes[i];
-      if (scene.mediaId?.mediaType === "video" && scene.mediaId?.fileUrl?.endsWith(".mp4")) {
-        results.push({ sceneNumber: scene.sceneNumber, status: "already_video", videoUrl: scene.mediaId.fileUrl });
+      const existingVideoId = scene.mediaByAspect?.[slotKey]?.videoMediaId;
+      const existingVideoDoc = existingVideoId ? mediaById.get(String(existingVideoId)) : null;
+      if (!overwrite && existingVideoDoc?.mediaType === "video" && existingVideoDoc?.fileUrl?.endsWith(".mp4")) {
+        results.push({ sceneNumber: scene.sceneNumber, status: "already_video", aspectRatio: targetAspect, videoUrl: existingVideoDoc.fileUrl });
       } else {
         scenesToProcess.push(scene);
       }
@@ -1290,14 +1418,24 @@ storyVideoRouter.post("/projects/:id/scenes/generate-all-veo", async (req, res, 
       await Promise.all(
         batch.map(async (scene) => {
           const promptText = scene.visualPrompt || scene.captionText || "Cinematic celebration moment";
-          const sourceImageUrl = scene.mediaId?.fileUrl || null;
+          let sourceImageUrl = null;
+          const slotImgId = scene.mediaByAspect?.[slotKey]?.imageMediaId || scene.mediaByAspect?.[slotKey]?.activeMediaId;
+          const slotImgDoc = slotImgId ? mediaById.get(String(slotImgId)) : null;
+          if (slotImgDoc && slotImgDoc.mediaType === "image") {
+            sourceImageUrl = slotImgDoc.fileUrl;
+          } else if (scene.mediaId?.fileUrl && scene.mediaId?.mediaType === "image") {
+            if (!scene.mediaId.aspectRatio || scene.mediaId.aspectRatio === targetAspect) {
+              sourceImageUrl = scene.mediaId.fileUrl;
+            }
+          }
 
           try {
-            console.log(`[API Story Video] Generating scene ${scene.sceneNumber}/${storyboard.scenes.length} with Gemini Omni 1.1 Flash: "${promptText.slice(0, 50)}..."`);
+            console.log(`[API Story Video] Generating ${targetAspect} scene ${scene.sceneNumber}/${storyboard.scenes.length} with Gemini Omni 1.1 Flash: "${promptText.slice(0, 50)}..."`);
             const videoUrl = await videoEngine.generateSceneVideoClip({
               imageUrl: sourceImageUrl,
               promptText,
               durationSeconds: 5,
+              aspectRatio: targetAspect,
               projectId: project._id,
               title: project.title,
               sceneNumber: scene.sceneNumber
@@ -1308,17 +1446,26 @@ storyVideoRouter.post("/projects/:id/scenes/generate-all-veo", async (req, res, 
                 projectId: project._id,
                 fileUrl: videoUrl,
                 mediaType: "video",
-                originalFilename: `omni_scene_${scene.sceneNumber}.mp4`,
+                aspectRatio: targetAspect,
+                originalFilename: `omni_scene_${scene.sceneNumber}_${aspectTag}.mp4`,
                 durationSeconds: 5
               });
-              scene.mediaId = mediaDoc._id;
+
+              const setUpdate = {
+                [`scenes.$.mediaByAspect.${slotKey}.videoMediaId`]: mediaDoc._id,
+                [`scenes.$.mediaByAspect.${slotKey}.activeMediaId`]: mediaDoc._id
+              };
+              if (!scene.mediaId) {
+                setUpdate["scenes.$.mediaId"] = mediaDoc._id;
+              }
+
               await Storyboard.updateOne(
                 { _id: storyboard._id, "scenes.sceneNumber": scene.sceneNumber },
-                { $set: { "scenes.$.mediaId": mediaDoc._id } }
+                { $set: setUpdate }
               );
-              results.push({ sceneNumber: scene.sceneNumber, status: "generated", videoUrl });
+              results.push({ sceneNumber: scene.sceneNumber, status: "generated", aspectRatio: targetAspect, videoUrl });
             } else {
-              results.push({ sceneNumber: scene.sceneNumber, status: "fallback_image" });
+              results.push({ sceneNumber: scene.sceneNumber, status: "fallback_image", aspectRatio: targetAspect });
             }
           } catch (clipErr) {
             console.error(`Gemini Omni generation failed for scene ${scene.sceneNumber}:`, clipErr.message);
@@ -1328,7 +1475,11 @@ storyVideoRouter.post("/projects/:id/scenes/generate-all-veo", async (req, res, 
       );
     }
 
-    res.json({ message: "Gemini Omni 1.1 motion video clips generated for all scenes", results });
+    res.json({
+      message: `Gemini Omni 1.1 (${targetAspect}) motion video clips generated for ${scenesToProcess.length} scene(s) (other aspect ratios preserved)`,
+      aspectRatio: targetAspect,
+      results
+    });
   } catch (err) {
     next(err);
   }

@@ -323,9 +323,17 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
     // 1. Primary: Google Gemini Flash Image (Vertex AI native multimodal image generation)
     const primaryImageModel = env.geminiImageModel || "gemini-2.5-flash-image";
     const secondaryImagenModel = env.imagenModel || "imagen-3.0-generate-002";
+    const orientationDesc = aspectRatio === "9:16"
+      ? "vertical 9:16 mobile portrait shot, centered composition with subjects framed comfortably inside vertical margins"
+      : aspectRatio === "1:1"
+        ? "square 1:1 balanced centered shot"
+        : aspectRatio === "4:3"
+          ? "classic 4:3 framed cinematic shot"
+          : "16:9 widescreen cinematic shot";
+    const aspectFileTag = String(aspectRatio || "16:9").replace(":", "x");
     try {
       console.log(`[Google AI Image] Generating high-definition ${aspectRatio} scene frame with ${primaryImageModel} for Scene ${sceneNumber}...`);
-      const enhancedPrompt = `A photorealistic ${aspectRatio} widescreen cinematic shot, 8k resolution, professional photography, natural lighting: ${visualPrompt}`;
+      const enhancedPrompt = `A photorealistic ${orientationDesc}, 8k resolution, professional photography, natural lighting: ${visualPrompt}`;
 
       const response = await ai.models.generateContent({
         model: primaryImageModel,
@@ -342,7 +350,7 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
         if (part.inlineData?.data) {
           const mimeType = part.inlineData.mimeType || "image/png";
           const ext = mimeType.includes("png") ? "png" : "jpg";
-          const filename = `scene_${sceneNumber}_frame_${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
+          const filename = `scene_${sceneNumber}_frame_${aspectFileTag}_${Date.now()}_${Math.floor(Math.random() * 1000)}.${ext}`;
           const buffer = Buffer.from(part.inlineData.data, "base64");
           const storageKey = buildStoryStorageKey({
             projectId,
@@ -375,7 +383,7 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
 
       const imageBytesBase64 = response.generatedImages?.[0]?.image?.imageBytes;
       if (imageBytesBase64) {
-        const filename = `scene_${sceneNumber}_frame_${Date.now()}_${Math.floor(Math.random() * 1000)}.jpg`;
+        const filename = `scene_${sceneNumber}_frame_${aspectFileTag}_${Date.now()}_${Math.floor(Math.random() * 1000)}.jpg`;
         const buffer = Buffer.from(imageBytesBase64, "base64");
         const storageKey = buildStoryStorageKey({
           projectId,
@@ -396,7 +404,14 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
   try {
     const cleanPrompt = encodeURIComponent(visualPrompt.slice(0, 250));
     const seed = Math.floor(Math.random() * 100000);
-    const dims = aspectRatio === "9:16" ? "width=1080&height=1920" : (aspectRatio === "1:1" ? "width=1080&height=1080" : "width=1920&height=1080");
+    const dims = aspectRatio === "9:16"
+      ? "width=1080&height=1920"
+      : aspectRatio === "1:1"
+        ? "width=1080&height=1080"
+        : aspectRatio === "4:3"
+          ? "width=1440&height=1080"
+          : "width=1920&height=1080";
+    const aspectFileTag = String(aspectRatio || "16:9").replace(":", "x");
     const fallbackModel = encodeURIComponent(env.fallbackImageModel || "flux");
     const aiImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?${dims}&model=${fallbackModel}&nologo=true&private=true&enhance=false&seed=${seed}`;
 
@@ -409,7 +424,7 @@ export async function generateSceneImageWithGemini(visualPrompt, options = {}) {
 
     if (res.ok) {
       const arrayBuffer = await res.arrayBuffer();
-      const filename = `scene_${sceneNumber}_frame_${Date.now()}_${seed}.jpg`;
+      const filename = `scene_${sceneNumber}_frame_${aspectFileTag}_${Date.now()}_${seed}.jpg`;
       const buffer = Buffer.from(arrayBuffer);
       const storageKey = buildStoryStorageKey({
         projectId,

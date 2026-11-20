@@ -5,14 +5,52 @@ import { GoogleGenAI } from "@google/genai";
 import { env, getGoogleCloudCredentials } from "../../config/env.js";
 import { uploadAssetBuffer, buildStoryStorageKey } from "../storage/index.js";
 
+// Resolve local /uploads/... file path including nested project subdirectories
+function resolveLocalUploadPath(imageUrl = "") {
+  if (!imageUrl || !imageUrl.includes("/uploads/")) return null;
+  const relPart = decodeURIComponent(imageUrl.split("/uploads/")[1]?.split("?")[0] || "");
+  const candidates = [];
+  if (relPart) {
+    candidates.push(path.join(process.cwd(), "uploads", relPart));
+    candidates.push(path.join(process.cwd(), "apps", "api", "uploads", relPart));
+  }
+  const base = path.basename(imageUrl.split("?")[0]);
+  if (base) {
+    candidates.push(path.join(process.cwd(), "uploads", base));
+    candidates.push(path.join(process.cwd(), "apps", "api", "uploads", base));
+  }
+  for (const candidate of candidates) {
+    if (fsSync.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function buildAspectFramingPrefix(aspectRatio = "16:9") {
+  if (aspectRatio === "9:16") {
+    return "Vertical 9:16 mobile portrait shot, centered vertical composition with subjects framed comfortably inside vertical margins";
+  }
+  if (aspectRatio === "1:1") {
+    return "Square 1:1 balanced centered composition shot";
+  }
+  if (aspectRatio === "4:3") {
+    return "Classic 4:3 framed cinematic shot";
+  }
+  return "Cinematic 16:9 widescreen shot";
+}
+
 // Google Cloud Gemini Omni 1.1 Flash AI Video Adapter (Vertex AI Next-Gen Interactions)
 export class GoogleOmniVideoAdapter {
-  async generateSceneVideoClip({ imageUrl, promptText, durationSeconds = 5, projectId: storyProjectId, title = "", sceneNumber = 1 }) {
-    const cleanPrompt = (promptText || "Cinematic 5-second motion video clip, photorealistic 16:9 widescreen, cinematic camera motion").trim();
+  async generateSceneVideoClip({ imageUrl, promptText, durationSeconds = 5, aspectRatio = "16:9", projectId: storyProjectId, title = "", sceneNumber = 1 }) {
+    const framingPrefix = buildAspectFramingPrefix(aspectRatio);
+    const rawPrompt = (promptText || "Cinematic 5-second motion video clip with smooth natural camera movement").trim();
+    const cleanPrompt = `${framingPrefix}: ${rawPrompt}`;
+    const targetVideoAspect = aspectRatio === "9:16" ? "9:16" : "16:9";
 
     try {
       const videoModel = env.googleVideoModel || "gemini-omni-1.1-flash-preview";
-      console.log(`[Google Gemini Omni Video] Authenticating with Vertex AI Service Account for ${videoModel}...`);
+      console.log(`[Google Gemini Omni Video] Authenticating with Vertex AI Service Account for ${videoModel} (aspect=${aspectRatio})...`);
       const authInfo = getGoogleCloudCredentials();
       const projectId = env.googleCloudProject || authInfo.projectId || process.env.GOOGLE_CLOUD_PROJECT;
       const genAiOptions = {
@@ -28,7 +66,7 @@ export class GoogleOmniVideoAdapter {
       }
       const ai = new GoogleGenAI(genAiOptions);
 
-      console.log(`[Google Gemini Omni Video] Generating motion video with ${videoModel}: "${cleanPrompt.slice(0, 80)}..."`);
+      console.log(`[Google Gemini Omni Video] Generating ${aspectRatio} motion video with ${videoModel}: "${cleanPrompt.slice(0, 80)}..."`);
 
       let inputPayload = cleanPrompt;
 
@@ -44,8 +82,8 @@ export class GoogleOmniVideoAdapter {
               imgBuffer = Buffer.from(matches[2], "base64");
             }
           } else if (imageUrl.includes("/uploads/")) {
-            const localFile = path.join(process.cwd(), "uploads", path.basename(imageUrl));
-            if (fsSync.existsSync(localFile)) {
+            const localFile = resolveLocalUploadPath(imageUrl);
+            if (localFile) {
               imgBuffer = await fs.readFile(localFile);
               if (localFile.endsWith(".png")) mimeType = "image/png";
               else if (localFile.endsWith(".webp")) mimeType = "image/webp";
@@ -75,26 +113,42 @@ export class GoogleOmniVideoAdapter {
         }
       }
 
+      const createWithOptionalFormat = async (payload) => {
+        try {
+          return await ai.interactions.create({
+            model: videoModel,
+            input: payload,
+            response_format: {
+              type: "video",
+              aspect_ratio: targetVideoAspect
+            }
+          });
+        } catch (fmtErr) {
+          console.warn(`[Google Gemini Omni Video] response_format (${targetVideoAspect}) rejected (${fmtErr.message}), retrying standard interaction...`);
+          return await ai.interactions.create({
+            model: videoModel,
+            input: payload
+          });
+        }
+      };
+
       let inter = null;
       try {
-        inter = await ai.interactions.create({
-          model: videoModel,
-          input: inputPayload
-        });
+        inter = await createWithOptionalFormat(inputPayload);
       } catch (callErr) {
         if (Array.isArray(inputPayload) && inputPayload.length > 1) {
           console.warn("[Google Gemini Omni Video] Multimodal call failed, falling back to cinematic text prompt:", callErr.message);
-          inter = await ai.interactions.create({
-            model: videoModel,
-            input: `Cinematic 5-second 16:9 motion video clip: ${cleanPrompt}. Highly detailed, realistic motion, smooth camera pan, 720p.`
-          });
+          inter = await createWithOptionalFormat(
+            `${framingPrefix}, 5-second motion video clip: ${rawPrompt}. Highly detailed, realistic motion, smooth camera movement.`
+          );
         } else {
           throw callErr;
         }
       }
 
       if (inter?.output_video?.data) {
-        const videoFilename = `scene_${sceneNumber}_clip_${Date.now()}_${Math.floor(Math.random() * 1000)}.mp4`;
+        const aspectTag = aspectRatio.replace(":", "x");
+        const videoFilename = `scene_${sceneNumber}_clip_${aspectTag}_${Date.now()}_${Math.floor(Math.random() * 1000)}.mp4`;
         const buffer = Buffer.from(inter.output_video.data, "base64");
         const storageKey = buildStoryStorageKey({
           projectId: storyProjectId,
@@ -120,11 +174,11 @@ export const GoogleVeoVideoAdapter = GoogleOmniVideoAdapter;
 
 // Replicate Cloud AI Video Adapter
 class ReplicateVideoAdapter {
-  async generateSceneVideoClip({ imageUrl, promptText, durationSeconds = 5, projectId: storyProjectId, title = "", sceneNumber = 1 }) {
+  async generateSceneVideoClip({ imageUrl, promptText, durationSeconds = 5, aspectRatio = "16:9", projectId: storyProjectId, title = "", sceneNumber = 1 }) {
     const apiKey = env.videoApiKey || env.replicateApiKey;
     if (!apiKey) {
       console.warn("REPLICATE_API_KEY missing. Falling back to Google Veo or static image frame.");
-      return new GoogleVeoVideoAdapter().generateSceneVideoClip({ imageUrl, promptText, durationSeconds, projectId: storyProjectId, title, sceneNumber });
+      return new GoogleVeoVideoAdapter().generateSceneVideoClip({ imageUrl, promptText, durationSeconds, aspectRatio, projectId: storyProjectId, title, sceneNumber });
     }
 
     try {
@@ -180,7 +234,7 @@ class ReplicateVideoAdapter {
       console.error("Replicate AI video generation error:", err.message);
     }
 
-    return new GoogleVeoVideoAdapter().generateSceneVideoClip({ imageUrl, promptText, durationSeconds, projectId: storyProjectId, title, sceneNumber });
+    return new GoogleVeoVideoAdapter().generateSceneVideoClip({ imageUrl, promptText, durationSeconds, aspectRatio, projectId: storyProjectId, title, sceneNumber });
   }
 }
 

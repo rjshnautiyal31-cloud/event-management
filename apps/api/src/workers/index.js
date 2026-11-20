@@ -1,12 +1,13 @@
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegInstaller from "ffmpeg-static";
+import { execFile } from "child_process";
 import path from "path";
 import fs from "fs/promises";
 import fsSync from "fs";
 import { GenerationJob } from "../models/GenerationJob.js";
 import { Video } from "../models/Video.js";
 import { Project } from "../models/Project.js";
-import { Storyboard } from "../models/Storyboard.js";
+import { Storyboard, aspectRatioToSlotKey } from "../models/Storyboard.js";
 import { Media } from "../models/Media.js";
 import { Song } from "../models/Song.js";
 import { queueService } from "../services/queue/index.js";
@@ -75,10 +76,11 @@ async function writeAdHeadlineAssFile(assPath, { width, height, duration, headli
   const endAssTime = `${hrs}:${String(mins).padStart(2, "0")}:${secs}`;
 
   const baseScale = Math.min(width, height);
-  const titleFontSize = Math.max(28, Math.round(baseScale * (isEndCard ? 0.046 : 0.038)));
-  const subFontSize = Math.max(20, Math.round(baseScale * 0.028));
+  const lengthPenalty = cleanHeadline.length > 34 ? 0.84 : cleanHeadline.length > 24 ? 0.92 : 1;
+  const titleFontSize = Math.max(24, Math.round(baseScale * (isEndCard ? 0.044 : 0.036) * lengthPenalty));
+  const subFontSize = Math.max(18, Math.round(baseScale * 0.026));
   const marginV = Math.max(60, Math.round(height * (isEndCard ? 0.14 : 0.10)));
-  const marginH = Math.max(36, Math.round(width * 0.06));
+  const marginH = Math.max(40, Math.round(width * 0.07));
 
   // ASS colors use &HAABBGGRR (Deep Indigo #34206F => BGR 6F2034)
   const dialogueText = isEndCard && cleanSubtext
@@ -87,6 +89,7 @@ async function writeAdHeadlineAssFile(assPath, { width, height, duration, headli
 
   const assBody = `[Script Info]
 ScriptType: v4.00+
+WrapStyle: 0
 PlayResX: ${width}
 PlayResY: ${height}
 
@@ -149,17 +152,27 @@ async function ensureLocalFile(fileUrlOrPath, tempDir, prefix = "asset", cleanup
 
   // If it references /uploads/ on local server or file already exists locally in uploads/
   if (fileUrlOrPath.includes("/uploads/")) {
-    const relPart = fileUrlOrPath.split("/uploads/")[1];
+    const relPart = decodeURIComponent(fileUrlOrPath.split("/uploads/")[1]?.split("?")[0] || "");
     if (relPart) {
-      const localPath = path.join(process.cwd(), "uploads", relPart);
-      if (fsSync.existsSync(localPath)) {
-        return localPath;
+      const candidates = [
+        path.join(process.cwd(), "uploads", relPart),
+        path.join(process.cwd(), "apps", "api", "uploads", relPart)
+      ];
+      for (const candidate of candidates) {
+        if (fsSync.existsSync(candidate)) {
+          return candidate;
+        }
       }
     }
-    const filename = path.basename(fileUrlOrPath);
-    const fallbackPath = path.join(process.cwd(), "uploads", filename);
-    if (fsSync.existsSync(fallbackPath)) {
-      return fallbackPath;
+    const filename = path.basename(fileUrlOrPath.split("?")[0]);
+    const fallbackCandidates = [
+      path.join(process.cwd(), "uploads", filename),
+      path.join(process.cwd(), "apps", "api", "uploads", filename)
+    ];
+    for (const candidate of fallbackCandidates) {
+      if (fsSync.existsSync(candidate)) {
+        return candidate;
+      }
     }
   }
 
@@ -194,6 +207,25 @@ async function ensureLocalFile(fileUrlOrPath, tempDir, prefix = "asset", cleanup
     console.error(`[Video Worker] Error fetching remote media (${fileUrlOrPath}):`, err.message);
     return null;
   }
+}
+
+// Probe image or video dimensions via FFmpeg stream header inspection
+async function probeMediaDimensions(filePath) {
+  if (!filePath || !activeFfmpegPath) return null;
+  return new Promise((resolve) => {
+    execFile(activeFfmpegPath, ["-hide_banner", "-i", filePath], { timeout: 6000 }, (_err, stdout, stderr) => {
+      const combined = `${stdout || ""}\n${stderr || ""}`;
+      const streamMatch = combined.match(/Stream\s+#\d+:\d+[^\n]*Video:[^\n]*?,\s*(\d{2,5})x(\d{2,5})(?:[\s,\[])/i);
+      if (streamMatch) {
+        const width = parseInt(streamMatch[1], 10);
+        const height = parseInt(streamMatch[2], 10);
+        if (width > 0 && height > 0) {
+          return resolve({ width, height });
+        }
+      }
+      resolve(null);
+    });
+  });
 }
 
 export const VIDEO_PRESETS = {
@@ -299,15 +331,25 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     }
 
     const mediaDocs = await Media.find({ projectId }).sort({ createdAt: 1 });
+    const mediaById = new Map(mediaDocs.map((m) => [String(m._id), m]));
+    const uploadedOnlyMedia = mediaDocs.filter((m) => !m.aspectRatio && String(m.originalFilename || "").startsWith("upload_"));
+    const targetSlotKey = aspectRatioToSlotKey(preset.aspectRatio);
+
+    const resolveMediaObj = (ref) => {
+      if (!ref) return null;
+      if (typeof ref === "object" && ref.fileUrl) return ref;
+      return mediaById.get(String(ref._id || ref)) || null;
+    };
 
     let rawScenes = storyboardDoc?.scenes || [];
     if (rawScenes.length === 0) {
-      const sceneCount = Math.max(isAdProject ? 3 : 4, mediaDocs.length);
+      const pool = uploadedOnlyMedia.length > 0 ? uploadedOnlyMedia : mediaDocs;
+      const sceneCount = Math.max(isAdProject ? 3 : 4, pool.length);
       rawScenes = Array.from({ length: sceneCount }).map((_, i) => ({
         sceneNumber: i + 1,
         captionText: isAdProject ? (projectDoc?.adBrief?.brandName || `Ad Scene ${i + 1}`) : `Event Scene ${i + 1}`,
         onScreenHeadline: isAdProject && i === sceneCount - 1 ? (projectDoc?.adBrief?.callToAction || "") : "",
-        mediaId: mediaDocs[i % Math.max(1, mediaDocs.length)] || null
+        mediaId: pool[i % Math.max(1, pool.length)] || null
       }));
     }
 
@@ -335,10 +377,19 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
     const scenesToRender = [];
     for (let idx = 0; idx < rawScenes.length; idx++) {
       const scene = rawScenes[idx];
-      let mediaDoc = scene.mediaId;
+      const aspectSlot = scene.mediaByAspect?.[targetSlotKey];
+
+      // Priority 1: Dedicated asset generated/selected for this exact aspect ratio (video preferred if active, else slot active/video/image)
+      let mediaDoc =
+        resolveMediaObj(aspectSlot?.activeMediaId) ||
+        resolveMediaObj(aspectSlot?.videoMediaId) ||
+        resolveMediaObj(aspectSlot?.imageMediaId) ||
+        resolveMediaObj(scene.mediaId);
 
       if ((!mediaDoc || !mediaDoc.fileUrl) && mediaDocs.length > 0) {
-        mediaDoc = mediaDocs[idx % mediaDocs.length];
+        const aspectMatches = mediaDocs.filter((m) => m.aspectRatio === preset.aspectRatio);
+        const pool = aspectMatches.length > 0 ? aspectMatches : (uploadedOnlyMedia.length > 0 ? uploadedOnlyMedia : mediaDocs);
+        mediaDoc = pool[idx % pool.length];
       }
 
       let imgPath = null;
@@ -357,14 +408,14 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       });
     }
 
-    // Ensure fallback cover image if no media images exist
-    const fallbackBmpPath = path.join(uploadDir, "fallback_cover.bmp");
+    // Ensure fallback cover image matching target preset dimensions if no media images exist
+    const fallbackBmpPath = path.join(uploadDir, `fallback_cover_${presetKey}_${timestamp}.bmp`);
     let hasFallbackCreated = false;
 
     for (const scene of scenesToRender) {
       if (!scene.imgPath) {
         if (!hasFallbackCreated) {
-          const bmpBuffer = createSolidBmpBuffer(800, 600, isAdProject ? "34206F" : "0A2D59");
+          const bmpBuffer = createSolidBmpBuffer(preset.width, preset.height, isAdProject ? "34206F" : "0A2D59");
           await fs.writeFile(fallbackBmpPath, bmpBuffer);
           hasFallbackCreated = true;
           tempFilesToClean.push(fallbackBmpPath);
@@ -406,7 +457,16 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
       const isVideo = [".mp4", ".webm", ".mov", ".mkv", ".avi"].includes(path.extname(srcPath || "").toLowerCase());
       const isFinalScene = index === scenesToRender.length - 1;
 
-      console.log(`[Video Worker] Rendering segment ${index} (${preset.width}x${preset.height}): isVideo=${isVideo}, duration=${scene.duration}`);
+      const srcDims = await probeMediaDimensions(srcPath);
+      const dstRatio = preset.width / preset.height;
+      const srcRatio = srcDims ? srcDims.width / srcDims.height : dstRatio;
+      // If source & target orientations differ substantially (e.g. 16:9 clip inside 9:16 mobile output),
+      // preserve 100% of the foreground frame over a soft-blurred vertical backdrop instead of chopping off the sides!
+      const needsContainBackdrop = Boolean(srcDims && Math.abs(Math.log(srcRatio / dstRatio)) > 0.28);
+
+      console.log(
+        `[Video Worker] Rendering segment ${index} (${preset.width}x${preset.height}): src=${srcDims ? `${srcDims.width}x${srcDims.height}` : "unknown"}, mode=${needsContainBackdrop ? "contain-backdrop" : "full-bleed"}, isVideo=${isVideo}, duration=${scene.duration}`
+      );
 
       let assOverlayPath = null;
       if (burnInAdOverlay && (isFinalScene || scene.segmentType === "visual_beat" || scene.segmentType === "cta_endcard") && scene.onScreenHeadline) {
@@ -433,11 +493,14 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
           cmd.input(srcPath).inputOptions(["-loop", "1", "-t", String(scene.duration)]);
         }
 
-        const baseScaleCrop = `scale=${preset.width}:${preset.height}:force_original_aspect_ratio=increase,crop=${preset.width}:${preset.height}`;
+        const W = preset.width;
+        const H = preset.height;
         const safeAssFilter = withAss && assOverlayPath
           ? `,ass=${assOverlayPath.replace(/\\/g, "/").replace(/:/g, "\\:")}`
           : "";
-        const vfChain = `${baseScaleCrop}${safeAssFilter},format=yuv420p`;
+        const vfChain = needsContainBackdrop
+          ? `split=2[bg][fg];[bg]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},boxblur=24:4,eq=brightness=-0.10:saturation=1.12[bgblur];[fg]scale=${W}:${H}:force_original_aspect_ratio=decrease[fgfit];[bgblur][fgfit]overlay=(W-w)/2:(H-h)/2,setsar=1${safeAssFilter},format=yuv420p`
+          : `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},setsar=1${safeAssFilter},format=yuv420p`;
 
         const segOutputOpts = [
           "-vf", vfChain,
@@ -657,7 +720,7 @@ export async function processVideoRenderJob(jobId, projectId, mediaPaths = [], a
 if (env.queueProvider === "memory") {
   queueService.registerWorker(async (job) => {
     if (job.name === "video_rendering") {
-      await processVideoRenderJob(job.data.jobId, job.data.projectId, job.data.mediaPaths, job.data.audioPath);
+      await processVideoRenderJob(job.data.jobId, job.data.projectId, job.data.mediaPaths, job.data.audioPath, job.data.options || {});
     }
   });
 }
